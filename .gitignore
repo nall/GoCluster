@@ -11,6 +11,12 @@
 # data/
 logs/
 archive data/
+data/archive
+data/grids
+data/fcc
+data/reports
+data/scp
+data/users
 # *.db
 # *.sqlite
 # *.zip
