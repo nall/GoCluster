@@ -1,0 +1,58 @@
+# Ingest sources and normalization caches.
+# RBN (CW/RTTY)
+rbn:
+  enabled: true
+  name: "RBN-CW-RTTY"
+  host: "telnet.reversebeacon.net"
+  port: 7000
+  callsign: "N2WQ-2"               # Change this to your callsign!
+  telnet_transport: "ziutek"       # Telnet parser/negotiation backend: native or ziutek
+  slot_buffer: 1000                # Buffer depth between telnet reader and pipeline (per-spot queue)
+  keepalive_seconds: 180           # Periodic CRLF to keep idle connections alive (0 disables)
+  keep_ssid_suffix: false          # When false, telnet/archive/filters use stripped DE calls
+
+# RBN (FT4/FT8)
+rbn_digital:
+  enabled: true
+  name: "RBN-FT4-FT8"
+  host: "telnet.reversebeacon.net"
+  port: 7001
+  callsign: "N2WQ-2"              # Change this to your callsign!
+  telnet_transport: "ziutek"      # Telnet parser/negotiation backend: native or ziutek
+  slot_buffer: 1000               # Buffer depth between telnet reader and pipeline (FT4/FT8 bursts are spiky)
+  keepalive_seconds: 180          # Periodic CRLF to keep idle connections alive (0 disables)
+  keep_ssid_suffix: true          # When false, telnet/archive/filters use stripped DE calls
+
+# Optional human/relay telnet ingest (POC or upstream cluster)
+human_telnet:
+  enabled: false
+  name: "HUMAN-SPOTS"
+  host: "dxs.n2wq.com"
+  port: 7300
+  callsign: "N2WQ-22"          # Change this to your callsign or upstream ID
+  telnet_transport: "ziutek"   # Telnet parser/negotiation backend: native or ziutek
+  slot_buffer: 1000            # Buffer depth between telnet reader and pipeline
+  keepalive_seconds: 180       # Periodic CRLF to keep idle connections alive (0 disables)
+  keep_ssid_suffix: true       # When false, telnet/archive/filters use stripped DE calls
+
+pskreporter:
+  enabled: true
+  name: "PSKReporter"
+  broker: "mqtt.pskreporter.info"
+  port: 1883
+  modes: ["FT8", "FT4", "CW", "RTTY", "MSK144", "PSK"]  # Modes to accept after subscription (PSK covers PSK31/63/125 variants)
+  path_only_modes: ["WSPR"]           # Modes used for path prediction only (never reach dedup/telnet/archive)
+  workers: 8                          # 0 means automatic (uses all CPU cores, minimum 4)
+  spot_channel_size: 50000            # Buffered ingest channel between MQTT and processing
+  mqtt_inbound_workers: 8             # 0 means automatic (defaults to workers)
+  mqtt_inbound_queue_depth: 8192      # 0 means automatic (defaults to workers * 256, capped)
+  mqtt_qos12_enqueue_timeout_ms: 250  # QoS1/2 inbound queue timeout before disconnect (0 = immediate)
+  append_spotter_ssid: true           # Append "-#" to receiver calls lacking an SSID for dedup
+  max_payload_bytes: 8192             # Drop payloads larger than this many bytes
+  cty_cache_size: 50000               # Bounded cache for CTY lookups in the shared ingest gate
+  cty_cache_ttl_seconds: 300          # TTL for ingest CTY cache entries (seconds)
+
+# Normalization/cache (shared across sources)
+call_cache:
+  size: 4096                      # Max cached entries for normalized calls/spotters
+  ttl_seconds: 600                # Expire cached entries after this many seconds (>0)

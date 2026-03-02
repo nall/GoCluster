@@ -1,0 +1,72 @@
+bands: {}
+blockbands: {}
+modes:
+    CW: true
+    LSB: true
+    MSK144: true
+    PSK: true
+    RTTY: true
+    SSTV: true
+    USB: true
+blockmodes: {}
+sources:
+    HUMAN: true
+    SKIMMER: true
+blocksources: {}
+allbands: true
+blockallbands: false
+allmodes: false
+blockallmodes: false
+allsources: false
+blockallsources: false
+confidence: {}
+blockconfidence: {}
+allconfidence: true
+blockallconfidence: false
+pathclasses: {}
+blockpathclasses: {}
+allpathclasses: true
+blockallpathclasses: false
+include_beacons: true
+allow_wwv: true
+allow_wcy: true
+allow_announce: true
+allow_self: true
+dxcontinents: {}
+blockdxcontinents: {}
+decontinents: {}
+blockdecontinents: {}
+alldxcontinents: true
+blockalldxcontinents: false
+alldecontinents: true
+blockalldecontinents: false
+dxzones: {}
+blockdxzones: {}
+dezones: {}
+blockdezones: {}
+alldxzones: true
+blockalldxzones: false
+alldezones: true
+blockalldezones: false
+dxgrid2prefixes: {}
+blockdxgrid2: {}
+degrid2prefixes: {}
+blockdegrid2: {}
+alldxgrid2: true
+blockalldxgrid2: false
+alldegrid2: true
+blockalldegrid2: false
+dxdxcc: {}
+blockdxdxcc: {}
+dedxcc: {}
+blockdedxcc: {}
+alldxdxcc: true
+blockalldxdxcc: false
+alldedxcc: true
+blockalldedxcc: false
+recent_ips:
+    - ::1
+dialect: go
+dedupe_policy: MED
+grid: FN05
+noise_class: QUIET

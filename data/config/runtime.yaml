@@ -1,0 +1,81 @@
+# Delivery/runtime settings.
+# Persistence
+buffer:
+  capacity: 200000                  # Number of spots held in the in-memory ring buffer (post-primary dedup)
+
+# Telnet server (user-facing interface)
+telnet:
+  port: 8300
+  tls_enabled: false
+  max_connections: 100
+  max_prelogin_sessions: 100      # Hard cap on unauthenticated sessions (Tier-A DoS guardrail)
+  prelogin_timeout_seconds: 30    # Accept->callsign timeout for unauthenticated sessions
+  accept_rate_per_ip: 3           # Per-IP prelogin admit rate (tokens/sec)
+  accept_burst_per_ip: 6          # Per-IP prelogin burst capacity
+  prelogin_concurrency_per_ip: 3  # Max concurrent unauthenticated sessions per source IP
+  welcome_message: |
+    <CLUSTER> DX Telnet cluster
+    Uptime: <UPTIME> | Users: <USER_COUNT>
+    IP address reputation powered by IPinfo
+    
+    Please enter your call:
+  login_greeting: |
+    Last login: <LAST_LOGIN> from <LAST_IP>
+    Current commands: <DIALECT> (<DIALECT_SOURCE>).
+    Use DIALECT LIST or DIALECT <DIALECT_DEFAULT> to change.
+    Grid: <GRID> (SET GRID <grid>)
+    Noise: <NOISE> (SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL)
+    Dedupe policy: <DEDUPE> (SET DEDUPE FAST|MED|SLOW)
+    Type HELP for all commands.
+    
+    <CALL> de <CLUSTER> <DATETIME>>
+  login_empty_message: |
+    Callsign cannot be empty. Please try again.
+  login_invalid_message: |
+    Invalid call. Please try again.
+  nearby_login_warning: "PSS NEARBY filter is ON. Disable NEARBY if you want to use regular location filters"
+  input_too_long_message: |
+    <CONTEXT> input is too long (maximum <MAX_LEN> characters).
+  input_invalid_char_message: |
+    <CONTEXT> input may only contain <ALLOWED>.
+  dialect_source_default_label: "default"
+  dialect_source_persisted_label: "persisted"
+
+  duplicate_login_message: |
+    Another login with your call. This session is being closed (multiple logins are not allowed).
+  transport: "ziutek"              # Telnet parser/negotiation backend: native or ziutek (IAC bytes are stripped from input regardless)
+  echo_mode: "server"              # Input echo policy: server (default), local, or off (relies on telnet IAC negotiation)
+  broadcast_workers: 10            # 0 means automatic (uses all CPU cores, minimum 4)
+  broadcast_queue_size: 8192       # Buffer depth for the global telnet broadcast queue
+  broadcast_batch_interval_ms: 200 # Micro-batching interval for telnet broadcasts (0 = immediate)
+  worker_queue_size: 1024          # Jobs queued per broadcast worker before dropping
+  client_buffer_size: 1024         # Per-client spot backlog before a slow session drops spots
+  control_queue_size: 32           # Per-client control backlog (bulletins/prompts/keepalives); full queue disconnects
+  writer_batch_max_bytes: 16384    # Per-connection writer flush cap (bytes) for control-first micro-batching
+  writer_batch_wait_ms: 5          # Max wait before flushing partial writer batch
+  reject_workers: 2                # Async reject writers so accept loop never blocks on reject I/O
+  reject_queue_size: 1024          # Bounded queue for reject jobs (queue full => immediate close without banner)
+  reject_write_deadline_ms: 500    # Deadline for writing reject banner before close
+  skip_handshake: false            # Set true to disable Telnet option negotiation (raw TCP clients); IAC bytes are still stripped from input
+  login_line_limit: 32             # Max bytes accepted for the initial login prompt (DoS guardrail)
+  command_line_limit: 128          # Max bytes accepted for post-login commands (filters, etc.)
+  output_line_length: 76           # DX cluster output line length (no CRLF, 1-based columns, minimum 65)
+  keepalive_seconds: 120           # Periodic CRLF to keep idle sessions alive (0 disables)
+  read_idle_timeout_seconds: 86400 # Read deadline for logged-in sessions (timeouts do not disconnect)
+  login_timeout_seconds: 120       # Legacy fallback; Tier-A prelogin timeout uses prelogin_timeout_seconds
+  drop_extreme_rate: 0.80          # Disconnect if spot drop rate exceeds this ratio over drop_extreme_window_seconds
+  drop_extreme_window_seconds: 30  # Sliding window for extreme drop evaluation
+  drop_extreme_min_attempts: 100   # Minimum attempts before extreme drop disconnect
+
+# Default filters applied to new users
+filter:
+  default_modes:
+    - CW
+    - LSB
+    - USB
+    - RTTY
+    - MSK144
+    - PSK31
+    - SSTV
+  default_sources:
+    - HUMAN

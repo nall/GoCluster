@@ -1,0 +1,148 @@
+# Path reliability tuning
+# This feature uses a single combined FT8-equivalent dB bucket family.
+# It ingests FT8/FT4/CW/RTTY/PSK/WSPR into the same bucket set.
+# Voice modes (LSB/USB) are display-only and never ingested.
+# The glyph reflects a merged path estimate adjusted for the user's noise class.
+# Internally, SNRs are converted to linear power and averaged in that domain.
+#
+# Glyph scale (configured via glyph_symbols):
+#   high/medium/low/unlikely map to the glyphs below; insufficient uses its own placeholder.
+
+# Master enable for path reliability (set false to disable ingestion/display entirely).
+enabled: true
+
+# Bands allowed to contribute to path reliability buckets (normalized).
+# Defaults to HF through 6m; exclude VHF/UHF unless explicitly listed.
+allowed_bands:
+  - 160m
+  - 80m
+  - 60m
+  - 40m
+  - 30m
+  - 20m
+  - 17m
+  - 15m
+  - 12m
+  - 10m
+  - 6m
+
+# Glyph symbols (single printable ASCII character each).
+glyph_symbols:
+  high: ">"
+  medium: "="
+  low: "<"
+  unlikely: "-"
+  insufficient: " "
+
+# Clamp FT8-equivalent dB before converting to power; FT8 cannot decode below about -25 dB.
+clamp_min: -25
+clamp_max: 35
+
+# Decay half-life in seconds when no per-band override applies.
+default_half_life_seconds: 420
+
+# Per-band half-life overrides (seconds). Omit or set 0 to use default_half_life_seconds.
+band_half_life_seconds:
+  160m: 600
+  80m:  600
+  60m:  540
+  40m:  480
+  30m:  420
+  20m:  360
+  17m:  300
+  15m:  300
+  12m:  240
+  10m:  240
+  6m:   240
+
+# Buckets older than this many seconds are purged to bound memory (fallback only).
+stale_after_seconds: 1800
+
+# Stale window multiplier: stale_after = k * band half-life (per band).
+stale_after_half_life_multiplier: 3
+
+# Minimum decayed weight required to report a glyph; below this returns glyph_symbols.insufficient.
+min_effective_weight: 0.6
+
+# Minimum fine weight required before blending fine with coarse (res-1); below this uses coarse only.
+min_fine_weight: 5
+
+# Minimum fine weight required to use fine only (skip coarse entirely).
+fine_only_weight: 20
+
+# Reverse-direction hint discount applied to effective weight when one direction is missing.
+reverse_hint_discount: 0.5
+
+# Merge weights for combining receive/transmit FT8-equiv dB values (normalized to sum to 1).
+# receive = DX->user (after noise penalty), transmit = user->DX.
+merge_receive_weight: 0.6
+merge_transmit_weight: 0.4
+
+# Per-mode glyph thresholds in FT8-equivalent dB.
+# FT8/FT4 thresholds follow: < -21 unlikely, -21..-17 low, -17..-13 medium, >= -13 high.
+# CW/RTTY/PSK thresholds derive from 0/3/7/12 dB buckets with a -7 dB correction.
+mode_thresholds:
+  ft8:
+    high: -13
+    medium: -17
+    low: -21
+    unlikely: -21
+  ft4:
+    high: -5
+    medium: -10
+    low: -14
+    unlikely: -17
+  cw:
+    high: 0
+    medium: -5
+    low: -9
+    unlikely: -12
+  rtty:
+    high: 12
+    medium: 4
+    low: 0
+    unlikely: -3
+  psk:
+    high: 5
+    medium: 0
+    low: -4
+    unlikely: -7
+  usb:
+    high: 22
+    medium: 17
+    low: 13
+    unlikely: 10
+  lsb:
+    high: 22
+    medium: 17
+    low: 13
+    unlikely: 10
+
+# Fallback glyph thresholds in FT8-equivalent dB (used when a mode is missing above).
+glyph_thresholds:
+  high: -13
+  medium: -17
+  low: -21
+  unlikely: -21
+
+# Cap per-beacon contribution so a single beacon cannot dominate.
+beacon_weight_cap: 1.0
+
+# Toggle glyph rendering in telnet output.
+display_enabled: true
+
+# Mode offsets to convert to FT8-equivalent dB (applied on ingest).
+mode_offsets:
+  ft4: 0
+  cw: -7
+  rtty: -7
+  psk: -19
+  wspr: -26
+
+# Noise class penalties applied to DX->user direction (SET NOISE) per ITU-R P.372-16
+noise_offsets:
+  quiet: 0
+  rural: 4
+  suburban: 12
+  urban: 17
+  industrial: 20

@@ -8,14 +8,14 @@
 *.out
 
 # Generated data/logs
-data/
+# data/
 logs/
 archive data/
-*.db
-*.sqlite
-*.zip
-*.log
-*.log.*
+# *.db
+# *.sqlite
+# *.zip
+# *.log
+# *.log.*
 
 # Local env/config
 .env

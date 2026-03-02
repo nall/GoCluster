@@ -1,0 +1,1180 @@
+{
+  "date_utc": "2026-02-25",
+  "log_file": "data\\logs\\25-Feb-2026.log",
+  "timezone": "UTC",
+  "model_context": {
+    "clamp_min": -25,
+    "clamp_max": 35,
+    "default_half_life_seconds": 420,
+    "band_half_life_seconds": {
+      "10m": 240,
+      "12m": 240,
+      "15m": 300,
+      "160m": 600,
+      "17m": 300,
+      "20m": 360,
+      "30m": 420,
+      "40m": 480,
+      "60m": 540,
+      "6m": 240,
+      "80m": 600
+    },
+    "stale_after_seconds": 1800,
+    "stale_after_half_life_multiplier": 3,
+    "stale_after_by_band_seconds": {
+      "10m": 720,
+      "12m": 720,
+      "15m": 900,
+      "160m": 1800,
+      "17m": 900,
+      "20m": 1080,
+      "30m": 1260,
+      "40m": 1440,
+      "60m": 1620,
+      "80m": 1800
+    },
+    "min_effective_weight": 0.6,
+    "min_fine_weight": 5,
+    "reverse_hint_discount": 0.5,
+    "merge_receive_weight": 0.6,
+    "merge_transmit_weight": 0.4,
+    "noise_offsets": {
+      "INDUSTRIAL": 20,
+      "QUIET": 0,
+      "RURAL": 6,
+      "SUBURBAN": 9,
+      "URBAN": 12
+    }
+  },
+  "bands": [
+    {
+      "band": "10m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 7577,
+          "ge10_med": 233,
+          "lt1_med": 5157,
+          "unique_spotters": 1205,
+          "unique_grid_pairs": 3162,
+          "ge10_min": 146,
+          "ge10_p75": 240,
+          "ge10_max": 277,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 9858,
+          "ge10_med": 309,
+          "lt1_med": 6382,
+          "unique_spotters": 1468,
+          "unique_grid_pairs": 4235,
+          "ge10_min": 212,
+          "ge10_p75": 292,
+          "ge10_max": 373,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 10269,
+          "ge10_med": 292,
+          "lt1_med": 6830,
+          "unique_spotters": 1399,
+          "unique_grid_pairs": 4583,
+          "ge10_min": 191,
+          "ge10_p75": 345,
+          "ge10_max": 396,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 9858,
+            "max": 9858
+          },
+          "ge10_range": {
+            "min": 309,
+            "max": 309
+          },
+          "lt1_range": {
+            "min": 6382,
+            "max": 6382
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 7577,
+            "max": 7577
+          },
+          "ge10_range": {
+            "min": 233,
+            "max": 233
+          },
+          "lt1_range": {
+            "min": 5157,
+            "max": 5157
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 10269,
+            "max": 10269
+          },
+          "ge10_range": {
+            "min": 292,
+            "max": 292
+          },
+          "lt1_range": {
+            "min": 6830,
+            "max": 6830
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 7577,
+        "max": 10269
+      },
+      "overall_ge10_range": {
+        "min": 233,
+        "max": 309
+      },
+      "overall_lt1_range": {
+        "min": 5157,
+        "max": 6830
+      }
+    },
+    {
+      "band": "12m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 3247,
+          "ge10_med": 13,
+          "lt1_med": 3101,
+          "unique_spotters": 748,
+          "unique_grid_pairs": 2284,
+          "ge10_min": 4,
+          "ge10_p75": 13,
+          "ge10_max": 16,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 3865,
+          "ge10_med": 19,
+          "lt1_med": 3349,
+          "unique_spotters": 885,
+          "unique_grid_pairs": 2531,
+          "ge10_min": 11,
+          "ge10_p75": 19,
+          "ge10_max": 37,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 3691,
+          "ge10_med": 30,
+          "lt1_med": 3148,
+          "unique_spotters": 848,
+          "unique_grid_pairs": 2664,
+          "ge10_min": 8,
+          "ge10_p75": 28,
+          "ge10_max": 39,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 3691,
+            "max": 3691
+          },
+          "ge10_range": {
+            "min": 30,
+            "max": 30
+          },
+          "lt1_range": {
+            "min": 3148,
+            "max": 3148
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 3247,
+            "max": 3247
+          },
+          "ge10_range": {
+            "min": 13,
+            "max": 13
+          },
+          "lt1_range": {
+            "min": 3101,
+            "max": 3101
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 3865,
+            "max": 3865
+          },
+          "ge10_range": {
+            "min": 19,
+            "max": 19
+          },
+          "lt1_range": {
+            "min": 3349,
+            "max": 3349
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 3247,
+        "max": 3865
+      },
+      "overall_ge10_range": {
+        "min": 13,
+        "max": 30
+      },
+      "overall_lt1_range": {
+        "min": 3101,
+        "max": 3349
+      }
+    },
+    {
+      "band": "15m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 8991,
+          "ge10_med": 298,
+          "lt1_med": 6656,
+          "unique_spotters": 1169,
+          "unique_grid_pairs": 3971,
+          "ge10_min": 179,
+          "ge10_p75": 325,
+          "ge10_max": 330,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 9105,
+          "ge10_med": 321,
+          "lt1_med": 6311,
+          "unique_spotters": 1301,
+          "unique_grid_pairs": 4074,
+          "ge10_min": 247,
+          "ge10_p75": 321,
+          "ge10_max": 353,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 8519,
+          "ge10_med": 276,
+          "lt1_med": 6207,
+          "unique_spotters": 1116,
+          "unique_grid_pairs": 4103,
+          "ge10_min": 171,
+          "ge10_p75": 302,
+          "ge10_max": 327,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 9105,
+            "max": 9105
+          },
+          "ge10_range": {
+            "min": 321,
+            "max": 321
+          },
+          "lt1_range": {
+            "min": 6311,
+            "max": 6311
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 8991,
+            "max": 8991
+          },
+          "ge10_range": {
+            "min": 298,
+            "max": 298
+          },
+          "lt1_range": {
+            "min": 6656,
+            "max": 6656
+          }
+        },
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 8519,
+            "max": 8519
+          },
+          "ge10_range": {
+            "min": 276,
+            "max": 276
+          },
+          "lt1_range": {
+            "min": 6207,
+            "max": 6207
+          }
+        }
+      ],
+      "moderate_ranges": null,
+      "overall_f_range": {
+        "min": 8519,
+        "max": 9105
+      },
+      "overall_ge10_range": {
+        "min": 276,
+        "max": 321
+      },
+      "overall_lt1_range": {
+        "min": 6207,
+        "max": 6656
+      }
+    },
+    {
+      "band": "17m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 4957,
+          "ge10_med": 91,
+          "lt1_med": 3833,
+          "unique_spotters": 796,
+          "unique_grid_pairs": 2197,
+          "ge10_min": 45,
+          "ge10_p75": 91,
+          "ge10_max": 93,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 4190,
+          "ge10_med": 78,
+          "lt1_med": 3337,
+          "unique_spotters": 832,
+          "unique_grid_pairs": 2289,
+          "ge10_min": 49,
+          "ge10_p75": 106,
+          "ge10_max": 131,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 2832,
+          "ge10_med": 32,
+          "lt1_med": 2408,
+          "unique_spotters": 656,
+          "unique_grid_pairs": 1716,
+          "ge10_min": 25,
+          "ge10_p75": 42,
+          "ge10_max": 44,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 4957,
+            "max": 4957
+          },
+          "ge10_range": {
+            "min": 91,
+            "max": 91
+          },
+          "lt1_range": {
+            "min": 3833,
+            "max": 3833
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "22:00–23:00",
+          "f_range": {
+            "min": 2832,
+            "max": 4190
+          },
+          "ge10_range": {
+            "min": 32,
+            "max": 78
+          },
+          "lt1_range": {
+            "min": 2408,
+            "max": 3337
+          }
+        }
+      ],
+      "moderate_ranges": null,
+      "overall_f_range": {
+        "min": 2832,
+        "max": 4957
+      },
+      "overall_ge10_range": {
+        "min": 32,
+        "max": 91
+      },
+      "overall_lt1_range": {
+        "min": 2408,
+        "max": 3833
+      }
+    },
+    {
+      "band": "20m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 15435,
+          "ge10_med": 1026,
+          "lt1_med": 9421,
+          "unique_spotters": 2085,
+          "unique_grid_pairs": 4772,
+          "ge10_min": 592,
+          "ge10_p75": 1026,
+          "ge10_max": 1034,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 13658,
+          "ge10_med": 1059,
+          "lt1_med": 8431,
+          "unique_spotters": 2071,
+          "unique_grid_pairs": 5410,
+          "ge10_min": 994,
+          "ge10_p75": 1091,
+          "ge10_max": 1207,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 14672,
+          "ge10_med": 1071,
+          "lt1_med": 9002,
+          "unique_spotters": 2058,
+          "unique_grid_pairs": 6154,
+          "ge10_min": 447,
+          "ge10_p75": 1071,
+          "ge10_max": 1102,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 14672,
+            "max": 14672
+          },
+          "ge10_range": {
+            "min": 1071,
+            "max": 1071
+          },
+          "lt1_range": {
+            "min": 9002,
+            "max": 9002
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 13658,
+            "max": 13658
+          },
+          "ge10_range": {
+            "min": 1059,
+            "max": 1059
+          },
+          "lt1_range": {
+            "min": 8431,
+            "max": 8431
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 15435,
+            "max": 15435
+          },
+          "ge10_range": {
+            "min": 1026,
+            "max": 1026
+          },
+          "lt1_range": {
+            "min": 9421,
+            "max": 9421
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 13658,
+        "max": 15435
+      },
+      "overall_ge10_range": {
+        "min": 1026,
+        "max": 1071
+      },
+      "overall_lt1_range": {
+        "min": 8431,
+        "max": 9421
+      }
+    },
+    {
+      "band": "30m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 9281,
+          "ge10_med": 296,
+          "lt1_med": 6903,
+          "unique_spotters": 1093,
+          "unique_grid_pairs": 3277,
+          "ge10_min": 138,
+          "ge10_p75": 303,
+          "ge10_max": 321,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 8371,
+          "ge10_med": 248,
+          "lt1_med": 6423,
+          "unique_spotters": 1058,
+          "unique_grid_pairs": 3345,
+          "ge10_min": 138,
+          "ge10_p75": 316,
+          "ge10_max": 350,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 6503,
+          "ge10_med": 183,
+          "lt1_med": 5582,
+          "unique_spotters": 1096,
+          "unique_grid_pairs": 3334,
+          "ge10_min": 63,
+          "ge10_p75": 177,
+          "ge10_max": 223,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 9281,
+            "max": 9281
+          },
+          "ge10_range": {
+            "min": 296,
+            "max": 296
+          },
+          "lt1_range": {
+            "min": 6903,
+            "max": 6903
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "22:00–23:00",
+          "f_range": {
+            "min": 6503,
+            "max": 8371
+          },
+          "ge10_range": {
+            "min": 183,
+            "max": 248
+          },
+          "lt1_range": {
+            "min": 5582,
+            "max": 6423
+          }
+        }
+      ],
+      "moderate_ranges": null,
+      "overall_f_range": {
+        "min": 6503,
+        "max": 9281
+      },
+      "overall_ge10_range": {
+        "min": 183,
+        "max": 296
+      },
+      "overall_lt1_range": {
+        "min": 5582,
+        "max": 6903
+      }
+    },
+    {
+      "band": "40m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 14203,
+          "ge10_med": 857,
+          "lt1_med": 8224,
+          "unique_spotters": 1729,
+          "unique_grid_pairs": 4228,
+          "ge10_min": 408,
+          "ge10_p75": 823,
+          "ge10_max": 870,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 18337,
+          "ge10_med": 945,
+          "lt1_med": 11578,
+          "unique_spotters": 1862,
+          "unique_grid_pairs": 6163,
+          "ge10_min": 787,
+          "ge10_p75": 945,
+          "ge10_max": 997,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 21194,
+          "ge10_med": 950,
+          "lt1_med": 14783,
+          "unique_spotters": 1974,
+          "unique_grid_pairs": 7212,
+          "ge10_min": 300,
+          "ge10_p75": 814,
+          "ge10_max": 950,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 21194,
+            "max": 21194
+          },
+          "ge10_range": {
+            "min": 950,
+            "max": 950
+          },
+          "lt1_range": {
+            "min": 14783,
+            "max": 14783
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00–22:00",
+          "f_range": {
+            "min": 14203,
+            "max": 18337
+          },
+          "ge10_range": {
+            "min": 857,
+            "max": 945
+          },
+          "lt1_range": {
+            "min": 8224,
+            "max": 11578
+          }
+        }
+      ],
+      "moderate_ranges": null,
+      "overall_f_range": {
+        "min": 14203,
+        "max": 21194
+      },
+      "overall_ge10_range": {
+        "min": 857,
+        "max": 950
+      },
+      "overall_lt1_range": {
+        "min": 8224,
+        "max": 14783
+      }
+    },
+    {
+      "band": "60m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 2601,
+          "ge10_med": 87,
+          "lt1_med": 1443,
+          "unique_spotters": 404,
+          "unique_grid_pairs": 650,
+          "ge10_min": 41,
+          "ge10_p75": 88,
+          "ge10_max": 91,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 2753,
+          "ge10_med": 87,
+          "lt1_med": 1845,
+          "unique_spotters": 412,
+          "unique_grid_pairs": 811,
+          "ge10_min": 72,
+          "ge10_p75": 91,
+          "ge10_max": 110,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 2809,
+          "ge10_med": 68,
+          "lt1_med": 2180,
+          "unique_spotters": 408,
+          "unique_grid_pairs": 1095,
+          "ge10_min": 6,
+          "ge10_p75": 58,
+          "ge10_max": 73,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 2753,
+            "max": 2753
+          },
+          "ge10_range": {
+            "min": 87,
+            "max": 87
+          },
+          "lt1_range": {
+            "min": 1845,
+            "max": 1845
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 2601,
+            "max": 2601
+          },
+          "ge10_range": {
+            "min": 87,
+            "max": 87
+          },
+          "lt1_range": {
+            "min": 1443,
+            "max": 1443
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 2809,
+            "max": 2809
+          },
+          "ge10_range": {
+            "min": 68,
+            "max": 68
+          },
+          "lt1_range": {
+            "min": 2180,
+            "max": 2180
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 2601,
+        "max": 2809
+      },
+      "overall_ge10_range": {
+        "min": 68,
+        "max": 87
+      },
+      "overall_lt1_range": {
+        "min": 1443,
+        "max": 2180
+      }
+    },
+    {
+      "band": "80m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 5640,
+          "ge10_med": 419,
+          "lt1_med": 2900,
+          "unique_spotters": 788,
+          "unique_grid_pairs": 1189,
+          "ge10_min": 127,
+          "ge10_p75": 383,
+          "ge10_max": 419,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 7101,
+          "ge10_med": 539,
+          "lt1_med": 3863,
+          "unique_spotters": 850,
+          "unique_grid_pairs": 1499,
+          "ge10_min": 323,
+          "ge10_p75": 543,
+          "ge10_max": 584,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 8113,
+          "ge10_med": 420,
+          "lt1_med": 5289,
+          "unique_spotters": 1026,
+          "unique_grid_pairs": 2321,
+          "ge10_min": 118,
+          "ge10_p75": 347,
+          "ge10_max": 423,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 7101,
+            "max": 7101
+          },
+          "ge10_range": {
+            "min": 539,
+            "max": 539
+          },
+          "lt1_range": {
+            "min": 3863,
+            "max": 3863
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 5640,
+            "max": 5640
+          },
+          "ge10_range": {
+            "min": 419,
+            "max": 419
+          },
+          "lt1_range": {
+            "min": 2900,
+            "max": 2900
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 8113,
+            "max": 8113
+          },
+          "ge10_range": {
+            "min": 420,
+            "max": 420
+          },
+          "lt1_range": {
+            "min": 5289,
+            "max": 5289
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 5640,
+        "max": 8113
+      },
+      "overall_ge10_range": {
+        "min": 419,
+        "max": 539
+      },
+      "overall_lt1_range": {
+        "min": 2900,
+        "max": 5289
+      }
+    },
+    {
+      "band": "160m",
+      "hours": [
+        {
+          "hour": "21:00",
+          "f_med": 4281,
+          "ge10_med": 218,
+          "lt1_med": 2409,
+          "unique_spotters": 690,
+          "unique_grid_pairs": 1245,
+          "ge10_min": 107,
+          "ge10_p75": 208,
+          "ge10_max": 218,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "22:00",
+          "f_med": 4761,
+          "ge10_med": 164,
+          "lt1_med": 3094,
+          "unique_spotters": 645,
+          "unique_grid_pairs": 1008,
+          "ge10_min": 144,
+          "ge10_p75": 267,
+          "ge10_max": 275,
+          "ge10_degenerate": false
+        },
+        {
+          "hour": "23:00",
+          "f_med": 2357,
+          "ge10_med": 49,
+          "lt1_med": 1842,
+          "unique_spotters": 542,
+          "unique_grid_pairs": 776,
+          "ge10_min": 28,
+          "ge10_p75": 54,
+          "ge10_max": 64,
+          "ge10_degenerate": false
+        }
+      ],
+      "evidence_level": "mixed",
+      "strong_ranges": [
+        {
+          "hours": "21:00",
+          "f_range": {
+            "min": 4281,
+            "max": 4281
+          },
+          "ge10_range": {
+            "min": 218,
+            "max": 218
+          },
+          "lt1_range": {
+            "min": 2409,
+            "max": 2409
+          }
+        }
+      ],
+      "weak_ranges": [
+        {
+          "hours": "23:00",
+          "f_range": {
+            "min": 2357,
+            "max": 2357
+          },
+          "ge10_range": {
+            "min": 49,
+            "max": 49
+          },
+          "lt1_range": {
+            "min": 1842,
+            "max": 1842
+          }
+        }
+      ],
+      "moderate_ranges": [
+        {
+          "hours": "22:00",
+          "f_range": {
+            "min": 4761,
+            "max": 4761
+          },
+          "ge10_range": {
+            "min": 164,
+            "max": 164
+          },
+          "lt1_range": {
+            "min": 3094,
+            "max": 3094
+          }
+        }
+      ],
+      "overall_f_range": {
+        "min": 2357,
+        "max": 4761
+      },
+      "overall_ge10_range": {
+        "min": 49,
+        "max": 218
+      },
+      "overall_lt1_range": {
+        "min": 1842,
+        "max": 3094
+      }
+    }
+  ],
+  "band_groups": {
+    "high": [
+      "17m",
+      "15m",
+      "12m",
+      "10m"
+    ],
+    "low": [
+      "160m",
+      "80m",
+      "60m"
+    ],
+    "mid": [
+      "40m",
+      "30m",
+      "20m"
+    ]
+  },
+  "coverage_medians_by_band": {
+    "10m": {
+      "spotters_median": 1399,
+      "grid_pairs_median": 4235
+    },
+    "12m": {
+      "spotters_median": 848,
+      "grid_pairs_median": 2531
+    },
+    "15m": {
+      "spotters_median": 1169,
+      "grid_pairs_median": 4074
+    },
+    "160m": {
+      "spotters_median": 645,
+      "grid_pairs_median": 1008
+    },
+    "17m": {
+      "spotters_median": 796,
+      "grid_pairs_median": 2197
+    },
+    "20m": {
+      "spotters_median": 2071,
+      "grid_pairs_median": 5410
+    },
+    "30m": {
+      "spotters_median": 1093,
+      "grid_pairs_median": 3334
+    },
+    "40m": {
+      "spotters_median": 1862,
+      "grid_pairs_median": 6163
+    },
+    "60m": {
+      "spotters_median": 408,
+      "grid_pairs_median": 811
+    },
+    "80m": {
+      "spotters_median": 850,
+      "grid_pairs_median": 1499
+    }
+  },
+  "predictions_by_hour": [
+    {
+      "hour": "21:00",
+      "samples": 12,
+      "avg_total": 496.1666666666667,
+      "avg_combined": 699.0833333333334,
+      "avg_insufficient": 252.41666666666666,
+      "avg_no_sample": 198.16666666666666,
+      "avg_low_weight": 63
+    },
+    {
+      "hour": "22:00",
+      "samples": 11,
+      "avg_total": 730.9090909090909,
+      "avg_combined": 610.8181818181819,
+      "avg_insufficient": 120.0909090909091,
+      "avg_no_sample": 81.45454545454545,
+      "avg_low_weight": 38.63636363636363
+    },
+    {
+      "hour": "23:00",
+      "samples": 12,
+      "avg_total": 628.75,
+      "avg_combined": 504.6666666666667,
+      "avg_insufficient": 124.08333333333333,
+      "avg_no_sample": 95.33333333333333,
+      "avg_low_weight": 28.75
+    }
+  ],
+  "source_mix_by_hour": [
+    {
+      "hour": "21:00",
+      "total": 1448496,
+      "rbn": 15737,
+      "rbn_ft": 62814,
+      "psk": 1369904,
+      "human": 0,
+      "peer": 41,
+      "upstream": 0,
+      "other": 0
+    },
+    {
+      "hour": "22:00",
+      "total": 1262210,
+      "rbn": 10871,
+      "rbn_ft": 50515,
+      "psk": 1200802,
+      "human": 0,
+      "peer": 22,
+      "upstream": 0,
+      "other": 0
+    },
+    {
+      "hour": "23:00",
+      "total": 1310650,
+      "rbn": 10455,
+      "rbn_ft": 55513,
+      "psk": 1244662,
+      "human": 0,
+      "peer": 20,
+      "upstream": 0,
+      "other": 0
+    }
+  ],
+  "thresholds": {
+    "strong_rule": "strong if ge10_med \u003e= p75(ge10) and f_med \u003e= p50(f)",
+    "weak_rule": "weak if ge10_med \u003c= p25(ge10) and f_med \u003c= p50(f)"
+  }
+}
