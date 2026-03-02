@@ -52,6 +52,32 @@ func TestNewSpotNormalizesSSBToSideband(t *testing.T) {
 	}
 }
 
+func TestRoundFrequencyTo10HzHalfUp(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{name: "round down below half", in: 7009.504, want: 7009.50},
+		{name: "round up at half", in: 7009.505, want: 7009.51},
+		{name: "round up above half", in: 7009.506, want: 7009.51},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := roundFrequencyTo10Hz(tt.in); got != tt.want {
+				t.Fatalf("roundFrequencyTo10Hz(%f)=%f want %f", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewSpotRoundsFrequencyTo10HzHalfUp(t *testing.T) {
+	s := NewSpot("W1ABC", "K1XYZ", 7014.995, "CW")
+	if s.Frequency != 7015.00 {
+		t.Fatalf("expected rounded frequency 7015.00, got %.2f", s.Frequency)
+	}
+}
+
 func TestEnsureNormalizedCollapsesPSKVariants(t *testing.T) {
 	s := NewSpot("K1ABC", "W1AW", 14074.0, "PSK31")
 	s.ModeNorm = "" // force recompute
@@ -148,6 +174,44 @@ func TestFormatDXClusterUsesStrippedDECall(t *testing.T) {
 	}
 	if !strings.Contains(got, "DX de W1XYZ:") {
 		t.Fatalf("expected stripped DE call prefix, got %q", got)
+	}
+}
+
+func TestFormatDXClusterStripsTrailingHashSSIDOnlyWhenTooLong(t *testing.T) {
+	tooLong := &Spot{
+		DXCall:    "II2WOG",
+		DECall:    "EA8/DF4UE-#",
+		Frequency: 3540.0,
+		Mode:      "CW",
+		Time:      time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
+	}
+
+	gotTooLong := tooLong.FormatDXCluster()
+	if strings.Contains(gotTooLong, "EA8/DF4UE-#:") {
+		t.Fatalf("expected trailing -# to be stripped when call is too long, got %q", gotTooLong)
+	}
+	if !strings.Contains(gotTooLong, "DX de EA8/DF4UE:") {
+		t.Fatalf("expected stripped DE call in prefix, got %q", gotTooLong)
+	}
+	freqIdx := strings.Index(gotTooLong, "3540.00")
+	if freqIdx <= 0 {
+		t.Fatalf("expected frequency in output, got %q", gotTooLong)
+	}
+	if gotTooLong[freqIdx-1] != ' ' {
+		t.Fatalf("expected a space between DE prefix and frequency, got %q", gotTooLong)
+	}
+
+	shortEnough := &Spot{
+		DXCall:    "II2WOG",
+		DECall:    "OH4KA-#",
+		Frequency: 3540.0,
+		Mode:      "CW",
+		Time:      time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
+	}
+
+	gotShort := shortEnough.FormatDXCluster()
+	if !strings.Contains(gotShort, "DX de OH4KA-#:") {
+		t.Fatalf("expected trailing -# to be preserved when call fits, got %q", gotShort)
 	}
 }
 
@@ -326,7 +390,7 @@ func TestFormatDXClusterAlignmentNoConfidence(t *testing.T) {
 	got := s.FormatDXCluster()
 	layout := CurrentDXClusterLayout()
 
-	const freqStr = "7009.5"
+	const freqStr = "7009.50"
 	freqIdx := strings.Index(got, freqStr)
 	if freqIdx == -1 {
 		t.Fatalf("frequency string missing from output: %q", got)
@@ -371,7 +435,7 @@ func TestFormatDXClusterAlignmentWithConfidence(t *testing.T) {
 	got := s.FormatDXCluster()
 	layout := CurrentDXClusterLayout()
 
-	const freqStr = "7014.0"
+	const freqStr = "7014.00"
 	freqIdx := strings.Index(got, freqStr)
 	if freqIdx == -1 {
 		t.Fatalf("frequency string missing from output: %q", got)

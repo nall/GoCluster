@@ -107,7 +107,7 @@ type CallMetadata struct {
 // Downstream: EnsureNormalized and RefreshBeaconFlag.
 // NewSpot creates a new spot with sensible defaults
 func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
-	freq = roundFrequencyTo100Hz(freq)
+	freq = roundFrequencyTo10Hz(freq)
 	mode = NormalizeVoiceMode(mode, freq)
 	modeNorm := mode
 	if canonical, _, ok := canonicalPSKModeUpper(mode); ok {
@@ -146,7 +146,7 @@ func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
 // Downstream: EnsureNormalized and RefreshBeaconFlag.
 // NewSpotNormalized builds a spot without re-normalizing DX/DE calls.
 func NewSpotNormalized(dxCallNorm, deCallNorm string, freq float64, mode string) *Spot {
-	freq = roundFrequencyTo100Hz(freq)
+	freq = roundFrequencyTo10Hz(freq)
 	mode = NormalizeVoiceMode(mode, freq)
 	modeNorm := mode
 	if canonical, _, ok := canonicalPSKModeUpper(mode); ok {
@@ -179,14 +179,14 @@ func NewSpotNormalized(dxCallNorm, deCallNorm string, freq float64, mode string)
 	return spot
 }
 
-// Purpose: Round a kHz frequency to the nearest 100 Hz (0.1 kHz).
+// Purpose: Round a kHz frequency to the nearest 10 Hz (0.01 kHz).
 // Key aspects: Uses half-up rounding to avoid banker rounding.
 // Upstream: NewSpot and frequency normalization.
 // Downstream: math.Floor.
-// roundFrequencyTo100Hz normalizes a kHz value to the nearest 100 Hz (0.1 kHz).
-func roundFrequencyTo100Hz(freqKHz float64) float64 {
+// roundFrequencyTo10Hz normalizes a kHz value to the nearest 10 Hz (0.01 kHz).
+func roundFrequencyTo10Hz(freqKHz float64) float64 {
 	// Use half-up rounding to avoid banker's rounding surprises at .x5 boundaries.
-	return math.Floor(freqKHz*10+0.5) / 10
+	return math.Floor(freqKHz*100+0.5) / 100
 }
 
 // Hash32 computes a 32-bit dedupe hash for the spot.
@@ -599,7 +599,7 @@ func (s *Spot) FormatDXCluster() string {
 		// Pre-size a buffer to avoid multiple allocations while preserving the
 		// exact column layout described above.
 		timeStr := s.Time.UTC().Format("1504Z")
-		freqStr := strconv.FormatFloat(s.Frequency, 'f', 1, 64)
+		freqStr := strconv.FormatFloat(s.Frequency, 'f', 2, 64)
 		commentPayload := s.formatZoneGridComment()
 
 		tailStartIdx := layout.tailStartIdx
@@ -615,6 +615,17 @@ func (s *Spot) FormatDXCluster() string {
 		maxDELen := maxPrefixLen - len("DX de ") - len(":")
 		if maxDELen < 1 {
 			maxDELen = 1
+		}
+		// Keep short SSID markers for display, but if a trailing "-#" would make
+		// the left field too tight, drop just that marker before any hard truncation.
+		if strings.HasSuffix(deCall, "-#") {
+			maxDELenWithGap := maxDELen - 1
+			if maxDELenWithGap < 1 {
+				maxDELenWithGap = 1
+			}
+			if len(deCall) > maxDELenWithGap {
+				deCall = strings.TrimSuffix(deCall, "-#")
+			}
 		}
 		if len(deCall) > maxDELen {
 			deCall = deCall[:maxDELen]
