@@ -14,9 +14,11 @@ archive data/
 data/archive
 data/grids
 data/fcc
+data/rbn
 data/reports
 data/scp
 data/users
+cmd/rbn_backtest/data/
 # *.db
 # *.sqlite
 # *.zip
