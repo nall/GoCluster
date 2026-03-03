@@ -39,10 +39,10 @@ peering:
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
       login_callsign: "N2WQ-2"    # Callsign used to log in to the remote
       remote_callsign: "KM3T-44"     # Expected remote node callsign
-      enabled: true               # Placeholder peer #3 (set true when ready)
+    - enabled: true                # Outbound peer definition #4
       host: "f1fca.freeboxos.fr"   # Remote host
       port: 6300                   # Remote port
-      password: "N2WQ!2_GoClusterTest"                 # Optional password sent after login callsign
+      password: "N2WQ!2_GoClusterTest" # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
       login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
       remote_callsign: "F1FCA-1"   # Expected remote node callsign
