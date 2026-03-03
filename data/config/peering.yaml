@@ -18,26 +18,26 @@ peering:
   max_line_length: 65536           # Drop lines longer than this to avoid abuse
   pc92_max_bytes: 65536            # Drop PC92 topology frames larger than this (<= max_line_length)
   peers:
-    - enabled: false               # Outbound peer definition
+    - enabled: true                # Outbound peer definition
       host: "dxs.n2wq.com"         # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
       login_callsign: "N2WQ-77"    # Callsign used to log in to the remote
       remote_callsign: "N2WQ-73"   # Expected remote node callsign
-    - enabled: true                # Placeholder peer #2 (set true when ready)
-      host: " gocluster.km3t.net"  # Remote host
-      port: 8300                   # Remote port
-      password: ""                 # Optional password sent after login callsign
-      prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "PEER2"     # Expected remote node callsign
-    - enabled: false               # Placeholder peer #3 (set true when ready)
-      host: "peer3.example.net"    # Remote host
+    - enabled: false               # Placeholder peer #2 (set true when ready)
+      host: "dxspider.km3t.net"  # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-77"    # Callsign used to log in to the remote
+      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
+      remote_callsign: "KM3T-10"     # Expected remote node callsign
+    - enabled: true               # Placeholder peer #3 (set true when ready)
+      host: "gocluster.km3t.net"   # Remote host
+      port: 8300                   # Remote port
+      password: ""                 # Optional password sent after login callsign
+      prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
+      login_callsign: "N2WQ-2"    # Callsign used to log in to the remote
       remote_callsign: "KM3T-44"     # Expected remote node callsign
   timeouts:
     login_seconds: 60              # Outbound login timeout

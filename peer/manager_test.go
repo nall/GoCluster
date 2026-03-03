@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -27,5 +28,24 @@ func TestHandleFramePC92QueueDropsWhenFull(t *testing.T) {
 	}
 	if len(m.pc92Ch) != 1 {
 		t.Fatalf("expected queue to remain full (drop), got len=%d", len(m.pc92Ch))
+	}
+}
+
+func TestActiveSessionSSIDsSortedUnique(t *testing.T) {
+	m := &Manager{
+		sessions: map[string]*session{
+			"a": {remoteCall: "n2wq-73"},
+			"b": {remoteCall: " KM3T-44 "},
+			"c": {remoteCall: "km3t-44"},
+			"d": {remoteCall: "*"},
+			"e": {remoteCall: ""},
+			"f": nil,
+		},
+	}
+
+	got := m.ActiveSessionSSIDs()
+	want := []string{"KM3T-44", "N2WQ-73"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
 	}
 }

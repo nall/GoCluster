@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -626,6 +627,40 @@ func (m *Manager) ActiveSessionCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.sessions)
+}
+
+// ActiveSessionSSIDs returns active peer callsigns (including SSID suffixes) for dashboard display.
+// Purpose: Expose operator-friendly peer identity instead of aggregate counts.
+// Key aspects: Safe with nil manager, read-locked snapshot, sorted and de-duplicated.
+// Upstream: main stats loop.
+// Downstream: overview ingest sources box.
+func (m *Manager) ActiveSessionSSIDs() []string {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.sessions) == 0 {
+		return nil
+	}
+	ssids := make([]string, 0, len(m.sessions))
+	seen := make(map[string]struct{}, len(m.sessions))
+	for _, sess := range m.sessions {
+		if sess == nil {
+			continue
+		}
+		label := strutil.NormalizeUpper(sess.remoteCall)
+		if label == "" || label == "*" {
+			continue
+		}
+		if _, exists := seen[label]; exists {
+			continue
+		}
+		seen[label] = struct{}{}
+		ssids = append(ssids, label)
+	}
+	sort.Strings(ssids)
+	return ssids
 }
 
 // liveUserCount returns the current telnet client count when provided, otherwise falls back to config.

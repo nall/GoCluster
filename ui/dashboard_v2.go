@@ -46,6 +46,7 @@ const (
 		"\n" +
 		"[lightgray]CTY[-]: --  [lightgray]FCC[-]: --  [lightgray]Skew[-]: --"
 	placeholderPath               = "[lightgray]Path pairs[-]: -- (L2) / -- (L1)\n[lightgray]160m[-]: -- / --   [lightgray]80m[-]: -- / --"
+	placeholderIngestSources      = "[lightgray]Ingest[-]: -- / 4 connected\n\n(none)"
 	placeholderNetwork            = "[lightgray]Telnet[-]: -- clients   [lightgray]Drops[-]: Q-- C-- W--"
 	placeholderValidation         = "CTY drop: --"
 	placeholderUnlicensed         = "Unlicensed drop: --"
@@ -58,6 +59,8 @@ const (
 	overviewCachesDefaultHeight   = 9
 	overviewCachesMinHeight       = 3
 	overviewPathMinHeight         = 3
+	overviewSourcesDefaultHeight  = 5
+	overviewSourcesMinHeight      = 3
 )
 
 var (
@@ -93,6 +96,7 @@ type DashboardV2 struct {
 	overviewPipeline  *tview.TextView
 	overviewCaches    *tview.TextView
 	overviewPath      *tview.TextView
+	overviewSources   *tview.TextView
 	overviewNetwork   *tview.TextView
 	ingestRoot        *tview.Flex
 	ingestHdr         *tview.TextView
@@ -134,6 +138,7 @@ type DashboardV2 struct {
 	overviewPipelineHeight int
 	overviewCachesHeight   int
 	overviewPathHeight     int
+	overviewSourcesHeight  int
 }
 
 // NewDashboardV2 constructs the v2 dashboard if enabled.
@@ -165,6 +170,7 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 		overviewPipelineHeight: overviewPipelineDefaultHeight,
 		overviewCachesHeight:   overviewCachesDefaultHeight,
 		overviewPathHeight:     overviewPathMinHeight,
+		overviewSourcesHeight:  overviewSourcesDefaultHeight,
 	}
 
 	d.overviewHdr = newBoxedTextView("Overview")
@@ -173,6 +179,8 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 	d.overviewPipeline = newBoxedTextView("Pipeline Quality")
 	d.overviewCaches = newBoxedTextView("Caches & Data Freshness")
 	d.overviewPath = newBoxedTextView("Path Predictions")
+	d.overviewSources = newBoxedTextView("Ingest Sources")
+	d.overviewSources.SetScrollable(true)
 	d.overviewNetwork = newBoxedTextView("Network")
 	d.overviewNetwork.SetScrollable(true)
 	d.seedOverviewPlaceholders()
@@ -189,6 +197,8 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 		AddItem(d.overviewCaches, overviewCachesDefaultHeight, 0, false).
 		AddItem(newSpacer(), 1, 0, false).
 		AddItem(d.overviewPath, overviewPathMinHeight, 0, false).
+		AddItem(newSpacer(), 1, 0, false).
+		AddItem(d.overviewSources, overviewSourcesDefaultHeight, 0, false).
 		AddItem(newSpacer(), 1, 0, false).
 		AddItem(d.overviewNetwork, 0, 1, false)
 	d.ingestHdr = newBoxedTextView("Overview")
@@ -236,7 +246,10 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 		AddItem(newSpacer(), 1, 0, false).
 		AddItem(d.eventsStream.Primitive(), 0, 1, false)
 
-	d.overviewGroup = newFocusGroup(newFocusBox(d.overviewNetwork, "Network", true))
+	d.overviewGroup = newFocusGroup(
+		newFocusBox(d.overviewSources, "Ingest Sources", true),
+		newFocusBox(d.overviewNetwork, "Network", true),
+	)
 	d.ingestGroup = newFocusGroup(d.ingestValidation, d.ingestUnlicensed)
 	d.pipelineGroup = newFocusGroup(d.pipelineCorrected, d.pipelineHarmonics)
 	d.eventsGroup = newFocusGroup(d.eventsStream)
@@ -698,6 +711,7 @@ func (d *DashboardV2) updateOverviewBoxes(lines []string) {
 	}
 	cacheIdx := -1
 	pathIdx := -1
+	sourceIdx := -1
 	networkIdx := -1
 	for i, line := range lines {
 		switch line {
@@ -705,6 +719,8 @@ func (d *DashboardV2) updateOverviewBoxes(lines []string) {
 			cacheIdx = i
 		case "PATH PREDICTIONS":
 			pathIdx = i
+		case "INGEST SOURCES":
+			sourceIdx = i
 		case "NETWORK":
 			networkIdx = i
 		}
@@ -722,8 +738,12 @@ func (d *DashboardV2) updateOverviewBoxes(lines []string) {
 			d.overviewCachesHeight = neededHeight
 		}
 	}
-	if pathIdx >= 0 && networkIdx > pathIdx+1 {
-		pathLines := lines[pathIdx+1 : networkIdx]
+	pathEnd := networkIdx
+	if sourceIdx > pathIdx+1 && sourceIdx < pathEnd {
+		pathEnd = sourceIdx
+	}
+	if pathIdx >= 0 && pathEnd > pathIdx+1 {
+		pathLines := lines[pathIdx+1 : pathEnd]
 		setBoxText(d.overviewPath, strings.Join(pathLines, "\n"))
 		neededHeight := len(pathLines) + 2
 		if neededHeight < overviewPathMinHeight {
@@ -735,6 +755,20 @@ func (d *DashboardV2) updateOverviewBoxes(lines []string) {
 			d.overviewRoot.ResizeItem(d.overviewPath, neededHeight, 0)
 			d.overviewPathHeight = neededHeight
 		}
+	}
+	if sourceIdx >= 0 && networkIdx > sourceIdx+1 {
+		sourceLines := lines[sourceIdx+1 : networkIdx]
+		setBoxText(d.overviewSources, strings.Join(sourceLines, "\n"))
+		neededHeight := len(sourceLines) + 2
+		if neededHeight < overviewSourcesMinHeight {
+			neededHeight = overviewSourcesMinHeight
+		}
+		if d.overviewRoot != nil && d.overviewSources != nil && neededHeight != d.overviewSourcesHeight {
+			d.overviewRoot.ResizeItem(d.overviewSources, neededHeight, 0)
+			d.overviewSourcesHeight = neededHeight
+		}
+	} else {
+		setBoxText(d.overviewSources, placeholderIngestSources)
 	}
 	if networkIdx >= 0 && len(lines) > networkIdx+1 {
 		networkLines := lines[networkIdx+1:]
@@ -780,6 +814,7 @@ func (d *DashboardV2) seedOverviewPlaceholders() {
 	setBoxText(d.overviewPipeline, placeholderPipeline)
 	setBoxText(d.overviewCaches, placeholderCaches)
 	setBoxText(d.overviewPath, placeholderPath)
+	setBoxText(d.overviewSources, placeholderIngestSources)
 	setBoxText(d.overviewNetwork, placeholderNetwork)
 }
 

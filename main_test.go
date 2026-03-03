@@ -2444,6 +2444,10 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 		false,
 		false,
 		false,
+		false,
+		false,
+		0,
+		nil,
 		0,
 		0,
 		0,
@@ -2505,6 +2509,37 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 		if strings.Contains(line, "Evidence policy") {
 			t.Fatalf("did not expect evidence policy line in overview lines, got %v", lines)
 		}
+	}
+}
+
+func TestFormatIngestSourceLinesIncludesPeerSSIDs(t *testing.T) {
+	lines := formatIngestSourceLines(true, true, true, 2, []string{"KM3T-44", "N2WQ-73"})
+	if len(lines) == 0 {
+		t.Fatal("expected ingest source lines")
+	}
+	if !strings.Contains(lines[0], "4 / 4 connected") {
+		t.Fatalf("expected 4/4 connected summary, got %q", lines[0])
+	}
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "KM3T-44") || !strings.Contains(joined, "N2WQ-73") {
+		t.Fatalf("expected peer SSIDs in ingest source list, got %v", lines)
+	}
+	if strings.Contains(joined, "Peers (2)") {
+		t.Fatalf("did not expect peer-count fallback when SSIDs are available, got %v", lines)
+	}
+}
+
+func TestFormatIngestSourceLinesFallsBackToPeerCount(t *testing.T) {
+	lines := formatIngestSourceLines(false, false, false, 2, nil)
+	if len(lines) == 0 {
+		t.Fatal("expected ingest source lines")
+	}
+	if !strings.Contains(lines[0], "1 / 4 connected") {
+		t.Fatalf("expected peer-only connected summary, got %q", lines[0])
+	}
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "Peers (2)") {
+		t.Fatalf("expected peer-count fallback when SSIDs are unavailable, got %v", lines)
 	}
 }
 

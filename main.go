@@ -1882,9 +1882,17 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			}
 		}
 
+		rbnCWLive := rbnClient != nil && rbnClient.HealthSnapshot().Connected
+		rbnFTLive := rbnDigitalClient != nil && rbnDigitalClient.HealthSnapshot().Connected
 		rbnLive := rbnFeedsLive(rbnClient, rbnDigitalClient)
 		pskLive := pskReporterLive(pskSnap, now)
-		p92Live := peerManager != nil && peerManager.ActiveSessionCount() > 0
+		peerSessions := 0
+		var peerSSIDs []string
+		if peerManager != nil {
+			peerSessions = peerManager.ActiveSessionCount()
+			peerSSIDs = peerManager.ActiveSessionSSIDs()
+		}
+		p92Live := peerSessions > 0
 
 		lines := make([]string, 0, 11)
 		lines = append(lines,
@@ -1927,7 +1935,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		if dash != nil {
 			dash.SetStats(lines)
 			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, knownPtr, recentBandStore, ctyState, knownCallsPath, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
-				rbnLive, pskLive, p92Live,
+				rbnLive, pskLive, p92Live, rbnCWLive, rbnFTLive, peerSessions, peerSSIDs,
 				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4,
 				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63,
 				p92Total,
@@ -6056,6 +6064,9 @@ func buildOverviewLines(
 	telnetSrv *telnet.Server,
 	clusterCall string,
 	rbnLive, pskLive, p92Live bool,
+	rbnCWLive, rbnFTLive bool,
+	peerSessions int,
+	peerSSIDs []string,
 	rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4 uint64,
 	pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63 uint64,
 	p92Total uint64,
@@ -6205,8 +6216,42 @@ func buildOverviewLines(
 		"PATH PREDICTIONS",
 	)
 	lines = append(lines, formatPathLines(pathPredictor, now)...)
+	lines = append(lines, "INGEST SOURCES")
+	lines = append(lines, formatIngestSourceLines(rbnCWLive, rbnFTLive, pskLive, peerSessions, peerSSIDs)...)
 	lines = append(lines, "NETWORK")
 	lines = append(lines, formatNetworkLines(telnetSrv, clientList)...)
+	return lines
+}
+
+func formatIngestSourceLines(rbnCWLive, rbnFTLive, pskLive bool, peerSessions int, peerSSIDs []string) []string {
+	connected := 0
+	entries := make([]string, 0, 4+len(peerSSIDs))
+	if rbnCWLive {
+		connected++
+		entries = append(entries, "RBN")
+	}
+	if rbnFTLive {
+		connected++
+		entries = append(entries, "RBN-FT")
+	}
+	if pskLive {
+		connected++
+		entries = append(entries, "PSKReporter")
+	}
+	if peerSessions > 0 {
+		connected++
+		if len(peerSSIDs) > 0 {
+			entries = append(entries, peerSSIDs...)
+		} else {
+			entries = append(entries, fmt.Sprintf("Peers (%d)", peerSessions))
+		}
+	}
+	lines := []string{fmt.Sprintf("[yellow]Ingest[-]: %d / 4 connected", connected)}
+	if len(entries) == 0 {
+		lines = append(lines, "", "(none)")
+		return lines
+	}
+	lines = append(lines, formatClientListLines(entries)...)
 	return lines
 }
 
