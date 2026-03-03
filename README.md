@@ -34,13 +34,13 @@ A modern Go-based DX cluster that aggregates amateur radio spots, enriches them 
 
 1. **Telnet Server** (`telnet/server.go`) handles client connections, commands, and spot broadcasting using worker goroutines.
 2. **RBN Clients** (`rbn/client.go`) maintain connections to the CW/RTTY (port 7000) and Digital (port 7001) feeds. Each line is parsed and normalized, then sent through the shared ingest CTY/ULS gate for validation and enrichment before queuing.
-   - Parsing uses a single left-to-right token walk assisted by an Aho–Corasick (AC) keyword scanner so the line only needs to be scanned once.
+   - Parsing is two-stage: `rbn/client.go` does a bounded left-to-right token walk for structural fields (spotter, frequency, DX call), then `spot.ParseSpotComment` extracts mode/report/time from the remaining comment tokens.
    - The parser supports both `DX de CALL: 14074.0 ...` and the glued form `DX de CALL:14074.0 ...` by splitting the spotter token into `DECall` + optional attached frequency.
    - Frequency is the first token that parses as a plausible dial frequency (currently `100.0`-`3,000,000.0` kHz), rather than assuming a fixed column index.
    - Mode is taken from the first explicit mode token (`CW`, `USB`, `JS8`, `SSTV`, `FT8`, `MSK144`, etc.). If mode is absent, it is inferred from `data/config/mode_allocations.yaml` (with a simple fallback: `USB` >= 10 MHz else `CW`).
    - Report/SNR is recognized in both `+5 dB` and `-13dB` forms; `HasReport` is set whenever a report is present (RBN/RBN-Digital zero-SNR reports are dropped before ingest).
    - Ingest burst protection is sized per source via `rbn.slot_buffer` / `rbn_digital.slot_buffer` in `data/config/ingest.yaml`; overflow logs are tagged by source for easier diagnosis.
-3. **PSKReporter MQTT** (`pskreporter/client.go`) subscribes to a single catch-all `pskr/filter/v2/+/+/#` topic and filters modes downstream according to `pskreporter.modes`. It converts JSON payloads into canonical spots and preserves locator-based grids. Set `pskreporter.append_spotter_ssid: true` if you want receiver callsigns that lack SSIDs to pick up a `-#` suffix for deduplication. PSKReporter spots no longer carry a comment string; DX/DE grids stay in metadata and are shown in the fixed tail of telnet output. Configure `pskreporter.max_payload_bytes` to guard against oversized payloads; CTY caching is handled by the unified call metadata cache. PSKReporter spots with explicit `0 dB` reports (rp=0) are dropped before ingest; missing reports are treated as absent. `pskreporter.path_only_modes` routes specific modes (e.g., WSPR) directly into path prediction only—they never reach dedup, telnet, archive, or peer output, and they bypass CTY validation. MQTT ingest is bounded by `pskreporter.mqtt_inbound_workers`, `pskreporter.mqtt_inbound_queue_depth`, and `pskreporter.mqtt_qos12_enqueue_timeout_ms` (QoS0 drops when full; QoS1/2 disconnect after the enqueue timeout).
+3. **PSKReporter MQTT** (`pskreporter/client.go`) subscribes to a single catch-all `pskr/filter/v2/+/+/#` topic and filters modes downstream according to `pskreporter.modes`. It converts JSON payloads into canonical spots and preserves locator-based grids. Set `pskreporter.append_spotter_ssid: true` if you want receiver callsigns that lack SSIDs to pick up a `-#` suffix for deduplication. PSKReporter spots no longer carry a comment string; DX/DE grids stay in metadata and are shown in the fixed tail of telnet output. Configure `pskreporter.max_payload_bytes` to guard against oversized payloads; CTY caching is handled by the unified call metadata cache. PSKReporter spots with explicit `0 dB` reports (rp=0) or missing reports are dropped before ingest. `pskreporter.path_only_modes` routes specific modes (e.g., WSPR) directly into path prediction only—they never reach dedup, telnet, archive, or peer output, and they bypass CTY validation. MQTT ingest is bounded by `pskreporter.mqtt_inbound_workers`, `pskreporter.mqtt_inbound_queue_depth`, and `pskreporter.mqtt_qos12_enqueue_timeout_ms` (QoS0 drops when full; QoS1/2 disconnect after the enqueue timeout).
    - PSK modes are normalized to a canonical `PSK` family for filtering, dedupe, and stats while preserving the reported variant (PSK31/63/125) in telnet/archive output.
 4. **CTY Database** (`cty/parser.go` + `data/cty/cty.plist`) performs longest-prefix lookups; when a callsign includes slashes, it prefers the shortest matching segment (portable/location prefix), so `N2WQ/VE3` and `VE3/N2WQ` both resolve to `VE3` (Canada) for metadata. The in-memory CTY DB is paired with a unified call metadata cache so repeated lookups do not thrash the trie.
 5. **Dedup Engine** (`dedup/deduplicator.go`) filters duplicates before they reach the ring buffer. A zero-second window effectively disables dedup, but the pipeline stays unified. A secondary, broadcast-only dedupe runs after call correction/harmonic/frequency adjustments to collapse repeat DX reports without altering ring/history. It hashes band + DE ADIF (DXCC) + DE grid2 prefix (FAST/MED) or DE CQ zone (SLOW) + normalized DX call + source class (human vs skimmer); the time window is enforced by the cache, so one spot per window per key reaches clients while the ring/history remain intact. Three secondary policies are available: **fast** (120s, grid2), **med** (300s, grid2), and **slow** (480s, CQ zone), each with its own `secondary_*_prefer_stronger_snr` toggle in `data/config/dedupe.yaml`. Telnet clients select with `SET DEDUPE FAST|MED|SLOW` (use `SHOW DEDUPE` to confirm); default is MED. Archive uses the MED policy. Peer publishing uses the MED policy plus source gating: only local non-test human/manual spots are published (RBN/FT8/FT4/PSKReporter, upstream, and peer-origin spots are not peer-published). When call-correction stabilizer is enabled, telnet MED dedupe remains per-client while archive/peer MED dedupe is split to an independent instance so delayed telnet release does not change archive/peer suppression timing. The console pipeline line reports per-policy output as `<count>/<percent> (F) / <count>/<percent> (M) / <count>/<percent> (S)`. When a policy's prefer-stronger flag is true, the stronger SNR duplicate replaces the cached entry and is broadcast for that policy. Spotter SSID display is controlled at broadcast time (see `rbn.keep_ssid_suffix`); when disabled, telnet output, archive, and filters use stripped DE calls while peers keep the raw calls.
@@ -48,19 +48,22 @@ A modern Go-based DX cluster that aggregates amateur radio spots, enriches them 
 7. **Call/Harmonic/License Guards** (`spot/correction.go`, `spot/harmonics.go`, `main.go`) apply resolver-primary call correction, suppress harmonics, and finally run FCC license gating for DX right before broadcast/buffering (CTY validation runs in the ingest gate; corrected calls are re-validated against CTY before acceptance). Resolver winner admission uses shared family rails, optional neighborhood competition (`resolver_neighborhood_*`), and the conservative one-short recent corroborator rail (`resolver_recent_plus1_*`). Family behavior is configured under `call_correction.family_policy` (slash precedence, truncation rails, and telnet family suppression including optional contested edit-neighbor suppression). A conservative split-signal ambiguity guard rejects corrections when top candidates have strong support but highly disjoint spotter sets in the same narrow frequency neighborhood (`reason=ambiguous_multi_signal`). Calls ending in `/B` (standard beacon IDs) are auto-tagged and bypass correction/harmonic/license drops (only user filters can hide them). The license gate uses a license-normalized base call (e.g., `W6/UT5UF` -> `UT5UF`) to decide if FCC checks apply and which call to query, while CTY metadata still reflects the portable/location prefix (so `N2WQ/VE3` reports Canada for DXCC but uses `N2WQ` for licensing); drops appear in the "Unlicensed US Calls" pane.
 8. **Skimmer Frequency Corrections** (`cmd/rbnskewfetch`, `skew/`, `rbn/client.go`, `pskreporter/client.go`) download SM7IUN's skew list, convert it to JSON, and apply per-spotter multiplicative factors before any callsign normalization for every CW/RTTY skimmer feed.
 
-### Aho–Corasick Spot Parsing (Non-PSKReporter)
+### Tokenized Spot Parsing (Non-PSKReporter)
 
-Non-PSKReporter sources (RBN CW/RTTY, RBN digital, and upstream/human telnet feeds) arrive as DX-cluster style text lines (e.g., `DX de ...`). The parser in `rbn/client.go` uses a small Aho–Corasick (AC) automaton to recognize keywords in a single pass and drive a left-to-right extraction.
+Non-PSKReporter sources (RBN CW/RTTY, RBN digital, and upstream/human telnet feeds) arrive as DX-cluster style text lines (e.g., `DX de ...`). Parsing is split between a structural tokenizer (`rbn/client.go`) and shared comment parsing (`spot/comment_parser.go`).
 
 High-level flow:
 
-- **Keyword dictionary**: `DX`, `DE`, `DB`, `WPM`, plus all supported mode tokens (`CW`, `SSB` as an alias normalized to `USB`/`LSB`, `USB`, `LSB`, `JS8`, `SSTV`, `RTTY`, `FT4`, `FT8`, `MSK144`, and common variants like `FT-8`).
-- **Automaton build (once)**: patterns are compiled into a trie and failure links are built with a BFS. This runs once and is reused for every line.
-- **Per-line scan**:
-  - Tokenize the raw line on whitespace while tracking token byte offsets.
-  - Run the AC scan over the uppercased line to find keyword hits.
-  - Classify each token by checking for an exact hit that spans the token (fallback: scan the token text itself when whitespace/punctuation causes slight drift).
-- **Single pass extraction**: walk tokens left-to-right, consuming fields as they are discovered: spotter call (and optional `CALL:freq` attachment), frequency, DX call, mode, report (`<signed int> dB` or `<signed int>dB`), time (`HHMMZ`), then treat any remaining unconsumed tokens as the free-form comment.
+- **Read-loop gate**: RBN feed processing admits lines prefixed with `DX de` before parsing.
+- **Structural parse (`rbn/client.go`)**:
+  - Tokenize the line on whitespace while tracking cleaned tokens.
+  - Parse spotter from token 3 (supporting `CALL:freq` glued form).
+  - Parse frequency as the first plausible numeric dial frequency (`100.0`-`3,000,000.0` kHz).
+  - Parse DX call as the first valid callsign after frequency.
+  - Pass unconsumed tokens to the shared comment parser.
+- **Comment parse (`spot.ParseSpotComment`)**:
+  - Uses a shared Aho-Corasick keyword scanner for mode/report/time/speed tokens (`DB`, `WPM`, `BPS`, `CW`, `RTTY`, `FT8`, `FT4`, `PSK*`, `MSK*`, `USB/LSB/SSB`, etc.).
+  - Supports explicit `+5 dB` and inline forms like `-13dB`, and extracts `HHMMZ` tokens.
 - **Mode inference**: when no explicit mode token exists, infer from `data/config/mode_allocations.yaml` by frequency (fallback: `USB` ≥ 10 MHz else `CW`).
 - **Report semantics**: `HasReport` is strictly “report was present in the source line” (or PSKReporter rp field), so `0 dB` is distinct from “missing report” on sources that retain it (RBN/PSKReporter zero-SNR drops happen before ingest).
 
@@ -88,7 +91,7 @@ High-level flow:
 
 ## UI Modes (local console)
 
-- `ui.mode: ansi` (default) draws the fixed 90x68 ANSI console in the server's terminal when stdout is a TTY. The layout is 12 stats lines, a blank line, then Dropped/Corrected/Unlicensed/Harmonics/System Log panes with 10 lines each. Pane headers render as `<<<<<<<<<< Dropped >>>>>>>>>>`, `<<<<<<<<<< Corrected >>>>>>>>>>`, etc. Telnet clients do **not** see this UI; if the terminal is smaller than 90x68, ANSI disables and logs continue.
+- `ui.mode: ansi` (default) draws the fixed 90-column ANSI console in the server's terminal when stdout is a TTY. The layout is 12 stats lines, a blank line, then Dropped/Corrected/Unlicensed/Harmonics/System Log panes with 10 lines each. Pane headers render as `<<<<<<<<<< Dropped >>>>>>>>>>`, `<<<<<<<<<< Corrected >>>>>>>>>>`, etc. Telnet clients do **not** see this UI; if the terminal is smaller than 90x72, ANSI disables and logs continue.
 - `ui.mode: tview` enables the legacy framed tview dashboard (requires an interactive console).
 - `ui.mode: tview-v2` enables the page-based tview dashboard with bounded buffers and navigation keys.
   - The v2 stream panes use virtualized viewport rendering with bounded rings to reduce CPU/heap pressure at sustained update rates.
@@ -170,15 +173,13 @@ prop_report:
 
 The telnet server broadcasts spots as fixed-width DX-cluster lines:
 
-- Exactly **78 characters**, followed by **CRLF** (line endings are normalized in `telnet.Client.Send`).
+- Exactly `telnet.output_line_length` characters (default **78**, minimum **65**), followed by **CRLF** (line endings are normalized in `telnet.Client.Send`).
 - Column numbering below is **1-based** (column 1 is the `D` in `DX de `).
 - The left side is padded so **mode always starts at column 40**.
 - Frequency is rendered in kHz with exactly **two decimal places**.
 - The displayed DX callsign uses the canonical normalized call (portable suffixes stripped) and is truncated to 10 characters to preserve fixed columns (the full normalized callsign is still stored and hashed). During correction, slash-explicit winners are preserved when slash precedence applies, so output can intentionally show variants like `W1AW/1`.
-- The right-side tail is fixed so clients can rely on it:
-  - Grid: columns 67-70 (4 chars; blank if unknown)
-  - Confidence: column 72 (1 char; blank if unknown)
-  - Time: columns 74-78 (`HHMMZ`)
+- The right-side tail is anchored to the configured line end so clients can rely on stable relative positions.
+  - At the default 78-char layout: Grid is columns 67-70 (4 chars), Confidence is column 72, and Time is columns 74-78 (`HHMMZ`).
 - Any free-form comment text is sanitized (tabs/newlines removed) and truncated so it can never push the grid/confidence/time tail; a space always separates the comment area from the fixed tail.
 
 Report formatting:
@@ -211,18 +212,20 @@ Each `spot.Spot` stores:
 	- `ADIF` (DXCC/ADIF country code)
 	- `Grid`
 
-All ingest sources run through a shared CTY/ULS validation gate before deduplication. Callsigns are normalized once (uppercased, dots converted to `/`, trailing slashes removed, and portable suffixes like `/P`, `/M`, `/MM`, `/AM`, `/QRP` stripped) before CTY lookup, so W1AW and W1AW/P collapse to the same canonical call for hashing and filters. Location prefixes (for example `/VE3`) are retained; CTY lookup then chooses the shortest matching slash segment so `N2WQ/VE3` and `VE3/N2WQ` both resolve to `VE3` for metadata. Validation still requires at least one digit to avoid non-amateur identifiers before malformed or unknown calls are filtered out. Automated feeds mark the `IsHuman` flag as `false` so downstream processors can tell which spots originated from telescopic inputs versus human operator submissions. Call correction re-validates suggested DX calls against CTY before accepting them; FCC license gating runs after correction using a license-normalized base call (for example, `W6/UT5UF` is evaluated as `UT5UF`) and drops unlicensed US calls (beacons bypass this drop; user filters still apply).
+All normal ingest sources run through a shared CTY/ULS validation gate before deduplication. Exception: `pskreporter.path_only_modes` bypass CTY/ULS and route directly to path prediction. Callsigns are normalized once (uppercased, dots converted to `/`, trailing slashes removed, and portable suffixes like `/P`, `/M`, `/MM`, `/AM`, `/QRP` stripped) before CTY lookup, so W1AW and W1AW/P collapse to the same canonical call for hashing and filters. Location prefixes (for example `/VE3`) are retained; CTY lookup then chooses the shortest matching slash segment so `N2WQ/VE3` and `VE3/N2WQ` both resolve to `VE3` for metadata. Validation still requires at least one digit to avoid non-amateur identifiers before malformed or unknown calls are filtered out. Automated feeds mark the `IsHuman` flag as `false` so downstream processors can tell which spots originated from telescopic inputs versus human operator submissions. Call correction re-validates suggested DX calls against CTY before accepting them; FCC license gating runs after correction using a license-normalized base call (for example, `W6/UT5UF` is evaluated as `UT5UF`) and drops unlicensed US calls (beacons bypass this drop; user filters still apply).
 
 ## Commands
 
 Telnet clients can issue commands via the prompt once logged in. The processor, located in `commands/processor.go`, requires a logged-in callsign and ignores unauthenticated commands with `No logged user found. Command ignored.` It supports the following general commands:
 
 - Test spotter calls: when a logged-in callsign ends with `TEST` (optionally `-<SSID>`) and has no slash segments, the base call (SSID stripped) must resolve in CTY or the `DX` command is rejected with a message. Accepted test spots are still filtered/broadcast locally and subject to reputation gating; they bypass FCC ULS validation, but are not stored in the ring buffer, not archived, and never peered.
+- Input handling note: telnet negotiation bytes (IAC command/subnegotiation sequences) are consumed in the reader and never passed into command parsing.
 
 - `HELP [command]` / `H` - list commands for the active dialect or show detailed help for a specific command (for example, `HELP DX`).
-- `SHOW DX [N]` / `SHOW/DX [N]` - alias of `SHOW MYDX`, streaming the most recent `N` filtered spots (`N` ranges from 1-250, default 50). Optional DXCC selector forms are supported: `SHOW DX <prefix|callsign> [N]` and `SHOW DX [N] <prefix|callsign>` (same for `SHOW/DX`). The selector is resolved through CTY portable lookup, and only spots whose `DXMetadata.ADIF` matches that DXCC are shown. Archive-only: if the Pebble archive is unavailable, the command returns `No spots available.` The command accepts the alias `SH DX` (or `SH/DX` in cc) as well.
+- `SHOW DX [N]` - alias of `SHOW MYDX`, streaming the most recent `N` filtered spots (`N` ranges from 1-250, default 50). Optional DXCC selector forms are supported: `SHOW DX <prefix|callsign> [N]` and `SHOW DX [N] <prefix|callsign>`. The selector is resolved through CTY portable lookup, and only spots whose `DXMetadata.ADIF` matches that DXCC are shown. Archive-only: if the Pebble archive is unavailable, the command returns `No spots available.` `SH DX` is also accepted.
+- `SHOW/DX [N]` / `SH/DX [N]` - CC dialect aliases for `SHOW DX`; in the default `go` dialect, slash forms return a usage hint to use `SHOW DX`/`SH DX`.
 - `SHOW MYDX [N]` - stream the most recent `N` spots that match your filters (self-spots always pass; `N` ranges from 1-250, default 50). Optional DXCC selector forms are supported: `SHOW MYDX <prefix|callsign> [N]` and `SHOW MYDX [N] <prefix|callsign>`. The selector resolves via CTY and filters to matching DX ADIF/DXCC. If a selector is provided while CTY is unavailable, the command returns `CTY database is not available.` / `CTY database is not loaded.` Archive-only: if the Pebble archive is unavailable, the command returns `No spots available.` Very narrow filters may return fewer than `N` results.
-- `SET DIAG <ON|OFF>` - replace the comment field with a diagnostic tag: `<source><DEDXCC><DEGRID2><band><policy>`, where source is `R` (RBN), `P` (PSK), or `H` (human/peer) and policy is `F`/`S`.
+- `SET DIAG <ON|OFF>` - replace the comment field with a diagnostic tag: `<source><DEDXCC><DEGRID2><band><policy>`, where source is `R` (RBN), `P` (PSK), or `H` (human/peer) and policy is `F`/`M`/`S`.
 - `SET SOLAR <15|30|60|OFF>` - opt into wall-clock aligned solar summaries (OFF by default).
 - `BYE`, `QUIT`, `EXIT` - request a graceful logout; the server replies with `73!` and closes the connection.
 
@@ -239,6 +242,7 @@ Effective labels in the snapshot use a fixed vocabulary: `all pass`, `all except
 - `PASS SOURCE <HUMAN|SKIMMER|ALL>` - filter by spot origin: `HUMAN` passes only spots with `IsHuman=true`, `SKIMMER` passes only spots with `IsHuman=false`, and `ALL` disables source filtering.
 - `PASS DXCONT <cont>[,<cont>...]` / `DECONT <cont>[,<cont>...]` - enable only the listed DX/spotter continents (AF, AN, AS, EU, NA, OC, SA), or `ALL`.
 - `PASS DXZONE <zone>[,<zone>...]` / `DEZONE <zone>[,<zone>...]` - enable only the listed DX/spotter CQ zones (1-40), or `ALL`.
+- `PASS DXDXCC <code>[,<code>...]` / `DEDXCC <code>[,<code>...]` - enable only the listed DX/spotter ADIF (DXCC) country codes, or `ALL`.
 - `PASS DXGRID2 <grid>[,<grid>...]` - enable only the listed 2-character DX grid prefixes. Tokens longer than two characters are truncated (e.g., `FN05` -> `FN`); `ALL` resets to accept every DX 2-character grid.
 - `PASS DEGRID2 <grid>[,<grid>...]` - enable only the listed 2-character DE grid prefixes (same parsing/truncation as DXGRID2); `ALL` resets to accept every DE 2-character grid.
 - `PASS DXCALL <pattern>[,<pattern>...]` - begins delivering only spots with DX calls matching the supplied patterns.
@@ -247,11 +251,13 @@ Effective labels in the snapshot use a fixed vocabulary: `all pass`, `all except
 - `PASS PATH <class>[,<class>...]` - enables the comma- or space-separated list of path prediction classes (HIGH/MEDIUM/LOW/UNLIKELY/INSUFFICIENT; use `ALL` to accept every class). When the path predictor is disabled, PATH commands are ignored with a warning.
 - `PASS NEARBY ON|OFF` - when ON, deliver spots whose DX or DE H3 cell matches your grid (L1 for 160/80/60m, L2 otherwise). Location filters (DX/DE CONT, ZONE, GRID2, DXCC) are suspended while NEARBY is ON, and attempts to change them are rejected with a warning. OFF restores the prior location filter state. State persists across sessions and a login warning is shown when active. Requires `SET GRID`.
 - `PASS BEACON` - explicitly enable delivery of beacon spots (DX calls ending `/B`; enabled by default).
+- `PASS WWV` / `PASS WCY` / `PASS ANNOUNCE` - explicitly allow WWV/WCY bulletins and PC93-style announcements.
 - `PASS SELF` - always deliver spots where the DX callsign matches your normalized callsign (even if filters would normally block).
 - `REJECT BAND <band>[,<band>...]` - disables only the comma- or space-separated list of bands provided (use `ALL` to block every band).
 - `REJECT MODE <mode>[,<mode>...]` - disables only the comma- or space-separated list of modes provided (specify `ALL` to block every mode).
 - `REJECT SOURCE <HUMAN|SKIMMER|ALL>` - blocks one origin category (human/operator spots vs automated/skimmer spots), or `ALL`.
 - `REJECT DXCONT` / `DECONT` / `DXZONE` / `DEZONE` - block continent/zone filters (use `ALL` to block all).
+- `REJECT DXDXCC <code>[,<code>...]` / `DEDXCC <code>[,<code>...]` - block listed DX/spotter ADIF (DXCC) country codes, or `ALL`.
 - `REJECT DXGRID2 <grid>[,<grid>...]` - remove specific 2-character DX grid prefixes (tokens truncated to two characters); `ALL` blocks every DX 2-character grid.
 - `REJECT DEGRID2 <grid>[,<grid>...]` - remove specific 2-character DE grid prefixes (tokens truncated to two characters); `ALL` blocks every DE 2-character grid.
 - `REJECT DXCALL <pattern>[,<pattern>...]` - blocks the supplied DX callsign patterns.
@@ -259,9 +265,10 @@ Effective labels in the snapshot use a fixed vocabulary: `all pass`, `all except
 - `REJECT CONFIDENCE <symbol>[,<symbol>...]` - disables only the comma- or space-separated list of glyphs provided (use `ALL` to block every glyph).
 - `REJECT PATH <class>[,<class>...]` - disables the comma- or space-separated list of path prediction classes (use `ALL` to block every class).
 - `REJECT BEACON` - drop beacon spots entirely (they remain tagged internally for future processing).
+- `REJECT WWV` / `REJECT WCY` / `REJECT ANNOUNCE` - block WWV/WCY bulletins and PC93-style announcements.
 - `REJECT SELF` - suppress all spots where the DX callsign matches your normalized callsign.
 
-Confidence glyphs are only emitted for modes that run call-correction logic (CW/RTTY/USB/LSB voice modes). FT8/FT4 spots carry no confidence glyphs, so confidence filters do not affect them. After correction assigns `P`/`V`/`C`/`?`, any remaining `?` is upgraded to `S` when the DX call is admitted by static custom-SCP membership (when `call_correction.custom_scp.enabled=true`) or admitted by recent evidence rails.
+Confidence glyphs are only emitted for modes that run call-correction logic (CW/RTTY/USB/LSB voice modes). FT8/FT4/PSK/MSK144 spots carry no confidence glyphs, so confidence filters do not affect them. After correction assigns `P`/`V`/`C`/`?`, any remaining `?` is upgraded to `S` when the DX call is admitted by static custom-SCP membership (when `call_correction.custom_scp.enabled=true`) or admitted by recent evidence rails.
 
 Band, mode, confidence, PATH, and DXGRID2/DEGRID2 commands share identical semantics: they accept comma- or space-separated lists, ignore duplicates/case, and treat the literal `ALL` as a shorthand to allow or block everything for that type. PASS/REJECT add to allow/block lists and remove the same items from the opposite list. DXGRID2 applies only to the DX grid when it is exactly two characters long; DEGRID2 applies only to the DE grid when it is exactly two characters long. 4/6-character or empty grids are unaffected, and longer tokens provided by the user are truncated to their first two characters before validation.
 SELF matches the normalized DX callsign only; when a spot is suppressed by secondary dedupe, a matching client still receives it if SELF is enabled. This delivery is per-client and does not bypass secondary dedupe for the global broadcast stream.
@@ -395,8 +402,8 @@ fcc_uls:
 ## Runtime Logs and Corrections
 
 - **Call corrections**: `2025/11/19 18:50:45 Call corrected: VE3N -> VE3NE at 7011.1 kHz (8 / 88%)`
-- **Frequency averaging**: `2025/11/19 18:50:45 Frequency corrected: VE3NE 7011.3 -> 7011.1 kHz (8 / 88%)`
-- **Harmonic suppression**: `2025/11/19 18:50:45 Harmonic suppressed: VE3NE 14022.0 -> 7011.0 kHz (3 / 18 dB)` plus a paired frequency-corrected line indicating the fundamental retained.
+- **Frequency averaging**: applied in the pipeline and counted in stats (`Calls: ... (F)`); there is no dedicated per-spot frequency-correction log line.
+- **Harmonic suppression**: `2025/11/19 18:50:45 Harmonic suppressed: VE3NE 14022.0 -> 7011.0 kHz (3 / 18 dB)`
 - **Stats ticker** (per `stats.display_interval_seconds`): `PSKReporter: <TOTAL> TOTAL / <CW> CW / <RTTY> RTTY / <FT8> FT8 / <FT4> FT4 / <MSK144> MSK144 / <PSK31/63> PSK31/63`
 
 ### Sample Session
@@ -415,7 +422,7 @@ Type HELP for available commands.
 HELP
 Available commands:
 ... (supported modes/bands summary)
-SHOW/DX 5
+SHOW DX 5
 DX1 14.074 FT8 599 N1ABC>W1XYZ
 DX2 14.070 FT4 26 N1ABC>W2ABC
 ...
@@ -445,7 +452,7 @@ Use these commands interactively to tailor the spot stream to your operating pre
 
 The telnet server fans every post-dedup spot to every connected client. When PSKReporter or both RBN feeds spike, the broadcast queue can saturate and you'll see `Broadcast channel full, dropping spot` along with a rising `Telnet drops` metric in the stats ticker (Q/C/W = broadcast queue drops / per-client queue drops / sender write-failure disconnects). Tune the `telnet` block in `data/config/runtime.yaml` to match your load profile:
 
-- `broadcast_workers` keeps the existing behavior (`0` = auto at half your CPUs, minimum 2).
+- `broadcast_workers` keeps the existing behavior (`0` = auto using `max(runtime.NumCPU(), 4)`).
 - `broadcast_queue_size` controls the global queue depth ahead of the worker pool (default `2048`); larger buffers smooth bursty ingest before anything is dropped.
 - `worker_queue_size` controls how many per-shard jobs each worker buffers before dropping a shard assignment (default `128`).
 - `client_buffer_size` defines how many spots a single telnet session can fall behind before its personal queue starts dropping (default `128`).
@@ -533,7 +540,7 @@ Operational guidance: enable `auto_delete_corrupt_db` only if the archive is tru
 
 ## Path Reliability (telnet)
 
-- Maintains a single directional FT8-equivalent bucket family per path: FT8/FT4/CW/RTTY/PSK all feed the same buckets. Voice modes (LSB/USB) are display-only. Buckets store linear power (FT8-equivalent) with exponential decay, using H3 res-2 buckets plus coarse H3 res-1 buckets, per-band half-lives, and staleness purging (per-band stale window).
+- Maintains a single directional FT8-equivalent bucket family per path: FT8/FT4/CW/RTTY/PSK/WSPR all feed the same buckets. Voice modes (LSB/USB) are display-only. Buckets store linear power (FT8-equivalent) with exponential decay, using H3 res-2 buckets plus coarse H3 res-1 buckets, per-band half-lives, and staleness purging (per-band stale window).
 - H3 size reference (average edge length): res-2 ≈ 158 km; res-1 ≈ 418 km.
 - Maidenhead grids (4–6 chars) are converted to a representative lat/lon by taking the center of the grid square (4‑char: 2° × 1°). That point is mapped into H3 res‑2 (fine/local) and res‑1 (coarse/regional) cells so we can blend local and regional evidence deterministically.
 - H3 cells are stored as stable 16‑bit proxy IDs via precomputed tables in `data/h3`. If grids are invalid or H3 tables are unavailable, the path is treated as insufficient data.
@@ -560,7 +567,7 @@ Operational guidance: enable `auto_delete_corrupt_db` only if the archive is tru
 
 `config.Load` accepts a directory (merging all YAML files); the server defaults to `data/config`. It normalizes missing fields and refuses to start when time strings are invalid. Key fallbacks:
 
-- Stats tickers default to `30s` when unset. Telnet queues fall back to `broadcast_queue_size=2048`, `worker_queue_size=128`, `client_buffer_size=128`, and friendly greeting/duplicate-login messages are injected if blank.
+- Stats tickers default to `30s` when unset. Telnet queues fall back to `broadcast_queue_size=2048`, `worker_queue_size=128`, and `client_buffer_size=128`. `broadcast_workers=0` resolves to `max(runtime.NumCPU(), 4)`, and `telnet.output_line_length` defaults to `78` (minimum `65`).
 - Call correction uses conservative resolver-primary baselines unless overridden: `min_consensus_reports=4`, `family_policy.slash_precedence_min_reports=2`, `family_policy.truncation.max_length_delta=1`, `family_policy.truncation.min_shorter_length=3`, `family_policy.truncation.relax_advantage.min_advantage=0`, `min_advantage=1`, `min_confidence_percent=70`, `recency_seconds=45`, `max_edit_distance=2`, `frequency_tolerance_hz=500`, `voice_frequency_tolerance_hz=2000`, `invalid_action=broadcast`, `resolver_recent_plus1_enabled=true`, `resolver_recent_plus1_min_unique_winner=3`, `resolver_recent_plus1_require_subject_weaker=true`, `resolver_recent_plus1_max_distance=1`, and `resolver_neighborhood_max_distance=1`. Bayesian gate defaults are conservative and disabled by default: `bayes_bonus.enabled=false`, `weight_distance1_milli=350`, `weight_distance2_milli=200`, `weighted_smoothing_milli=1000`, `recent_smoothing=2`, `obs_log_cap_milli=350`, `prior_log_min_milli=-200`, `prior_log_max_milli=600`, `report_threshold_distance1_milli=450`, `report_threshold_distance2_milli=650`, `advantage_threshold_distance1_milli=700`, `advantage_threshold_distance2_milli=950`, `advantage_min_weighted_delta_distance1_milli=200`, `advantage_min_weighted_delta_distance2_milli=300`, `advantage_extra_confidence_distance1=3`, `advantage_extra_confidence_distance2=5`, `require_candidate_validated=true`, and `require_subject_unvalidated_distance2=true`. Temporal defaults are `temporal_decoder.scope=uncertain_only`, `lag_seconds=2`, `max_wait_seconds=6`, `beam_size=8`, `max_obs_candidates=8`, `stay_bonus=120`, `switch_penalty=160`, `family_switch_penalty=60`, `edit1_switch_penalty=90`, `min_score=0`, `min_margin_score=80`, `overflow_action=fallback_resolver`, `max_pending=25000`, `max_active_keys=6000`, `max_events_per_key=32`. If `resolver_neighborhood_enabled=true`, `resolver_neighborhood_bucket_radius` is clamped to `[1..2]` (otherwise `[0..2]`) and `resolver_neighborhood_max_distance<=0` is normalized to `1`. Empty distance models default to `plain`; negative distance-3 extras and reliability/confusion weights are clamped to zero. When `custom_scp.enabled=true`, defaults include `history_horizon_days=395`, `min_snr_db_cw=4`, `min_snr_db_rtty=3`, `resolver_min_score=5`, `stabilizer_min_score=5`, `s_floor_min_score=3`, and bounded storage defaults (`max_keys=500000`, `max_spotters_per_key=64`).
 - Harmonic suppression clamps to sane minimums (`recency_seconds=120`, `max_harmonic_multiple=4`, `frequency_tolerance_hz=20`, `min_report_delta=6`, `min_report_delta_step>=0`).
 - Spot policy defaults prevent runaway averaging: `max_age_seconds=120`, `frequency_averaging_seconds=45`, `frequency_averaging_tolerance_hz=300`, `frequency_averaging_min_reports=4`.

@@ -26,19 +26,19 @@ peering:
       login_callsign: "N2WQ-77"    # Callsign used to log in to the remote
       remote_callsign: "N2WQ-73"   # Expected remote node callsign
     - enabled: false               # Placeholder peer #2 (set true when ready)
-      host: "dxspider.km3t.net"  # Remote host
+      host: "dxspider.km3t.net"    # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
       login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "KM3T-10"     # Expected remote node callsign
-    - enabled: true               # Placeholder peer #3 (set true when ready)
+      remote_callsign: "KM3T-10"   # Expected remote node callsign
+    - enabled: true                # Placeholder peer #3 (set true when ready)
       host: "gocluster.km3t.net"   # Remote host
       port: 6300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"    # Callsign used to log in to the remote
-      remote_callsign: "KM3T-44"     # Expected remote node callsign
+      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
+      remote_callsign: "KM3T-44"   # Expected remote node callsign
     - enabled: true                # Outbound peer definition #4
       host: "f1fca.freeboxos.fr"   # Remote host
       port: 6300                   # Remote port
