@@ -55,6 +55,7 @@ require (
 	github.com/zeebo/xxh3 v1.0.2
 	github.com/ziutek/telnet v0.1.0
 	golang.org/x/term v0.35.0
+	golang.org/x/time v0.14.0
 	howett.net/plist v1.0.1
 	modernc.org/sqlite v1.36.1
 )

@@ -595,6 +595,37 @@ func (g *Gate) lookupIPInfoStore(addr netip.Addr) (LookupResult, bool) {
 	return result, ok
 }
 
+// LookupIPForAdmission returns IPinfo-derived metadata for pre-login admission
+// controls. It is intentionally store-only (no live API/Cymru network lookups)
+// so admission checks stay bounded and deterministic under load.
+func (g *Gate) LookupIPForAdmission(ip string, now time.Time) (LookupResult, bool) {
+	if g == nil || !g.cfg.enabled {
+		return LookupResult{}, false
+	}
+	addr, err := netip.ParseAddr(strings.TrimSpace(ip))
+	if err != nil {
+		return LookupResult{}, false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if g.lookupCache != nil {
+		if cached, ok, _ := g.lookupCache.get(addr.String(), now); ok {
+			if cached.Source != "" {
+				return cached, true
+			}
+			return LookupResult{}, false
+		}
+	}
+	if result, ok := g.lookupIPInfoStore(addr); ok {
+		if g.lookupCache != nil {
+			g.lookupCache.set(addr.String(), result, now, false)
+		}
+		return result, true
+	}
+	return LookupResult{}, false
+}
+
 func (g *Gate) countryMismatch(ctyCountryKey, ipCountryKey string) bool {
 	if ctyCountryKey == "" || ipCountryKey == "" {
 		return false

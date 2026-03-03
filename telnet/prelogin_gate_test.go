@@ -176,3 +176,136 @@ func TestHandleClientPreloginTimeoutReleasesTicket(t *testing.T) {
 		t.Fatal("expected prelogin timeout counter increment")
 	}
 }
+
+func TestTryAcquirePreloginHonorsGlobalRate(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	s := newPreloginTestServer(&now)
+	s.acceptRateGlobal = 1
+	s.acceptBurstGlobal = 1
+	s.acceptRatePerIP = 100
+	s.acceptBurstPerIP = 100
+	s.acceptRatePerSubnet = 100
+	s.acceptBurstPerSubnet = 100
+
+	t1, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.70", 7000))
+	if t1 == nil || reason != "" {
+		t.Fatalf("expected first admission success, got ticket=%v reason=%q", t1, reason)
+	}
+	t1.Release()
+
+	t2, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.71", 7001))
+	if t2 != nil || reason != preloginRejectGlobalRate {
+		t.Fatalf("expected global rate reject, got ticket=%v reason=%q", t2, reason)
+	}
+}
+
+func TestTryAcquirePreloginHonorsSubnetRate(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	s := newPreloginTestServer(&now)
+	s.acceptRatePerIP = 100
+	s.acceptBurstPerIP = 100
+	s.acceptRateGlobal = 100
+	s.acceptBurstGlobal = 100
+	s.acceptRatePerSubnet = 1
+	s.acceptBurstPerSubnet = 1
+
+	t1, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.80", 8000))
+	if t1 == nil || reason != "" {
+		t.Fatalf("expected first admission success, got ticket=%v reason=%q", t1, reason)
+	}
+	t1.Release()
+
+	t2, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.81", 8001))
+	if t2 != nil || reason != preloginRejectSubnetRate {
+		t.Fatalf("expected subnet rate reject, got ticket=%v reason=%q", t2, reason)
+	}
+
+	now = now.Add(1100 * time.Millisecond)
+	t3, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.82", 8002))
+	if t3 == nil || reason != "" {
+		t.Fatalf("expected subnet refill success, got ticket=%v reason=%q", t3, reason)
+	}
+	t3.Release()
+}
+
+func TestTryAcquirePreloginHonorsASNAndCountryRate(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	s := newPreloginTestServer(&now)
+	s.acceptRatePerIP = 100
+	s.acceptBurstPerIP = 100
+	s.acceptRateGlobal = 100
+	s.acceptBurstGlobal = 100
+	s.acceptRatePerSubnet = 100
+	s.acceptBurstPerSubnet = 100
+	s.acceptRatePerASN = 1
+	s.acceptBurstPerASN = 1
+	s.acceptRatePerCountry = 1
+	s.acceptBurstPerCountry = 1
+	s.admissionGeoLookupFn = func(ip string, now time.Time) (string, string) {
+		if ip == "203.0.114.10" || ip == "203.0.114.11" {
+			return "AS64500", "US"
+		}
+		if ip == "198.51.100.10" {
+			return "AS64501", "CA"
+		}
+		if ip == "198.51.100.11" {
+			return "AS64502", "CA"
+		}
+		return "", ""
+	}
+
+	t1, reason := s.tryAcquirePrelogin(tcpAddr("203.0.114.10", 9000))
+	if t1 == nil || reason != "" {
+		t.Fatalf("expected first ASN admission success, got ticket=%v reason=%q", t1, reason)
+	}
+	t1.Release()
+
+	t2, reason := s.tryAcquirePrelogin(tcpAddr("203.0.114.11", 9001))
+	if t2 != nil || reason != preloginRejectASNRate {
+		t.Fatalf("expected ASN rate reject, got ticket=%v reason=%q", t2, reason)
+	}
+
+	now = now.Add(1100 * time.Millisecond)
+	t3, reason := s.tryAcquirePrelogin(tcpAddr("198.51.100.10", 9100))
+	if t3 == nil || reason != "" {
+		t.Fatalf("expected first country admission success, got ticket=%v reason=%q", t3, reason)
+	}
+	t3.Release()
+
+	t4, reason := s.tryAcquirePrelogin(tcpAddr("198.51.100.11", 9101))
+	if t4 != nil || reason != preloginRejectCountryRate {
+		t.Fatalf("expected country rate reject, got ticket=%v reason=%q", t4, reason)
+	}
+}
+
+func TestLogAdmissionRejectAppliesSamplingAndIntervalLimits(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	s := newPreloginTestServer(&now)
+	s.admissionLogInterval = time.Second
+	s.admissionLogSample = 1.0
+	s.admissionLogMaxLines = 2
+
+	s.logAdmissionReject(preloginRejectIPRate, "203.0.113.90")
+	s.logAdmissionReject(preloginRejectIPRate, "203.0.113.90")
+	s.logAdmissionReject(preloginRejectIPRate, "203.0.113.90")
+
+	s.preloginMu.Lock()
+	if got := s.admissionLogLines; got != 2 {
+		s.preloginMu.Unlock()
+		t.Fatalf("expected admission log sample lines capped at 2, got %d", got)
+	}
+	if got := s.admissionLogCounts[string(preloginRejectIPRate)]; got != 3 {
+		s.preloginMu.Unlock()
+		t.Fatalf("expected 3 counted rejects, got %d", got)
+	}
+	s.preloginMu.Unlock()
+
+	now = now.Add(2 * time.Second)
+	s.logAdmissionReject(preloginRejectIPRate, "203.0.113.91")
+
+	s.preloginMu.Lock()
+	defer s.preloginMu.Unlock()
+	if got := s.admissionLogCounts[string(preloginRejectIPRate)]; got != 1 {
+		t.Fatalf("expected interval rollover to reset counts to current event, got %d", got)
+	}
+}

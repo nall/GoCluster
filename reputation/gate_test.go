@@ -174,6 +174,73 @@ func TestPrefixLimiterDrop(t *testing.T) {
 	}
 }
 
+func TestLookupIPForAdmissionUsesStoreAndCache(t *testing.T) {
+	tmp := t.TempDir()
+	csvPath := filepath.Join(tmp, "location.csv")
+	writeSnapshot(t, csvPath, []string{
+		"start_ip,end_ip,country_code,country,continent_code,asn",
+		"203.0.113.0,203.0.113.255,US,United States,NA,AS64500",
+	})
+	pebbleRoot := filepath.Join(tmp, "ipinfo_pebble")
+	dbPath, err := buildIPInfoPebble(context.Background(), csvPath, pebbleRoot, false)
+	if err != nil {
+		t.Fatalf("buildIPInfoPebble failed: %v", err)
+	}
+	if err := updateIPInfoPebbleCurrent(pebbleRoot, dbPath); err != nil {
+		t.Fatalf("updateIPInfoPebbleCurrent failed: %v", err)
+	}
+
+	cfg := config.ReputationConfig{
+		Enabled:               true,
+		IPInfoPebblePath:      pebbleRoot,
+		IPInfoPebbleLoadIPv4:  true,
+		FallbackTeamCymru:     false,
+		IPInfoAPIEnabled:      false,
+		ReputationDir:         tmp,
+		LookupCacheTTLSeconds: 3600,
+		LookupCacheMaxEntries: 1000,
+		StateTTLSeconds:       3600,
+		StateMaxEntries:       1000,
+		PrefixTTLSeconds:      3600,
+		PrefixMaxEntries:      1000,
+	}
+
+	gate, err := NewGate(cfg, nil)
+	if err != nil {
+		t.Fatalf("NewGate failed: %v", err)
+	}
+	defer gate.Close()
+	if err := gate.LoadStore(); err != nil {
+		t.Fatalf("LoadStore failed: %v", err)
+	}
+
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	res, ok := gate.LookupIPForAdmission("203.0.113.10", now)
+	if !ok {
+		t.Fatal("expected admission lookup hit from store")
+	}
+	if res.ASN != "64500" || res.CountryCode != "US" {
+		t.Fatalf("unexpected admission lookup result: %+v", res)
+	}
+
+	// Remove store handle; second lookup should still succeed from lookup cache.
+	gate.ipinfoStoreMu.Lock()
+	store := gate.ipinfoStore
+	gate.ipinfoStore = nil
+	gate.ipinfoStoreMu.Unlock()
+	if store != nil {
+		_ = store.Close()
+	}
+
+	cached, ok := gate.LookupIPForAdmission("203.0.113.10", now.Add(time.Second))
+	if !ok {
+		t.Fatal("expected admission lookup hit from cache")
+	}
+	if cached.ASN != "64500" || cached.CountryCode != "US" {
+		t.Fatalf("unexpected cached admission lookup result: %+v", cached)
+	}
+}
+
 func writeSnapshot(t *testing.T, path string, lines []string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {

@@ -12,7 +12,18 @@ telnet:
   prelogin_timeout_seconds: 30    # Accept->callsign timeout for unauthenticated sessions
   accept_rate_per_ip: 3           # Per-IP prelogin admit rate (tokens/sec)
   accept_burst_per_ip: 6          # Per-IP prelogin burst capacity
+  accept_rate_per_subnet: 24      # Per-/24 (IPv4) or /48 (IPv6) prelogin admit rate (tokens/sec)
+  accept_burst_per_subnet: 48     # Per-subnet prelogin burst capacity
+  accept_rate_global: 300         # Cluster-wide prelogin admit rate (tokens/sec)
+  accept_burst_global: 600        # Cluster-wide prelogin burst capacity
+  accept_rate_per_asn: 40         # Per-ASN prelogin admit rate (tokens/sec) from IPinfo
+  accept_burst_per_asn: 80        # Per-ASN prelogin burst capacity
+  accept_rate_per_country: 120    # Per-country prelogin admit rate (tokens/sec) from IPinfo
+  accept_burst_per_country: 240   # Per-country prelogin burst capacity
   prelogin_concurrency_per_ip: 3  # Max concurrent unauthenticated sessions per source IP
+  admission_log_interval_seconds: 10                     # Aggregate admission reject summaries over this interval
+  admission_log_sample_rate: 0.05                        # Sample rate for per-event reject logs (0..1)
+  admission_log_max_reason_lines_per_interval: 20        # Max sampled reject lines emitted per interval
   welcome_message: |
     <CLUSTER> DX Telnet cluster
     Uptime: <UPTIME> | Users: <USER_COUNT>

@@ -13,8 +13,15 @@ These knobs govern how long the server waits for input before taking action:
 
 - `telnet.max_prelogin_sessions` &mdash; defaults to `256`. Hard cap on unauthenticated sessions to bound socket usage during floods.
 - `telnet.prelogin_timeout_seconds` &mdash; defaults to `15`. Total accept-to-callsign budget for unauthenticated sessions.
-- `telnet.accept_rate_per_ip` / `telnet.accept_burst_per_ip` &mdash; defaults to `3` and `6`. Per-IP token bucket for pre-login admission.
+- `telnet.accept_rate_per_ip` / `telnet.accept_burst_per_ip` &mdash; defaults to `3` and `6`. Per-IP pre-login admission limiter (Go `x/time/rate` token bucket).
+- `telnet.accept_rate_per_subnet` / `telnet.accept_burst_per_subnet` &mdash; defaults to `24` and `48`. Per-subnet pre-login limiter (`/24` IPv4, `/48` IPv6).
+- `telnet.accept_rate_global` / `telnet.accept_burst_global` &mdash; defaults to `300` and `600`. Cluster-wide pre-login limiter.
+- `telnet.accept_rate_per_asn` / `telnet.accept_burst_per_asn` &mdash; defaults to `40` and `80`. Per-ASN pre-login limiter using IPinfo metadata.
+- `telnet.accept_rate_per_country` / `telnet.accept_burst_per_country` &mdash; defaults to `120` and `240`. Per-country pre-login limiter using IPinfo metadata.
 - `telnet.prelogin_concurrency_per_ip` &mdash; defaults to `3`. Simultaneous unauthenticated session cap per source IP.
+- `telnet.admission_log_interval_seconds` &mdash; defaults to `10`. Aggregation window for rejection summary logs.
+- `telnet.admission_log_sample_rate` &mdash; defaults to `0.05` (5%). Sample rate for per-event reject logs; clamped to `[0,1]`.
+- `telnet.admission_log_max_reason_lines_per_interval` &mdash; defaults to `20`. Per-interval cap for sampled reject log lines.
 - `telnet.reject_workers` / `telnet.reject_queue_size` &mdash; defaults to `2` and `1024`. Moves reject-banner I/O off the accept loop using a bounded worker queue.
 - `telnet.reject_write_deadline_ms` &mdash; defaults to `500`. Reject-banner write deadline before forced close.
 - `telnet.writer_batch_max_bytes` / `telnet.writer_batch_wait_ms` &mdash; defaults to `16384` and `5`. Per-connection writer micro-batching cap and max wait.

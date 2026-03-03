@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/netip"
 	"os"
@@ -60,6 +61,7 @@ import (
 	"dxcluster/strutil"
 
 	ztelnet "github.com/ziutek/telnet"
+	"golang.org/x/time/rate"
 )
 
 type dedupePolicy uint8
@@ -134,95 +136,114 @@ func dedupeKeyLabel(policy dedupePolicy) string {
 //   - BroadcastSpot() is thread-safe (uses mutex)
 //   - Each client goroutine operates independently
 type Server struct {
-	port                 int                                 // TCP port to listen on
-	welcomeMessage       string                              // Welcome message for new connections
-	maxConnections       int                                 // Maximum concurrent client connections
-	duplicateLoginMsg    string                              // Message sent to evicted duplicate session
-	greetingTemplate     string                              // Post-login greeting with placeholders
-	loginPrompt          string                              // Login prompt before callsign entry
-	loginEmptyMessage    string                              // Message for empty callsign
-	loginInvalidMsg      string                              // Message for invalid callsign
-	inputTooLongMsg      string                              // Template for input length violations
-	inputInvalidMsg      string                              // Template for invalid character violations
-	dialectWelcomeMsg    string                              // Template for dialect welcome line
-	dialectSourceDef     string                              // Label for default dialect source
-	dialectSourcePers    string                              // Label for persisted dialect source
-	pathStatusMsg        string                              // Template for path reliability status line
-	clusterCall          string                              // Cluster/node callsign for greeting substitution
-	listener             net.Listener                        // TCP listener
-	clients              map[string]*Client                  // Map of callsign → Client
-	clientsMutex         sync.RWMutex                        // Protects clients map
-	shutdown             chan struct{}                       // Shutdown coordination channel
-	stopOnce             sync.Once                           // Ensures Stop is idempotent
-	broadcast            chan *broadcastPayload              // Broadcast channel for spots (buffered, configurable)
-	broadcastWorkers     int                                 // Number of goroutines delivering spots
-	workerQueues         []chan *broadcastJob                // Per-worker job queues
-	workerQueueSize      int                                 // Capacity of each worker's queue
-	batchInterval        time.Duration                       // Broadcast batch interval; 0 means immediate
-	batchMax             int                                 // Max jobs per batch before flush
-	writerBatchMaxBytes  int                                 // Max bytes per writer-loop flush batch
-	writerBatchWait      time.Duration                       // Max wait before flushing partial writer batch
-	metrics              broadcastMetrics                    // Broadcast metrics counters
-	keepaliveInterval    time.Duration                       // Optional periodic CRLF to keep idle sessions alive
-	clientShardCache     atomic.Pointer[clientShardSnapshot] // Immutable cached shard layout for broadcasts
-	shardsDirty          atomic.Bool                         // Flag to rebuild shards on client add/remove
-	rejectWorkers        int                                 // Worker count for asynchronous reject writes
-	rejectQueueSize      int                                 // Capacity of asynchronous reject queue
-	rejectWriteDeadline  time.Duration                       // Deadline for reject banner write
-	rejectQueue          chan rejectJob                      // Bounded async reject queue
-	rejectWorkerOnce     sync.Once                           // Ensures reject workers start once
-	processor            *commands.Processor                 // Command processor for user commands
-	skipHandshake        bool                                // When true, omit Telnet IAC negotiation
-	transport            string                              // Telnet transport backend ("native" or "ziutek")
-	useZiutek            bool                                // True when the external telnet transport is enabled
-	echoMode             string                              // Input echo policy ("server", "local", "off")
-	clientBufferSize     int                                 // Per-client spot channel capacity
-	controlQueueSize     int                                 // Per-client control queue capacity
-	readIdleTimeout      time.Duration                       // Read deadline for logged-in sessions (timeouts do not disconnect)
-	loginTimeout         time.Duration                       // Pre-login timeout before disconnect
-	maxPreloginSessions  int                                 // Hard cap on concurrent unauthenticated sessions
-	preloginTimeout      time.Duration                       // End-to-end timeout from accept to successful login
-	acceptRatePerIP      float64                             // Token refill rate (tokens/sec) for pre-login admission
-	acceptBurstPerIP     int                                 // Token bucket burst size for pre-login admission
-	preloginConcPerIP    int                                 // Max concurrent pre-login sessions per source IP
-	preloginMu           sync.Mutex                          // Guards pre-login admission counters and token buckets
-	preloginActive       int                                 // Active unauthenticated session count
-	preloginByIP         map[string]preloginIPState          // Admission state keyed by source IP
-	preloginTrackedMax   int                                 // Max tracked IP states for bounded memory
-	preloginStateIdleTTL time.Duration                       // Idle eviction TTL for IP admission state
-	preloginLastGC       time.Time                           // Last opportunistic GC timestamp
-	dropExtremeRate      float64                             // Drop ratio threshold for disconnect
-	dropExtremeWindow    time.Duration                       // Window for extreme drop evaluation
-	dropExtremeMinAtt    int                                 // Minimum attempts before extreme drop disconnect
-	clientListListener   atomic.Value                        // optional func()
-	latency              latencyMetrics                      // latency samples for delivery path
-	loginLineLimit       int                                 // Maximum bytes accepted for login/callsign input
-	commandLineLimit     int                                 // Maximum bytes accepted for post-login commands
-	filterEngine         *filterCommandEngine                // Table-driven filter command parser/executor
-	reputationGate       *reputation.Gate                    // Optional reputation gate for login metadata
-	startTime            time.Time                           // Process start time for uptime tokens
-	pathPredictor        *pathreliability.Predictor          // Optional path reliability predictor
-	pathDisplay          bool                                // Toggle glyph rendering
-	solarWeather         *solarweather.Manager               // Optional solar/geomagnetic override evaluator
-	noiseOffsets         map[string]float64                  // Noise class lookup
-	gridLookup           func(string) (string, bool, bool)   // Optional grid lookup from store
-	nowFn                func() time.Time                    // Optional clock injection for deterministic tests
-	dedupeFastEnabled    bool                                // Fast secondary dedupe policy enabled
-	dedupeMedEnabled     bool                                // Med secondary dedupe policy enabled
-	dedupeSlowEnabled    bool                                // Slow secondary dedupe policy enabled
-	nearbyLoginWarning   string                              // Warning appended when NEARBY is active
-	queueDropLog         ratelimit.Counter                   // Rate-limited log counter for broadcast queue drops
-	workerDropLog        ratelimit.Counter                   // Rate-limited log counter for worker queue drops
-	clientDropLog        ratelimit.Counter                   // Rate-limited log counter for per-client drops
-	rejectDropLog        ratelimit.Counter                   // Rate-limited log counter for rejected-conn queue drops
-	pathPredTotal        atomic.Uint64                       // Path predictions computed (glyphs)
-	pathPredDerived      atomic.Uint64                       // Predictions using derived user/DX grids
-	pathPredCombined     atomic.Uint64                       // Predictions with sufficient combined data
-	pathPredInsufficient atomic.Uint64                       // Predictions with insufficient data
-	pathPredNoSample     atomic.Uint64                       // Insufficient predictions with no samples
-	pathPredLowWeight    atomic.Uint64                       // Insufficient predictions below min weight
-	pathPredOverrideR    atomic.Uint64                       // R overrides applied
-	pathPredOverrideG    atomic.Uint64                       // G overrides applied
+	port                  int                                      // TCP port to listen on
+	welcomeMessage        string                                   // Welcome message for new connections
+	maxConnections        int                                      // Maximum concurrent client connections
+	duplicateLoginMsg     string                                   // Message sent to evicted duplicate session
+	greetingTemplate      string                                   // Post-login greeting with placeholders
+	loginPrompt           string                                   // Login prompt before callsign entry
+	loginEmptyMessage     string                                   // Message for empty callsign
+	loginInvalidMsg       string                                   // Message for invalid callsign
+	inputTooLongMsg       string                                   // Template for input length violations
+	inputInvalidMsg       string                                   // Template for invalid character violations
+	dialectWelcomeMsg     string                                   // Template for dialect welcome line
+	dialectSourceDef      string                                   // Label for default dialect source
+	dialectSourcePers     string                                   // Label for persisted dialect source
+	pathStatusMsg         string                                   // Template for path reliability status line
+	clusterCall           string                                   // Cluster/node callsign for greeting substitution
+	listener              net.Listener                             // TCP listener
+	clients               map[string]*Client                       // Map of callsign → Client
+	clientsMutex          sync.RWMutex                             // Protects clients map
+	shutdown              chan struct{}                            // Shutdown coordination channel
+	stopOnce              sync.Once                                // Ensures Stop is idempotent
+	broadcast             chan *broadcastPayload                   // Broadcast channel for spots (buffered, configurable)
+	broadcastWorkers      int                                      // Number of goroutines delivering spots
+	workerQueues          []chan *broadcastJob                     // Per-worker job queues
+	workerQueueSize       int                                      // Capacity of each worker's queue
+	batchInterval         time.Duration                            // Broadcast batch interval; 0 means immediate
+	batchMax              int                                      // Max jobs per batch before flush
+	writerBatchMaxBytes   int                                      // Max bytes per writer-loop flush batch
+	writerBatchWait       time.Duration                            // Max wait before flushing partial writer batch
+	metrics               broadcastMetrics                         // Broadcast metrics counters
+	keepaliveInterval     time.Duration                            // Optional periodic CRLF to keep idle sessions alive
+	clientShardCache      atomic.Pointer[clientShardSnapshot]      // Immutable cached shard layout for broadcasts
+	shardsDirty           atomic.Bool                              // Flag to rebuild shards on client add/remove
+	rejectWorkers         int                                      // Worker count for asynchronous reject writes
+	rejectQueueSize       int                                      // Capacity of asynchronous reject queue
+	rejectWriteDeadline   time.Duration                            // Deadline for reject banner write
+	rejectQueue           chan rejectJob                           // Bounded async reject queue
+	rejectWorkerOnce      sync.Once                                // Ensures reject workers start once
+	processor             *commands.Processor                      // Command processor for user commands
+	skipHandshake         bool                                     // When true, omit Telnet IAC negotiation
+	transport             string                                   // Telnet transport backend ("native" or "ziutek")
+	useZiutek             bool                                     // True when the external telnet transport is enabled
+	echoMode              string                                   // Input echo policy ("server", "local", "off")
+	clientBufferSize      int                                      // Per-client spot channel capacity
+	controlQueueSize      int                                      // Per-client control queue capacity
+	readIdleTimeout       time.Duration                            // Read deadline for logged-in sessions (timeouts do not disconnect)
+	loginTimeout          time.Duration                            // Pre-login timeout before disconnect
+	maxPreloginSessions   int                                      // Hard cap on concurrent unauthenticated sessions
+	preloginTimeout       time.Duration                            // End-to-end timeout from accept to successful login
+	acceptRatePerIP       float64                                  // Token refill rate (tokens/sec) for pre-login admission
+	acceptBurstPerIP      int                                      // Token bucket burst size for pre-login admission
+	acceptRatePerSubnet   float64                                  // Token refill rate per subnet for pre-login admission
+	acceptBurstPerSubnet  int                                      // Token bucket burst size per subnet for pre-login admission
+	acceptRateGlobal      float64                                  // Global token refill rate for pre-login admission
+	acceptBurstGlobal     int                                      // Global token bucket burst size for pre-login admission
+	acceptRatePerASN      float64                                  // Token refill rate per ASN for pre-login admission
+	acceptBurstPerASN     int                                      // Token bucket burst size per ASN for pre-login admission
+	acceptRatePerCountry  float64                                  // Token refill rate per country for pre-login admission
+	acceptBurstPerCountry int                                      // Token bucket burst size per country for pre-login admission
+	preloginConcPerIP     int                                      // Max concurrent pre-login sessions per source IP
+	preloginMu            sync.Mutex                               // Guards pre-login admission counters and token buckets
+	preloginActive        int                                      // Active unauthenticated session count
+	preloginByIP          map[string]preloginIPState               // Admission state keyed by source IP
+	preloginBySubnet      map[string]preloginLimiterState          // Admission state keyed by /24 or /48 prefix
+	preloginByASN         map[string]preloginLimiterState          // Admission state keyed by ASN
+	preloginByCountry     map[string]preloginLimiterState          // Admission state keyed by country code
+	preloginGlobal        *rate.Limiter                            // Global admission limiter
+	preloginTrackedMax    int                                      // Max tracked IP states for bounded memory
+	preloginStateIdleTTL  time.Duration                            // Idle eviction TTL for IP admission state
+	preloginLastGC        time.Time                                // Last opportunistic GC timestamp
+	admissionLogInterval  time.Duration                            // Interval for aggregated admission reject logs
+	admissionLogSample    float64                                  // Sample rate for per-event admission reject logs
+	admissionLogMaxLines  int                                      // Max per-event lines emitted per interval
+	admissionLogWindow    time.Time                                // Start time for current admission log window
+	admissionLogLines     int                                      // Per-event lines emitted in current window
+	admissionLogCounts    map[string]uint64                        // Aggregated admission reject counters by reason
+	dropExtremeRate       float64                                  // Drop ratio threshold for disconnect
+	dropExtremeWindow     time.Duration                            // Window for extreme drop evaluation
+	dropExtremeMinAtt     int                                      // Minimum attempts before extreme drop disconnect
+	clientListListener    atomic.Value                             // optional func()
+	latency               latencyMetrics                           // latency samples for delivery path
+	loginLineLimit        int                                      // Maximum bytes accepted for login/callsign input
+	commandLineLimit      int                                      // Maximum bytes accepted for post-login commands
+	filterEngine          *filterCommandEngine                     // Table-driven filter command parser/executor
+	reputationGate        *reputation.Gate                         // Optional reputation gate for login metadata
+	startTime             time.Time                                // Process start time for uptime tokens
+	pathPredictor         *pathreliability.Predictor               // Optional path reliability predictor
+	pathDisplay           bool                                     // Toggle glyph rendering
+	solarWeather          *solarweather.Manager                    // Optional solar/geomagnetic override evaluator
+	noiseOffsets          map[string]float64                       // Noise class lookup
+	gridLookup            func(string) (string, bool, bool)        // Optional grid lookup from store
+	nowFn                 func() time.Time                         // Optional clock injection for deterministic tests
+	admissionGeoLookupFn  func(string, time.Time) (string, string) // Optional prelogin geo-key lookup override for tests
+	dedupeFastEnabled     bool                                     // Fast secondary dedupe policy enabled
+	dedupeMedEnabled      bool                                     // Med secondary dedupe policy enabled
+	dedupeSlowEnabled     bool                                     // Slow secondary dedupe policy enabled
+	nearbyLoginWarning    string                                   // Warning appended when NEARBY is active
+	queueDropLog          ratelimit.Counter                        // Rate-limited log counter for broadcast queue drops
+	workerDropLog         ratelimit.Counter                        // Rate-limited log counter for worker queue drops
+	clientDropLog         ratelimit.Counter                        // Rate-limited log counter for per-client drops
+	rejectDropLog         ratelimit.Counter                        // Rate-limited log counter for rejected-conn queue drops
+	pathPredTotal         atomic.Uint64                            // Path predictions computed (glyphs)
+	pathPredDerived       atomic.Uint64                            // Predictions using derived user/DX grids
+	pathPredCombined      atomic.Uint64                            // Predictions with sufficient combined data
+	pathPredInsufficient  atomic.Uint64                            // Predictions with insufficient data
+	pathPredNoSample      atomic.Uint64                            // Insufficient predictions with no samples
+	pathPredLowWeight     atomic.Uint64                            // Insufficient predictions below min weight
+	pathPredOverrideR     atomic.Uint64                            // R overrides applied
+	pathPredOverrideG     atomic.Uint64                            // G overrides applied
 }
 
 // Client represents a connected telnet client session.
@@ -485,10 +506,14 @@ type dropBucket struct {
 }
 
 type preloginIPState struct {
-	tokens     float64
-	lastRefill time.Time
-	lastSeen   time.Time
-	active     int
+	limiter  *rate.Limiter
+	lastSeen time.Time
+	active   int
+}
+
+type preloginLimiterState struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 type preloginTicket struct {
@@ -511,6 +536,10 @@ type preloginRejectReason string
 const (
 	preloginRejectGlobalCap     preloginRejectReason = "global_cap"
 	preloginRejectIPRate        preloginRejectReason = "ip_rate"
+	preloginRejectSubnetRate    preloginRejectReason = "subnet_rate"
+	preloginRejectGlobalRate    preloginRejectReason = "global_rate"
+	preloginRejectASNRate       preloginRejectReason = "asn_rate"
+	preloginRejectCountryRate   preloginRejectReason = "country_rate"
 	preloginRejectIPConcurrency preloginRejectReason = "ip_concurrency"
 )
 
@@ -533,6 +562,10 @@ type broadcastMetrics struct {
 	rejectQueueDrops           uint64
 	preloginRejectGlobalCap    uint64
 	preloginRejectIPRate       uint64
+	preloginRejectSubnetRate   uint64
+	preloginRejectGlobalRate   uint64
+	preloginRejectASNRate      uint64
+	preloginRejectCountryRate  uint64
 	preloginRejectIPConcurrent uint64
 	preloginTimeouts           uint64
 	preloginStateEvictions     uint64
@@ -556,12 +589,63 @@ func (m *broadcastMetrics) rejectSnapshot() (handled, queueDrops uint64) {
 func (m *broadcastMetrics) preloginSnapshot() (active int64, rejectGlobalCap, rejectIPRate, rejectIPConcurrency, timeouts, stateEvictions, stateFullRejects uint64) {
 	active = atomic.LoadInt64(&m.preloginActive)
 	rejectGlobalCap = atomic.LoadUint64(&m.preloginRejectGlobalCap)
-	rejectIPRate = atomic.LoadUint64(&m.preloginRejectIPRate)
+	rejectIPRate = atomic.LoadUint64(&m.preloginRejectIPRate) +
+		atomic.LoadUint64(&m.preloginRejectSubnetRate) +
+		atomic.LoadUint64(&m.preloginRejectGlobalRate) +
+		atomic.LoadUint64(&m.preloginRejectASNRate) +
+		atomic.LoadUint64(&m.preloginRejectCountryRate)
 	rejectIPConcurrency = atomic.LoadUint64(&m.preloginRejectIPConcurrent)
 	timeouts = atomic.LoadUint64(&m.preloginTimeouts)
 	stateEvictions = atomic.LoadUint64(&m.preloginStateEvictions)
 	stateFullRejects = atomic.LoadUint64(&m.preloginStateFullRejects)
 	return
+}
+
+type preloginAdmissionSnapshot struct {
+	Active             int64
+	RejectGlobalCap    uint64
+	RejectIPRate       uint64
+	RejectSubnetRate   uint64
+	RejectGlobalRate   uint64
+	RejectASNRate      uint64
+	RejectCountryRate  uint64
+	RejectIPConcurrent uint64
+	Timeouts           uint64
+	StateEvictions     uint64
+	StateFullRejects   uint64
+	TrackedIPs         int
+	TrackedSubnets     int
+	TrackedASNs        int
+	TrackedCountries   int
+}
+
+func (s *Server) preloginAdmissionSnapshot() preloginAdmissionSnapshot {
+	if s == nil {
+		return preloginAdmissionSnapshot{}
+	}
+	s.preloginMu.Lock()
+	trackedIPs := len(s.preloginByIP)
+	trackedSubnets := len(s.preloginBySubnet)
+	trackedASNs := len(s.preloginByASN)
+	trackedCountries := len(s.preloginByCountry)
+	s.preloginMu.Unlock()
+	return preloginAdmissionSnapshot{
+		Active:             atomic.LoadInt64(&s.metrics.preloginActive),
+		RejectGlobalCap:    atomic.LoadUint64(&s.metrics.preloginRejectGlobalCap),
+		RejectIPRate:       atomic.LoadUint64(&s.metrics.preloginRejectIPRate),
+		RejectSubnetRate:   atomic.LoadUint64(&s.metrics.preloginRejectSubnetRate),
+		RejectGlobalRate:   atomic.LoadUint64(&s.metrics.preloginRejectGlobalRate),
+		RejectASNRate:      atomic.LoadUint64(&s.metrics.preloginRejectASNRate),
+		RejectCountryRate:  atomic.LoadUint64(&s.metrics.preloginRejectCountryRate),
+		RejectIPConcurrent: atomic.LoadUint64(&s.metrics.preloginRejectIPConcurrent),
+		Timeouts:           atomic.LoadUint64(&s.metrics.preloginTimeouts),
+		StateEvictions:     atomic.LoadUint64(&s.metrics.preloginStateEvictions),
+		StateFullRejects:   atomic.LoadUint64(&s.metrics.preloginStateFullRejects),
+		TrackedIPs:         trackedIPs,
+		TrackedSubnets:     trackedSubnets,
+		TrackedASNs:        trackedASNs,
+		TrackedCountries:   trackedCountries,
+	}
 }
 
 func (s *Server) recordSenderFailure() uint64 {
@@ -578,6 +662,14 @@ func (s *Server) recordPreloginReject(reason preloginRejectReason) uint64 {
 	switch reason {
 	case preloginRejectIPRate:
 		return atomic.AddUint64(&s.metrics.preloginRejectIPRate, 1)
+	case preloginRejectSubnetRate:
+		return atomic.AddUint64(&s.metrics.preloginRejectSubnetRate, 1)
+	case preloginRejectGlobalRate:
+		return atomic.AddUint64(&s.metrics.preloginRejectGlobalRate, 1)
+	case preloginRejectASNRate:
+		return atomic.AddUint64(&s.metrics.preloginRejectASNRate, 1)
+	case preloginRejectCountryRate:
+		return atomic.AddUint64(&s.metrics.preloginRejectCountryRate, 1)
 	case preloginRejectIPConcurrency:
 		return atomic.AddUint64(&s.metrics.preloginRejectIPConcurrent, 1)
 	default:
@@ -684,6 +776,8 @@ func (s *Server) tryAcquirePrelogin(addr net.Addr) (*preloginTicket, preloginRej
 		ip = "unknown"
 	}
 	now := s.now()
+	subnetKey := subnetAdmissionKey(ip)
+	asnKey, countryKey := s.lookupAdmissionGeoKeys(ip, now)
 
 	var (
 		reason preloginRejectReason
@@ -695,6 +789,105 @@ func (s *Server) tryAcquirePrelogin(addr net.Addr) (*preloginTicket, preloginRej
 		s.preloginMu.Unlock()
 		s.setPreloginActive(active)
 	}()
+	s.preloginInitLocked()
+
+	s.preloginMaybeGCLocked(now)
+	if s.maxPreloginSessions > 0 && s.preloginActive >= s.maxPreloginSessions {
+		reason = preloginRejectGlobalCap
+		active = s.preloginActive
+		return nil, reason
+	}
+	if s.preloginGlobal != nil && !s.preloginGlobal.AllowN(now, 1) {
+		reason = preloginRejectGlobalRate
+		active = s.preloginActive
+		return nil, reason
+	}
+
+	state, ok, acquired := s.preloginAcquireIPStateLocked(ip, now)
+	if !acquired {
+		_ = ok
+		reason = preloginRejectGlobalCap
+		active = s.preloginActive
+		return nil, reason
+	}
+	if state.active >= s.preloginConcPerIP {
+		reason = preloginRejectIPConcurrency
+		active = s.preloginActive
+		return nil, reason
+	}
+	if state.limiter != nil && !state.limiter.AllowN(now, 1) {
+		state.lastSeen = now
+		s.preloginByIP[ip] = state
+		reason = preloginRejectIPRate
+		active = s.preloginActive
+		return nil, reason
+	}
+
+	subnetState, acquired := s.preloginAcquireLimiterStateLocked(s.preloginBySubnet, subnetKey, now, s.acceptRatePerSubnet, s.acceptBurstPerSubnet)
+	if !acquired {
+		reason = preloginRejectGlobalCap
+		active = s.preloginActive
+		return nil, reason
+	}
+	if subnetState.limiter != nil && !subnetState.limiter.AllowN(now, 1) {
+		subnetState.lastSeen = now
+		s.preloginBySubnet[subnetKey] = subnetState
+		reason = preloginRejectSubnetRate
+		active = s.preloginActive
+		return nil, reason
+	}
+	s.preloginBySubnet[subnetKey] = subnetState
+
+	if asnKey != "" {
+		asnState, ok := s.preloginAcquireLimiterStateLocked(s.preloginByASN, asnKey, now, s.acceptRatePerASN, s.acceptBurstPerASN)
+		if !ok {
+			reason = preloginRejectGlobalCap
+			active = s.preloginActive
+			return nil, reason
+		}
+		if asnState.limiter != nil && !asnState.limiter.AllowN(now, 1) {
+			asnState.lastSeen = now
+			s.preloginByASN[asnKey] = asnState
+			reason = preloginRejectASNRate
+			active = s.preloginActive
+			return nil, reason
+		}
+		s.preloginByASN[asnKey] = asnState
+	}
+
+	if countryKey != "" {
+		countryState, ok := s.preloginAcquireLimiterStateLocked(s.preloginByCountry, countryKey, now, s.acceptRatePerCountry, s.acceptBurstPerCountry)
+		if !ok {
+			reason = preloginRejectGlobalCap
+			active = s.preloginActive
+			return nil, reason
+		}
+		if countryState.limiter != nil && !countryState.limiter.AllowN(now, 1) {
+			countryState.lastSeen = now
+			s.preloginByCountry[countryKey] = countryState
+			reason = preloginRejectCountryRate
+			active = s.preloginActive
+			return nil, reason
+		}
+		s.preloginByCountry[countryKey] = countryState
+	}
+
+	state.active++
+	state.lastSeen = now
+	s.preloginByIP[ip] = state
+	s.preloginActive++
+	active = s.preloginActive
+
+	return &preloginTicket{
+		server: s,
+		ip:     ip,
+	}, ""
+}
+
+func (s *Server) preloginInitLocked() {
+	if s == nil {
+		return
+	}
 	if s.maxPreloginSessions <= 0 {
 		s.maxPreloginSessions = defaultMaxPreloginSessions
 	}
@@ -703,6 +896,30 @@ func (s *Server) tryAcquirePrelogin(addr net.Addr) (*preloginTicket, preloginRej
 	}
 	if s.acceptBurstPerIP <= 0 {
 		s.acceptBurstPerIP = defaultAcceptBurstPerIP
+	}
+	if s.acceptRatePerSubnet <= 0 {
+		s.acceptRatePerSubnet = defaultAcceptRatePerSubnet
+	}
+	if s.acceptBurstPerSubnet <= 0 {
+		s.acceptBurstPerSubnet = defaultAcceptBurstPerSubnet
+	}
+	if s.acceptRateGlobal <= 0 {
+		s.acceptRateGlobal = defaultAcceptRateGlobal
+	}
+	if s.acceptBurstGlobal <= 0 {
+		s.acceptBurstGlobal = defaultAcceptBurstGlobal
+	}
+	if s.acceptRatePerASN <= 0 {
+		s.acceptRatePerASN = defaultAcceptRatePerASN
+	}
+	if s.acceptBurstPerASN <= 0 {
+		s.acceptBurstPerASN = defaultAcceptBurstPerASN
+	}
+	if s.acceptRatePerCountry <= 0 {
+		s.acceptRatePerCountry = defaultAcceptRatePerCountry
+	}
+	if s.acceptBurstPerCountry <= 0 {
+		s.acceptBurstPerCountry = defaultAcceptBurstPerCountry
 	}
 	if s.preloginConcPerIP <= 0 {
 		s.preloginConcPerIP = defaultPreloginConcPerIP
@@ -716,87 +933,155 @@ func (s *Server) tryAcquirePrelogin(addr net.Addr) (*preloginTicket, preloginRej
 	if s.preloginByIP == nil {
 		s.preloginByIP = make(map[string]preloginIPState)
 	}
-
-	s.preloginMaybeGCLocked(now)
-	if s.maxPreloginSessions > 0 && s.preloginActive >= s.maxPreloginSessions {
-		reason = preloginRejectGlobalCap
-		active = s.preloginActive
-		return nil, reason
+	if s.preloginBySubnet == nil {
+		s.preloginBySubnet = make(map[string]preloginLimiterState)
 	}
-
-	state, ok := s.preloginByIP[ip]
-	if !ok {
-		if len(s.preloginByIP) >= s.preloginTrackedMax {
-			s.preloginMaybeGCLocked(now)
-		}
-		if len(s.preloginByIP) >= s.preloginTrackedMax {
-			if !s.preloginEvictOldestIdleLocked() {
-				atomic.AddUint64(&s.metrics.preloginStateFullRejects, 1)
-				reason = preloginRejectGlobalCap
-				active = s.preloginActive
-				return nil, reason
-			}
-		}
-		state = preloginIPState{
-			tokens:     float64(s.acceptBurstPerIP),
-			lastRefill: now,
-			lastSeen:   now,
-		}
+	if s.preloginByASN == nil {
+		s.preloginByASN = make(map[string]preloginLimiterState)
 	}
-
-	if state.active >= s.preloginConcPerIP {
-		reason = preloginRejectIPConcurrency
-		active = s.preloginActive
-		return nil, reason
+	if s.preloginByCountry == nil {
+		s.preloginByCountry = make(map[string]preloginLimiterState)
 	}
-
-	state = s.preloginRefillTokens(state, now)
-	if state.tokens < 1 {
-		state.lastSeen = now
-		s.preloginByIP[ip] = state
-		reason = preloginRejectIPRate
-		active = s.preloginActive
-		return nil, reason
+	if s.preloginGlobal == nil {
+		s.preloginGlobal = rate.NewLimiter(rate.Limit(s.acceptRateGlobal), s.acceptBurstGlobal)
 	}
-
-	state.tokens -= 1
-	state.active++
-	state.lastSeen = now
-	state.lastRefill = now
-	s.preloginByIP[ip] = state
-	s.preloginActive++
-	active = s.preloginActive
-
-	return &preloginTicket{
-		server: s,
-		ip:     ip,
-	}, ""
+	if s.admissionLogInterval <= 0 {
+		s.admissionLogInterval = defaultAdmissionLogInterval
+	}
+	if s.admissionLogSample < 0 {
+		s.admissionLogSample = 0
+	}
+	if s.admissionLogSample > 1 {
+		s.admissionLogSample = 1
+	}
+	if s.admissionLogMaxLines <= 0 {
+		s.admissionLogMaxLines = defaultAdmissionLogMaxLines
+	}
+	if s.admissionLogCounts == nil {
+		s.admissionLogCounts = make(map[string]uint64)
+	}
 }
 
-func (s *Server) preloginRefillTokens(state preloginIPState, now time.Time) preloginIPState {
+func (s *Server) preloginAcquireIPStateLocked(ip string, now time.Time) (preloginIPState, bool, bool) {
 	if s == nil {
-		return state
+		return preloginIPState{}, false, false
 	}
-	if s.acceptRatePerIP <= 0 || s.acceptBurstPerIP <= 0 {
-		state.tokens = 0
-		state.lastRefill = now
-		return state
-	}
-	if state.lastRefill.IsZero() {
-		state.tokens = float64(s.acceptBurstPerIP)
-		state.lastRefill = now
-		return state
-	}
-	elapsed := now.Sub(state.lastRefill).Seconds()
-	if elapsed > 0 {
-		state.tokens += elapsed * s.acceptRatePerIP
-		limit := float64(s.acceptBurstPerIP)
-		if state.tokens > limit {
-			state.tokens = limit
+	state, ok := s.preloginByIP[ip]
+	if !ok {
+		if len(s.preloginByIP) >= s.preloginTrackedMax && !s.preloginEvictOldestIdleIPLocked() {
+			atomic.AddUint64(&s.metrics.preloginStateFullRejects, 1)
+			return preloginIPState{}, false, false
 		}
-		state.lastRefill = now
+		state = preloginIPState{
+			limiter:  rate.NewLimiter(rate.Limit(s.acceptRatePerIP), s.acceptBurstPerIP),
+			lastSeen: now,
+		}
 	}
-	return state
+	if state.limiter == nil {
+		state.limiter = rate.NewLimiter(rate.Limit(s.acceptRatePerIP), s.acceptBurstPerIP)
+	}
+	state.lastSeen = now
+	s.preloginByIP[ip] = state
+	return state, ok, true
+}
+
+func (s *Server) preloginAcquireLimiterStateLocked(states map[string]preloginLimiterState, key string, now time.Time, refillRate float64, burst int) (preloginLimiterState, bool) {
+	if s == nil {
+		return preloginLimiterState{}, false
+	}
+	if states == nil {
+		return preloginLimiterState{}, false
+	}
+	state, ok := states[key]
+	if !ok {
+		if len(states) >= s.preloginTrackedMax && !s.preloginEvictOldestIdleLimiterLocked(states) {
+			atomic.AddUint64(&s.metrics.preloginStateFullRejects, 1)
+			return preloginLimiterState{}, false
+		}
+		state = preloginLimiterState{
+			limiter:  rate.NewLimiter(rate.Limit(refillRate), burst),
+			lastSeen: now,
+		}
+	}
+	if state.limiter == nil {
+		state.limiter = rate.NewLimiter(rate.Limit(refillRate), burst)
+	}
+	state.lastSeen = now
+	states[key] = state
+	return state, true
+}
+
+func subnetAdmissionKey(ip string) string {
+	parsed, err := netip.ParseAddr(strings.TrimSpace(ip))
+	if err != nil {
+		return "unknown"
+	}
+	if parsed.Is4() {
+		return netip.PrefixFrom(parsed, 24).Masked().String()
+	}
+	if parsed.Is6() {
+		return netip.PrefixFrom(parsed, 48).Masked().String()
+	}
+	return "unknown"
+}
+
+func (s *Server) lookupAdmissionGeoKeys(ip string, now time.Time) (asnKey, countryKey string) {
+	if s != nil && s.admissionGeoLookupFn != nil {
+		return s.admissionGeoLookupFn(ip, now)
+	}
+	if s == nil || s.reputationGate == nil {
+		return "", ""
+	}
+	result, ok := s.reputationGate.LookupIPForAdmission(ip, now)
+	if !ok {
+		return "", ""
+	}
+	asnKey = strings.TrimSpace(result.ASN)
+	countryKey = strutil.NormalizeUpper(strings.TrimSpace(result.CountryCode))
+	return asnKey, countryKey
+}
+
+func (s *Server) flushAdmissionWindowLocked(now time.Time) {
+	if s == nil || len(s.admissionLogCounts) == 0 {
+		return
+	}
+	parts := make([]string, 0, len(s.admissionLogCounts))
+	for reason, count := range s.admissionLogCounts {
+		parts = append(parts, fmt.Sprintf("%s=%d", reason, count))
+	}
+	sort.Strings(parts)
+	log.Printf("Admission rejects (%s): %s", s.admissionLogInterval, strings.Join(parts, " "))
+	clear(s.admissionLogCounts)
+	s.admissionLogLines = 0
+	s.admissionLogWindow = now
+}
+
+func (s *Server) logAdmissionReject(reason preloginRejectReason, addr string) {
+	if s == nil {
+		return
+	}
+	now := s.now()
+	s.preloginMu.Lock()
+	s.preloginInitLocked()
+	if s.admissionLogWindow.IsZero() {
+		s.admissionLogWindow = now
+	}
+	if now.Sub(s.admissionLogWindow) >= s.admissionLogInterval {
+		s.flushAdmissionWindowLocked(now)
+	}
+	key := string(reason)
+	if key == "" {
+		key = "unknown"
+	}
+	s.admissionLogCounts[key]++
+	shouldSample := s.admissionLogSample > 0 && rand.Float64() <= s.admissionLogSample && s.admissionLogLines < s.admissionLogMaxLines
+	if shouldSample {
+		s.admissionLogLines++
+	}
+	s.preloginMu.Unlock()
+	if shouldSample {
+		log.Printf("Admission reject sample: reason=%s addr=%s", key, addr)
+	}
 }
 
 func (s *Server) preloginMaybeGCLocked(now time.Time) {
@@ -815,9 +1100,27 @@ func (s *Server) preloginMaybeGCLocked(now time.Time) {
 			delete(s.preloginByIP, ip)
 		}
 	}
+	for key, state := range s.preloginBySubnet {
+		if now.Sub(state.lastSeen) > s.preloginStateIdleTTL {
+			delete(s.preloginBySubnet, key)
+		}
+	}
+	for key, state := range s.preloginByASN {
+		if now.Sub(state.lastSeen) > s.preloginStateIdleTTL {
+			delete(s.preloginByASN, key)
+		}
+	}
+	for key, state := range s.preloginByCountry {
+		if now.Sub(state.lastSeen) > s.preloginStateIdleTTL {
+			delete(s.preloginByCountry, key)
+		}
+	}
+	if !s.admissionLogWindow.IsZero() && now.Sub(s.admissionLogWindow) >= s.admissionLogInterval {
+		s.flushAdmissionWindowLocked(now)
+	}
 }
 
-func (s *Server) preloginEvictOldestIdleLocked() bool {
+func (s *Server) preloginEvictOldestIdleIPLocked() bool {
 	if s == nil {
 		return false
 	}
@@ -840,6 +1143,30 @@ func (s *Server) preloginEvictOldestIdleLocked() bool {
 		return false
 	}
 	delete(s.preloginByIP, oldestIP)
+	atomic.AddUint64(&s.metrics.preloginStateEvictions, 1)
+	return true
+}
+
+func (s *Server) preloginEvictOldestIdleLimiterLocked(states map[string]preloginLimiterState) bool {
+	if s == nil || states == nil {
+		return false
+	}
+	var (
+		oldestKey  string
+		oldestSeen time.Time
+		found      bool
+	)
+	for key, state := range states {
+		if !found || state.lastSeen.Before(oldestSeen) {
+			found = true
+			oldestKey = key
+			oldestSeen = state.lastSeen
+		}
+	}
+	if !found {
+		return false
+	}
+	delete(states, oldestKey)
 	atomic.AddUint64(&s.metrics.preloginStateEvictions, 1)
 	return true
 }
@@ -1314,9 +1641,20 @@ const (
 	defaultPreloginTimeout        = 15 * time.Second
 	defaultAcceptRatePerIP        = 3.0
 	defaultAcceptBurstPerIP       = 6
+	defaultAcceptRatePerSubnet    = 24.0
+	defaultAcceptBurstPerSubnet   = 48
+	defaultAcceptRateGlobal       = 300.0
+	defaultAcceptBurstGlobal      = 600
+	defaultAcceptRatePerASN       = 40.0
+	defaultAcceptBurstPerASN      = 80
+	defaultAcceptRatePerCountry   = 120.0
+	defaultAcceptBurstPerCountry  = 240
 	defaultPreloginConcPerIP      = 3
 	defaultPreloginStateIdleTTL   = 2 * time.Minute
 	defaultPreloginGCInterval     = 30 * time.Second
+	defaultAdmissionLogInterval   = 10 * time.Second
+	defaultAdmissionLogSampleRate = 0.05
+	defaultAdmissionLogMaxLines   = 20
 	minPreloginTrackedStates      = 1024
 	maxPreloginTrackedStates      = 65536
 	preloginTrackedStateFactor    = 16
@@ -1374,7 +1712,18 @@ type ServerOptions struct {
 	PreloginTimeout          time.Duration
 	AcceptRatePerIP          float64
 	AcceptBurstPerIP         int
+	AcceptRatePerSubnet      float64
+	AcceptBurstPerSubnet     int
+	AcceptRateGlobal         float64
+	AcceptBurstGlobal        int
+	AcceptRatePerASN         float64
+	AcceptBurstPerASN        int
+	AcceptRatePerCountry     float64
+	AcceptBurstPerCountry    int
 	PreloginConcurrencyPerIP int
+	AdmissionLogInterval     time.Duration
+	AdmissionLogSampleRate   float64
+	AdmissionLogMaxLines     int
 	LoginLineLimit           int
 	CommandLineLimit         int
 	DropExtremeRate          float64
@@ -1398,74 +1747,89 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 	config := normalizeServerOptions(opts)
 	useZiutek := strings.EqualFold(config.Transport, "ziutek")
 	return &Server{
-		port:                 config.Port,
-		welcomeMessage:       config.WelcomeMessage,
-		maxConnections:       config.MaxConnections,
-		duplicateLoginMsg:    config.DuplicateLoginMsg,
-		greetingTemplate:     config.LoginGreeting,
-		loginPrompt:          config.LoginPrompt,
-		loginEmptyMessage:    config.LoginEmptyMessage,
-		loginInvalidMsg:      config.LoginInvalidMessage,
-		inputTooLongMsg:      config.InputTooLongMessage,
-		inputInvalidMsg:      config.InputInvalidCharMessage,
-		dialectWelcomeMsg:    config.DialectWelcomeMessage,
-		dialectSourceDef:     config.DialectSourceDefault,
-		dialectSourcePers:    config.DialectSourcePersisted,
-		pathStatusMsg:        config.PathStatusMessage,
-		clusterCall:          config.ClusterCall,
-		clients:              make(map[string]*Client),
-		shutdown:             make(chan struct{}),
-		broadcast:            make(chan *broadcastPayload, config.BroadcastQueue),
-		broadcastWorkers:     config.BroadcastWorkers,
-		workerQueueSize:      config.WorkerQueue,
-		batchInterval:        config.BroadcastBatchInterval,
-		batchMax:             defaultBroadcastBatch,
-		writerBatchMaxBytes:  config.WriterBatchMaxBytes,
-		writerBatchWait:      config.WriterBatchWait,
-		rejectWorkers:        config.RejectWorkers,
-		rejectQueueSize:      config.RejectQueueSize,
-		rejectWriteDeadline:  config.RejectWriteDeadline,
-		rejectQueue:          make(chan rejectJob, config.RejectQueueSize),
-		keepaliveInterval:    time.Duration(config.KeepaliveSeconds) * time.Second,
-		clientBufferSize:     config.ClientBuffer,
-		controlQueueSize:     config.ControlQueue,
-		skipHandshake:        config.SkipHandshake,
-		transport:            config.Transport,
-		useZiutek:            useZiutek,
-		echoMode:             config.EchoMode,
-		processor:            processor,
-		readIdleTimeout:      config.ReadIdleTimeout,
-		loginTimeout:         config.LoginTimeout,
-		maxPreloginSessions:  config.MaxPreloginSessions,
-		preloginTimeout:      config.PreloginTimeout,
-		acceptRatePerIP:      config.AcceptRatePerIP,
-		acceptBurstPerIP:     config.AcceptBurstPerIP,
-		preloginConcPerIP:    config.PreloginConcurrencyPerIP,
-		preloginByIP:         make(map[string]preloginIPState),
-		preloginTrackedMax:   defaultPreloginStateCap(config.MaxPreloginSessions),
-		preloginStateIdleTTL: preloginStateIdleTTL(config.PreloginTimeout),
-		loginLineLimit:       config.LoginLineLimit,
-		commandLineLimit:     config.CommandLineLimit,
-		filterEngine:         newFilterCommandEngineWithCTY(config.CTYLookup),
-		latency:              newLatencyMetrics(),
-		reputationGate:       opts.ReputationGate,
-		startTime:            time.Now().UTC(),
-		pathPredictor:        opts.PathPredictor,
-		pathDisplay:          opts.PathDisplayEnabled,
-		solarWeather:         opts.SolarWeather,
-		noiseOffsets:         opts.NoiseOffsets,
-		gridLookup:           opts.GridLookup,
-		dedupeFastEnabled:    config.DedupeFastEnabled,
-		dedupeMedEnabled:     config.DedupeMedEnabled,
-		dedupeSlowEnabled:    config.DedupeSlowEnabled,
-		nearbyLoginWarning:   normalizeWarningLine(config.NearbyLoginWarning),
-		dropExtremeRate:      config.DropExtremeRate,
-		dropExtremeWindow:    config.DropExtremeWindow,
-		dropExtremeMinAtt:    config.DropExtremeMinAttempts,
-		queueDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
-		workerDropLog:        ratelimit.NewCounter(defaultDropLogInterval),
-		clientDropLog:        ratelimit.NewCounter(defaultDropLogInterval),
-		rejectDropLog:        ratelimit.NewCounter(defaultDropLogInterval),
+		port:                  config.Port,
+		welcomeMessage:        config.WelcomeMessage,
+		maxConnections:        config.MaxConnections,
+		duplicateLoginMsg:     config.DuplicateLoginMsg,
+		greetingTemplate:      config.LoginGreeting,
+		loginPrompt:           config.LoginPrompt,
+		loginEmptyMessage:     config.LoginEmptyMessage,
+		loginInvalidMsg:       config.LoginInvalidMessage,
+		inputTooLongMsg:       config.InputTooLongMessage,
+		inputInvalidMsg:       config.InputInvalidCharMessage,
+		dialectWelcomeMsg:     config.DialectWelcomeMessage,
+		dialectSourceDef:      config.DialectSourceDefault,
+		dialectSourcePers:     config.DialectSourcePersisted,
+		pathStatusMsg:         config.PathStatusMessage,
+		clusterCall:           config.ClusterCall,
+		clients:               make(map[string]*Client),
+		shutdown:              make(chan struct{}),
+		broadcast:             make(chan *broadcastPayload, config.BroadcastQueue),
+		broadcastWorkers:      config.BroadcastWorkers,
+		workerQueueSize:       config.WorkerQueue,
+		batchInterval:         config.BroadcastBatchInterval,
+		batchMax:              defaultBroadcastBatch,
+		writerBatchMaxBytes:   config.WriterBatchMaxBytes,
+		writerBatchWait:       config.WriterBatchWait,
+		rejectWorkers:         config.RejectWorkers,
+		rejectQueueSize:       config.RejectQueueSize,
+		rejectWriteDeadline:   config.RejectWriteDeadline,
+		rejectQueue:           make(chan rejectJob, config.RejectQueueSize),
+		keepaliveInterval:     time.Duration(config.KeepaliveSeconds) * time.Second,
+		clientBufferSize:      config.ClientBuffer,
+		controlQueueSize:      config.ControlQueue,
+		skipHandshake:         config.SkipHandshake,
+		transport:             config.Transport,
+		useZiutek:             useZiutek,
+		echoMode:              config.EchoMode,
+		processor:             processor,
+		readIdleTimeout:       config.ReadIdleTimeout,
+		loginTimeout:          config.LoginTimeout,
+		maxPreloginSessions:   config.MaxPreloginSessions,
+		preloginTimeout:       config.PreloginTimeout,
+		acceptRatePerIP:       config.AcceptRatePerIP,
+		acceptBurstPerIP:      config.AcceptBurstPerIP,
+		acceptRatePerSubnet:   config.AcceptRatePerSubnet,
+		acceptBurstPerSubnet:  config.AcceptBurstPerSubnet,
+		acceptRateGlobal:      config.AcceptRateGlobal,
+		acceptBurstGlobal:     config.AcceptBurstGlobal,
+		acceptRatePerASN:      config.AcceptRatePerASN,
+		acceptBurstPerASN:     config.AcceptBurstPerASN,
+		acceptRatePerCountry:  config.AcceptRatePerCountry,
+		acceptBurstPerCountry: config.AcceptBurstPerCountry,
+		preloginConcPerIP:     config.PreloginConcurrencyPerIP,
+		preloginByIP:          make(map[string]preloginIPState),
+		preloginBySubnet:      make(map[string]preloginLimiterState),
+		preloginByASN:         make(map[string]preloginLimiterState),
+		preloginByCountry:     make(map[string]preloginLimiterState),
+		preloginTrackedMax:    defaultPreloginStateCap(config.MaxPreloginSessions),
+		preloginStateIdleTTL:  preloginStateIdleTTL(config.PreloginTimeout),
+		admissionLogInterval:  config.AdmissionLogInterval,
+		admissionLogSample:    config.AdmissionLogSampleRate,
+		admissionLogMaxLines:  config.AdmissionLogMaxLines,
+		admissionLogCounts:    make(map[string]uint64),
+		loginLineLimit:        config.LoginLineLimit,
+		commandLineLimit:      config.CommandLineLimit,
+		filterEngine:          newFilterCommandEngineWithCTY(config.CTYLookup),
+		latency:               newLatencyMetrics(),
+		reputationGate:        opts.ReputationGate,
+		startTime:             time.Now().UTC(),
+		pathPredictor:         opts.PathPredictor,
+		pathDisplay:           opts.PathDisplayEnabled,
+		solarWeather:          opts.SolarWeather,
+		noiseOffsets:          opts.NoiseOffsets,
+		gridLookup:            opts.GridLookup,
+		dedupeFastEnabled:     config.DedupeFastEnabled,
+		dedupeMedEnabled:      config.DedupeMedEnabled,
+		dedupeSlowEnabled:     config.DedupeSlowEnabled,
+		nearbyLoginWarning:    normalizeWarningLine(config.NearbyLoginWarning),
+		dropExtremeRate:       config.DropExtremeRate,
+		dropExtremeWindow:     config.DropExtremeWindow,
+		dropExtremeMinAtt:     config.DropExtremeMinAttempts,
+		queueDropLog:          ratelimit.NewCounter(defaultDropLogInterval),
+		workerDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
+		clientDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
+		rejectDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
 	}
 }
 
@@ -1539,8 +1903,44 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 	if config.AcceptBurstPerIP <= 0 {
 		config.AcceptBurstPerIP = defaultAcceptBurstPerIP
 	}
+	if config.AcceptRatePerSubnet <= 0 {
+		config.AcceptRatePerSubnet = defaultAcceptRatePerSubnet
+	}
+	if config.AcceptBurstPerSubnet <= 0 {
+		config.AcceptBurstPerSubnet = defaultAcceptBurstPerSubnet
+	}
+	if config.AcceptRateGlobal <= 0 {
+		config.AcceptRateGlobal = defaultAcceptRateGlobal
+	}
+	if config.AcceptBurstGlobal <= 0 {
+		config.AcceptBurstGlobal = defaultAcceptBurstGlobal
+	}
+	if config.AcceptRatePerASN <= 0 {
+		config.AcceptRatePerASN = defaultAcceptRatePerASN
+	}
+	if config.AcceptBurstPerASN <= 0 {
+		config.AcceptBurstPerASN = defaultAcceptBurstPerASN
+	}
+	if config.AcceptRatePerCountry <= 0 {
+		config.AcceptRatePerCountry = defaultAcceptRatePerCountry
+	}
+	if config.AcceptBurstPerCountry <= 0 {
+		config.AcceptBurstPerCountry = defaultAcceptBurstPerCountry
+	}
 	if config.PreloginConcurrencyPerIP <= 0 {
 		config.PreloginConcurrencyPerIP = defaultPreloginConcPerIP
+	}
+	if config.AdmissionLogInterval <= 0 {
+		config.AdmissionLogInterval = defaultAdmissionLogInterval
+	}
+	if config.AdmissionLogSampleRate < 0 {
+		config.AdmissionLogSampleRate = 0
+	}
+	if config.AdmissionLogSampleRate > 1 {
+		config.AdmissionLogSampleRate = 1
+	}
+	if config.AdmissionLogMaxLines <= 0 {
+		config.AdmissionLogMaxLines = defaultAdmissionLogMaxLines
 	}
 	if config.MaxPreloginSessions > 0 && config.PreloginConcurrencyPerIP > config.MaxPreloginSessions {
 		config.PreloginConcurrencyPerIP = config.MaxPreloginSessions
@@ -1934,10 +2334,7 @@ func (s *Server) processReject(job rejectJob) {
 		deadline = defaultRejectWriteDeadline
 	}
 	rejectConnWithBanner(job.conn, job.addr, job.banner, deadline)
-	total := atomic.AddUint64(&s.metrics.rejectHandled, 1)
-	if strings.TrimSpace(job.reason) != "" {
-		log.Printf("Rejected connection from %s: %s (handled=%d)", job.addr, job.reason, total)
-	}
+	atomic.AddUint64(&s.metrics.rejectHandled, 1)
 }
 
 func (s *Server) enqueueReject(conn net.Conn, addr, banner, reason string) {
@@ -2184,6 +2581,12 @@ func (s *Server) PreloginMetricSnapshot() (active int64, rejectGlobalCap, reject
 	return s.metrics.preloginSnapshot()
 }
 
+// PreloginAdmissionMetricSnapshot returns the detailed multi-dimensional
+// admission counters and tracked limiter state sizes.
+func (s *Server) PreloginAdmissionMetricSnapshot() preloginAdmissionSnapshot {
+	return s.preloginAdmissionSnapshot()
+}
+
 type pathPredictionStats struct {
 	Total        uint64
 	Derived      uint64
@@ -2296,6 +2699,7 @@ func (s *Server) acceptConnections() {
 		if ticket == nil {
 			addr := conn.RemoteAddr().String()
 			total := s.recordPreloginReject(rejectReason)
+			s.logAdmissionReject(rejectReason, addr)
 			reason := fmt.Sprintf("prelogin %s (total=%d active=%d/%d)", rejectReason, total, atomic.LoadInt64(&s.metrics.preloginActive), s.maxPreloginSessions)
 			s.enqueueReject(conn, addr, "Server busy. Try again later.\r\n", reason)
 			continue
@@ -3875,6 +4279,10 @@ func (s *Server) Stop() {
 	}
 	s.stopOnce.Do(func() {
 		log.Println("Stopping telnet server...")
+		now := s.now()
+		s.preloginMu.Lock()
+		s.flushAdmissionWindowLocked(now)
+		s.preloginMu.Unlock()
 		close(s.shutdown)
 		if s.listener != nil {
 			_ = s.listener.Close()

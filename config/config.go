@@ -195,8 +195,30 @@ type TelnetConfig struct {
 	AcceptRatePerIP float64 `yaml:"accept_rate_per_ip"`
 	// AcceptBurstPerIP sets token bucket burst capacity for pre-login admissions.
 	AcceptBurstPerIP int `yaml:"accept_burst_per_ip"`
+	// AcceptRatePerSubnet limits accepted pre-login connections per subnet per second.
+	AcceptRatePerSubnet float64 `yaml:"accept_rate_per_subnet"`
+	// AcceptBurstPerSubnet sets token bucket burst capacity for subnet admissions.
+	AcceptBurstPerSubnet int `yaml:"accept_burst_per_subnet"`
+	// AcceptRateGlobal limits accepted pre-login connections globally per second.
+	AcceptRateGlobal float64 `yaml:"accept_rate_global"`
+	// AcceptBurstGlobal sets token bucket burst capacity for global admissions.
+	AcceptBurstGlobal int `yaml:"accept_burst_global"`
+	// AcceptRatePerASN limits accepted pre-login connections per ASN per second.
+	AcceptRatePerASN float64 `yaml:"accept_rate_per_asn"`
+	// AcceptBurstPerASN sets token bucket burst capacity per ASN.
+	AcceptBurstPerASN int `yaml:"accept_burst_per_asn"`
+	// AcceptRatePerCountry limits accepted pre-login connections per country per second.
+	AcceptRatePerCountry float64 `yaml:"accept_rate_per_country"`
+	// AcceptBurstPerCountry sets token bucket burst capacity per country.
+	AcceptBurstPerCountry int `yaml:"accept_burst_per_country"`
 	// PreloginConcurrencyPerIP bounds simultaneous unauthenticated sessions per IP.
 	PreloginConcurrencyPerIP int `yaml:"prelogin_concurrency_per_ip"`
+	// AdmissionLogIntervalSeconds controls aggregated pre-login reject log cadence.
+	AdmissionLogIntervalSeconds int `yaml:"admission_log_interval_seconds"`
+	// AdmissionLogSampleRate controls sampled per-event reject logs [0,1].
+	AdmissionLogSampleRate float64 `yaml:"admission_log_sample_rate"`
+	// AdmissionLogMaxReasonLinesPerInterval caps sampled log lines each interval.
+	AdmissionLogMaxReasonLinesPerInterval int `yaml:"admission_log_max_reason_lines_per_interval"`
 	// LoginLineLimit bounds how many bytes are accepted for the initial callsign
 	// prompt. Keep this tight to prevent DoS via huge login banners.
 	LoginLineLimit int `yaml:"login_line_limit"`
@@ -1991,8 +2013,44 @@ func Load(path string) (*Config, error) {
 	if cfg.Telnet.AcceptBurstPerIP <= 0 {
 		cfg.Telnet.AcceptBurstPerIP = 6
 	}
+	if cfg.Telnet.AcceptRatePerSubnet <= 0 {
+		cfg.Telnet.AcceptRatePerSubnet = 24
+	}
+	if cfg.Telnet.AcceptBurstPerSubnet <= 0 {
+		cfg.Telnet.AcceptBurstPerSubnet = 48
+	}
+	if cfg.Telnet.AcceptRateGlobal <= 0 {
+		cfg.Telnet.AcceptRateGlobal = 300
+	}
+	if cfg.Telnet.AcceptBurstGlobal <= 0 {
+		cfg.Telnet.AcceptBurstGlobal = 600
+	}
+	if cfg.Telnet.AcceptRatePerASN <= 0 {
+		cfg.Telnet.AcceptRatePerASN = 40
+	}
+	if cfg.Telnet.AcceptBurstPerASN <= 0 {
+		cfg.Telnet.AcceptBurstPerASN = 80
+	}
+	if cfg.Telnet.AcceptRatePerCountry <= 0 {
+		cfg.Telnet.AcceptRatePerCountry = 120
+	}
+	if cfg.Telnet.AcceptBurstPerCountry <= 0 {
+		cfg.Telnet.AcceptBurstPerCountry = 240
+	}
 	if cfg.Telnet.PreloginConcurrencyPerIP <= 0 {
 		cfg.Telnet.PreloginConcurrencyPerIP = 3
+	}
+	if cfg.Telnet.AdmissionLogIntervalSeconds <= 0 {
+		cfg.Telnet.AdmissionLogIntervalSeconds = 10
+	}
+	if cfg.Telnet.AdmissionLogSampleRate < 0 {
+		cfg.Telnet.AdmissionLogSampleRate = 0
+	}
+	if cfg.Telnet.AdmissionLogSampleRate > 1 {
+		cfg.Telnet.AdmissionLogSampleRate = 1
+	}
+	if cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval <= 0 {
+		cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval = 20
 	}
 	if cfg.Telnet.PreloginConcurrencyPerIP > cfg.Telnet.MaxPreloginSessions {
 		cfg.Telnet.PreloginConcurrencyPerIP = cfg.Telnet.MaxPreloginSessions
@@ -2125,11 +2183,8 @@ func Load(path string) (*Config, error) {
 	if cfg.Peering.Topology.PersistIntervalSeconds <= 0 {
 		cfg.Peering.Topology.PersistIntervalSeconds = 300
 	}
-	for i := range cfg.Peering.Peers {
-		if cfg.Peering.Peers[i].Host != "" && cfg.Peering.Peers[i].Port > 0 && !cfg.Peering.Peers[i].Enabled {
-			cfg.Peering.Peers[i].Enabled = true
-		}
-	}
+	// Keep outbound peer enablement explicit: omitted or false stays disabled.
+	// This avoids accidental dial loops for placeholder entries.
 
 	// Harmonic guardrails ensure suppression logic runs with bounded windows and tolerances.
 	if cfg.Harmonics.RecencySeconds <= 0 {
@@ -2571,12 +2626,24 @@ func (c *Config) Print() {
 		c.Telnet.RejectWorkers,
 		c.Telnet.RejectQueueSize,
 		c.Telnet.RejectWriteDeadlineMS)
-	fmt.Printf("Telnet Tier-A: prelogin_max=%d prelogin_timeout=%ds ip_rate=%.2f/s ip_burst=%d ip_concurrency=%d\n",
+	fmt.Printf("Telnet Tier-A: prelogin_max=%d prelogin_timeout=%ds ip_rate=%.2f/s ip_burst=%d subnet_rate=%.2f/s subnet_burst=%d global_rate=%.2f/s global_burst=%d ip_concurrency=%d\n",
 		c.Telnet.MaxPreloginSessions,
 		c.Telnet.PreloginTimeoutSeconds,
 		c.Telnet.AcceptRatePerIP,
 		c.Telnet.AcceptBurstPerIP,
+		c.Telnet.AcceptRatePerSubnet,
+		c.Telnet.AcceptBurstPerSubnet,
+		c.Telnet.AcceptRateGlobal,
+		c.Telnet.AcceptBurstGlobal,
 		c.Telnet.PreloginConcurrencyPerIP)
+	fmt.Printf("Telnet Tier-A geo: asn_rate=%.2f/s asn_burst=%d country_rate=%.2f/s country_burst=%d log_interval=%ds log_sample=%.2f max_lines=%d\n",
+		c.Telnet.AcceptRatePerASN,
+		c.Telnet.AcceptBurstPerASN,
+		c.Telnet.AcceptRatePerCountry,
+		c.Telnet.AcceptBurstPerCountry,
+		c.Telnet.AdmissionLogIntervalSeconds,
+		c.Telnet.AdmissionLogSampleRate,
+		c.Telnet.AdmissionLogMaxReasonLinesPerInterval)
 	if c.Reputation.Enabled {
 		fmt.Printf("Reputation: enabled (cymru=%t api=%t pebble=%s v4_mem=%t wait=%ds ramp=%ds per_band=%d..%d total=%d..%d prefix4=%d@%d/s prefix6=%d@%d/s)\n",
 			c.Reputation.FallbackTeamCymru,
