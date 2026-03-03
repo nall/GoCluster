@@ -1,7 +1,9 @@
 package peer
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,5 +49,78 @@ func TestActiveSessionSSIDsSortedUnique(t *testing.T) {
 	want := []string{"KM3T-44", "N2WQ-73"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
+	tests := []struct {
+		name         string
+		line         string
+		targetPC9x   bool
+		wantPrefix   string
+		wantHopToken string
+	}{
+		{
+			name:         "pc11 relays to legacy peer as pc11",
+			line:         "PC11^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^H3^",
+			targetPC9x:   false,
+			wantPrefix:   "PC11^",
+			wantHopToken: "^H2^",
+		},
+		{
+			name:         "pc61 relays to pc9x peer as pc61",
+			line:         "PC61^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^203.0.113.7^H3^",
+			targetPC9x:   true,
+			wantPrefix:   "PC61^",
+			wantHopToken: "^H2^",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			src := &session{
+				id:         "src",
+				remoteCall: "SRC",
+				ctx:        context.Background(),
+				writeCh:    make(chan string, 1),
+			}
+			dst := &session{
+				id:         "dst",
+				remoteCall: "DST",
+				pc9x:       tc.targetPC9x,
+				ctx:        context.Background(),
+				writeCh:    make(chan string, 1),
+			}
+			m := &Manager{
+				dedupe:   newDedupeCache(time.Minute),
+				sessions: map[string]*session{"src": src, "dst": dst},
+			}
+
+			frame, err := ParseFrame(tc.line)
+			if err != nil {
+				t.Fatalf("ParseFrame: %v", err)
+			}
+
+			m.HandleFrame(frame, src)
+
+			select {
+			case got := <-dst.writeCh:
+				if !strings.HasPrefix(got, tc.wantPrefix) {
+					t.Fatalf("expected relayed frame prefix %q, got %q", tc.wantPrefix, got)
+				}
+				if !strings.Contains(got, tc.wantHopToken) {
+					t.Fatalf("expected relayed frame hop token %q, got %q", tc.wantHopToken, got)
+				}
+			default:
+				t.Fatal("expected relay to destination peer")
+			}
+
+			select {
+			case got := <-src.writeCh:
+				t.Fatalf("expected source peer to be excluded from relay, got %q", got)
+			default:
+			}
+		})
 	}
 }

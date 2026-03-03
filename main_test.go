@@ -154,27 +154,32 @@ func TestShouldArchiveSpotSkipsTestSpotter(t *testing.T) {
 	}
 }
 
-func TestShouldPublishToPeersSkipsTestSpotter(t *testing.T) {
-	spotTest := spot.NewSpot("K1ABC", "K1TEST", 7074.0, "FT8")
-	spotTest.SourceType = spot.SourceManual
-	spotTest.IsTestSpotter = true
-	if shouldPublishToPeers(spotTest) {
-		t.Fatalf("expected test spotter to skip peering")
+func TestShouldPublishToPeersSourcePolicy(t *testing.T) {
+	tests := []struct {
+		name string
+		src  spot.SourceType
+		test bool
+		want bool
+	}{
+		{name: "manual allowed", src: spot.SourceManual, want: true},
+		{name: "manual test spotter blocked", src: spot.SourceManual, test: true, want: false},
+		{name: "upstream blocked", src: spot.SourceUpstream, want: false},
+		{name: "peer blocked", src: spot.SourcePeer, want: false},
+		{name: "rbn blocked", src: spot.SourceRBN, want: false},
+		{name: "ft8 blocked", src: spot.SourceFT8, want: false},
+		{name: "ft4 blocked", src: spot.SourceFT4, want: false},
+		{name: "pskreporter blocked", src: spot.SourcePSKReporter, want: false},
 	}
-	spotNormal := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
-	spotNormal.SourceType = spot.SourceManual
-	if !shouldPublishToPeers(spotNormal) {
-		t.Fatalf("expected manual spot to publish to peers")
-	}
-	spotUpstream := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
-	spotUpstream.SourceType = spot.SourceUpstream
-	if shouldPublishToPeers(spotUpstream) {
-		t.Fatalf("expected upstream spot to skip peering")
-	}
-	spotPeer := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
-	spotPeer.SourceType = spot.SourcePeer
-	if shouldPublishToPeers(spotPeer) {
-		t.Fatalf("expected peer spot to skip peering")
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
+			s.SourceType = tc.src
+			s.IsTestSpotter = tc.test
+			if got := shouldPublishToPeers(s); got != tc.want {
+				t.Fatalf("shouldPublishToPeers(%s,test=%v)=%v want %v", tc.src, tc.test, got, tc.want)
+			}
+		})
 	}
 }
 

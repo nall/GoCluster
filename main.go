@@ -3185,11 +3185,14 @@ func shouldArchiveSpot(s *spot.Spot) bool {
 }
 
 // Purpose: Decide whether a spot should be forwarded to peers.
-// Key aspects: Excludes upstream/peer sources and test spotters.
+// Key aspects: Excludes skimmer/upstream/peer sources and test spotters.
 // Upstream: processOutputSpots.
 // Downstream: peer.Manager.PublishDX.
 func shouldPublishToPeers(s *spot.Spot) bool {
 	if s == nil || s.IsTestSpotter {
+		return false
+	}
+	if spot.IsSkimmerSource(s.SourceType) {
 		return false
 	}
 	switch s.SourceType {

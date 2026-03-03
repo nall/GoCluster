@@ -34,11 +34,18 @@ peering:
       remote_callsign: "KM3T-10"     # Expected remote node callsign
     - enabled: true               # Placeholder peer #3 (set true when ready)
       host: "gocluster.km3t.net"   # Remote host
-      port: 8300                   # Remote port
+      port: 6300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
       login_callsign: "N2WQ-2"    # Callsign used to log in to the remote
       remote_callsign: "KM3T-44"     # Expected remote node callsign
+      enabled: true               # Placeholder peer #3 (set true when ready)
+      host: "f1fca.freeboxos.fr"   # Remote host
+      port: 6300                   # Remote port
+      password: "N2WQ!2_GoClusterTest"                 # Optional password sent after login callsign
+      prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
+      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
+      remote_callsign: "F1FCA-1"   # Expected remote node callsign
   timeouts:
     login_seconds: 60              # Outbound login timeout
     init_seconds: 60               # Outbound init/handshake timeout
