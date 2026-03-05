@@ -193,6 +193,13 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 	now := time.Now().UTC()
 	switch frame.Type {
 	case "PC92":
+		seen := true
+		if frame.Hop > 1 {
+			seen = m.dedupe.markSeen(pc92Key(frame), now)
+		}
+		if !seen {
+			return
+		}
 		if m.topology != nil && m.pc92Ch != nil {
 			if m.cfg.PC92MaxBytes > 0 && len(frame.Raw) > m.cfg.PC92MaxBytes {
 				log.Printf("Peering: dropping PC92 (%d bytes) from %s: over size limit", len(frame.Raw), sessionLabel(sess))
@@ -204,7 +211,7 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 				}
 			}
 		}
-		if frame.Hop > 1 && m.dedupe.markSeen(pc92Key(frame), now) {
+		if frame.Hop > 1 {
 			m.forwardFrame(frame, frame.Hop-1, sess, true)
 		}
 	case "PC19", "PC16", "PC17", "PC21":

@@ -164,9 +164,15 @@ func (s *session) Run(ctx context.Context) error {
 			var tooLong ErrLineTooLong
 			if errors.As(err, &tooLong) {
 				if s.logLineTooLong {
-					log.Printf("Peering: line too long from %s, dropping and continuing", s.peer.host)
+					log.Printf(
+						"Peering: line too long from %s, dropping and continuing (reason=%s len=%d limit=%d)",
+						s.peer.host,
+						tooLong.Reason,
+						tooLong.Length,
+						tooLong.Limit,
+					)
 				}
-				appendOverlongSample(s.overlongPath, s.peer.host, tooLong.Preview, tooLong.Length)
+				appendOverlongSample(s.overlongPath, s.peer.host, tooLong.Preview, tooLong.Length, tooLong.Reason, tooLong.Limit)
 				continue
 			}
 			return err
@@ -469,8 +475,14 @@ func (s *session) runOutboundHandshake() error {
 		if err != nil {
 			var tooLong ErrLineTooLong
 			if errors.As(err, &tooLong) {
-				log.Printf("%s RX line too long, dropping", logPrefix)
-				appendOverlongSample(s.overlongPath, s.peer.host, tooLong.Preview, tooLong.Length)
+				log.Printf(
+					"%s RX line too long, dropping (reason=%s len=%d limit=%d)",
+					logPrefix,
+					tooLong.Reason,
+					tooLong.Length,
+					tooLong.Limit,
+				)
+				appendOverlongSample(s.overlongPath, s.peer.host, tooLong.Preview, tooLong.Length, tooLong.Reason, tooLong.Limit)
 				continue
 			}
 			return err

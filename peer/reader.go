@@ -50,6 +50,8 @@ type lineReader struct {
 type ErrLineTooLong struct {
 	Preview string
 	Length  int
+	Reason  string
+	Limit   int
 }
 
 // Error provides a generic error string for overlong lines.
@@ -59,6 +61,11 @@ type ErrLineTooLong struct {
 func (e ErrLineTooLong) Error() string {
 	return "line too long"
 }
+
+const (
+	overlongReasonPC92MaxBytes = "pc92_max_bytes"
+	overlongReasonMaxLine      = "max_line_length"
+)
 
 // Purpose: Construct a lineReader with the default telnet parser.
 // Key aspects: Uses conn.Read and a refuse-all telnet parser.
@@ -147,7 +154,12 @@ func (r *lineReader) tryReadLine() (string, error, bool) {
 			if r.pc92Max > 0 && idx > r.pc92Max && frameTypeFromBuffer(r.buf) == "PC92" {
 				preview := string(r.buf[:idx])
 				r.buf = append([]byte{}, r.buf[idx+size:]...)
-				return "", ErrLineTooLong{Preview: preview, Length: idx}, true
+				return "", ErrLineTooLong{
+					Preview: preview,
+					Length:  idx,
+					Reason:  overlongReasonPC92MaxBytes,
+					Limit:   r.pc92Max,
+				}, true
 			}
 			line := string(trimLine(r.buf[:idx]))
 			r.buf = append([]byte{}, r.buf[idx+size:]...)
@@ -163,13 +175,23 @@ func (r *lineReader) tryReadLine() (string, error, bool) {
 			preview := string(r.buf)
 			r.buf = r.buf[:0]
 			r.dropping = true
-			return "", ErrLineTooLong{Preview: preview, Length: len(preview)}, true
+			return "", ErrLineTooLong{
+				Preview: preview,
+				Length:  len(preview),
+				Reason:  overlongReasonPC92MaxBytes,
+				Limit:   r.pc92Max,
+			}, true
 		}
 		if len(r.buf) > r.maxLine && r.maxLine > 0 {
 			// Drop the current buffer to avoid unbounded growth; caller can choose to continue.
 			preview := string(r.buf)
 			r.buf = r.buf[:0]
-			return "", ErrLineTooLong{Preview: preview, Length: len(preview)}, true
+			return "", ErrLineTooLong{
+				Preview: preview,
+				Length:  len(preview),
+				Reason:  overlongReasonMaxLine,
+				Limit:   r.maxLine,
+			}, true
 		}
 		return "", nil, false
 	}

@@ -88,20 +88,9 @@ func ParseFrame(line string) (*Frame, error) {
 	}
 	f := &Frame{Raw: line}
 	f.Type = strutil.NormalizeUpper(parts[0])
-	if len(parts) > 1 {
-		f.Fields = parts[1:]
-	}
-	// Hop is always last non-empty token with H prefix when present.
-	for i := len(parts) - 1; i >= 0; i-- {
-		token := strings.TrimSpace(parts[i])
-		if strings.HasPrefix(token, "H") || strings.HasPrefix(token, "h") {
-			v, err := strconv.Atoi(strings.TrimPrefix(strings.TrimPrefix(token, "H"), "h"))
-			if err == nil {
-				f.Hop = v
-			}
-			break
-		}
-	}
+	payload, hop := stripTrailingHopSuffix(parts[1:])
+	f.Fields = payload
+	f.Hop = hop
 	return f, nil
 }
 
@@ -113,8 +102,9 @@ func (f *Frame) Encode(hop int) string {
 	if f == nil {
 		return ""
 	}
-	fields := make([]string, len(f.Fields))
-	copy(fields, f.Fields)
+	// Defensive canonicalization ensures we never emit stacked hop suffixes even
+	// when a caller passes legacy fields that still include trailing H tokens.
+	fields, _ := stripTrailingHopSuffix(f.Fields)
 	out := f.Type + "^" + strings.Join(fields, "^")
 	if hop > 0 {
 		if !strings.HasSuffix(out, "^") {
@@ -141,11 +131,67 @@ func PayloadFields(fields []string) []string {
 	if len(fields) == 0 {
 		return fields
 	}
+	out, _ := stripTrailingHopSuffix(fields)
+	return out
+}
+
+// stripTrailingHopSuffix removes a trailing hop suffix sequence (e.g., H95 or
+// H95,H94,H93) and returns the payload fields plus effective hop. The effective
+// hop is the rightmost numeric hop token in the trailing suffix.
+func stripTrailingHopSuffix(fields []string) ([]string, int) {
+	if len(fields) == 0 {
+		return fields, 0
+	}
 	out := make([]string, len(fields))
 	copy(out, fields)
-	last := strings.TrimSpace(out[len(out)-1])
-	if strings.HasPrefix(last, "H") || strings.HasPrefix(last, "h") {
-		out = out[:len(out)-1]
+
+	i := len(out) - 1
+	for i >= 0 && strings.TrimSpace(out[i]) == "" {
+		i--
 	}
-	return out
+	if i < 0 {
+		return out, 0
+	}
+
+	hop := 0
+	haveSuffix := false
+	for i >= 0 {
+		trimmed := strings.TrimSpace(out[i])
+		v, isHopLike, ok := parseHopToken(trimmed)
+		if !isHopLike {
+			break
+		}
+		haveSuffix = true
+		if ok && hop == 0 {
+			hop = v
+		}
+		i--
+		for i >= 0 && strings.TrimSpace(out[i]) == "" {
+			i--
+		}
+	}
+	if !haveSuffix {
+		return out, 0
+	}
+	return out[:i+1], hop
+}
+
+// parseHopToken classifies hop-like tokens (H...) and, when numeric, returns
+// their integer value.
+func parseHopToken(token string) (value int, isHopLike bool, ok bool) {
+	token = strings.TrimSpace(token)
+	if len(token) < 2 {
+		return 0, false, false
+	}
+	if token[0] != 'H' && token[0] != 'h' {
+		return 0, false, false
+	}
+	if token[1] < '0' || token[1] > '9' {
+		return 0, false, false
+	}
+	v, err := strconv.Atoi(token[1:])
+	if err != nil {
+		return 0, true, false
+	}
+	return v, true, true
 }

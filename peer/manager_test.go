@@ -124,3 +124,51 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleFramePC92DuplicateSuppressedBeforeTopologyEnqueue(t *testing.T) {
+	src := &session{
+		id:         "src",
+		remoteCall: "SRC",
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	dst := &session{
+		id:         "dst",
+		remoteCall: "DST",
+		pc9x:       true,
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 2),
+	}
+	m := &Manager{
+		topology: &topologyStore{},
+		dedupe:   newDedupeCache(time.Minute),
+		pc92Ch:   make(chan pc92Work, 4),
+		sessions: map[string]*session{"src": src, "dst": dst},
+	}
+
+	first, err := ParseFrame("PC92^NODE1^123^A^^9CALL:ver:build:1.2.3.4^H95^")
+	if err != nil {
+		t.Fatalf("ParseFrame(first): %v", err)
+	}
+	second, err := ParseFrame("PC92^NODE1^123^A^^9CALL:ver:build:1.2.3.4^H94^")
+	if err != nil {
+		t.Fatalf("ParseFrame(second): %v", err)
+	}
+
+	m.HandleFrame(first, src)
+	m.HandleFrame(second, src)
+
+	if got := len(m.pc92Ch); got != 1 {
+		t.Fatalf("expected 1 topology enqueue after duplicate suppression, got %d", got)
+	}
+	select {
+	case <-dst.writeCh:
+	default:
+		t.Fatal("expected first frame to forward to destination peer")
+	}
+	select {
+	case got := <-dst.writeCh:
+		t.Fatalf("expected duplicate frame to be suppressed, got relayed %q", got)
+	default:
+	}
+}
