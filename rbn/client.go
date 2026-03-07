@@ -701,7 +701,8 @@ func stripRBNSpeedCQComment(mode, comment string) string {
 // parseSpot converts a DX cluster-style telnet line into a canonical Spot.
 // Structural fields (DE/DX/freq/time) are parsed locally; comment parsing
 // (explicit mode/report/time token handling) is delegated to spot.ParseSpotComment
-// so RBN/human/peer inputs stay consistent. Mode inference happens downstream.
+// so RBN/human/peer inputs stay consistent. Only minimal-parse/human feeds may
+// continue without an explicit mode; RBN skimmer feeds require one at ingest.
 func (c *Client) parseSpot(line string) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -766,6 +767,9 @@ func (c *Client) parseSpot(line string) {
 	if !spot.IsValidNormalizedCallsign(dxCall) || !spot.IsValidNormalizedCallsign(deCall) {
 		return
 	}
+	if !c.minimalParse && strings.TrimSpace(mode) == "" {
+		return
+	}
 
 	comment := parsed.Comment
 	if !c.minimalParse {
@@ -786,6 +790,9 @@ func (c *Client) parseSpot(line string) {
 	}
 
 	s := spot.NewSpotNormalized(dxCall, deCall, freq, mode)
+	if mode != "" {
+		s.ModeProvenance = spot.ModeProvenanceCommentExplicit
+	}
 	if parsed.TimeToken != "" {
 		s.Time = parseTimeFromRBN(parsed.TimeToken)
 	}

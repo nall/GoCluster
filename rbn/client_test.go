@@ -27,10 +27,11 @@ func TestExtractCallAndFreqFromGluedToken(t *testing.T) {
 	}
 }
 
-func TestFinalizeModeDefaultsForVHFWhenUnknown(t *testing.T) {
-	mode := spot.FinalizeMode("", 144350.0)
-	if mode != "USB" {
-		t.Fatalf("expected USB fallback for VHF, got %q", mode)
+func TestRegionalClassifierLeavesVHFBlankWhenUnknown(t *testing.T) {
+	sp := spot.NewSpot("K1ABC", "W1AAA", 144350.0, "")
+	got := spot.ClassifyRegionalMode(sp)
+	if got.Mode != "" || got.Provenance != spot.ModeProvenanceRegionalUnknownBlank {
+		t.Fatalf("expected blank unknown-region VHF outcome, got (%q, %q)", got.Mode, got.Provenance)
 	}
 }
 

@@ -1,250 +1,250 @@
 [
   {
     "callsign": "AA0O",
-    "correction_factor": 1.000001266
+    "correction_factor": 1.000001341
   },
   {
     "callsign": "BI7JMD",
-    "correction_factor": 1.000013235
+    "correction_factor": 1.00001115
+  },
+  {
+    "callsign": "CN3A",
+    "correction_factor": 1.000012798
   },
   {
     "callsign": "CT1EYQ",
-    "correction_factor": 0.999998917
-  },
-  {
-    "callsign": "CX6VM",
-    "correction_factor": 1.000006067
+    "correction_factor": 0.999998553
   },
   {
     "callsign": "DK0KK",
-    "correction_factor": 0.999997306
+    "correction_factor": 0.999997071
   },
   {
     "callsign": "DK9IP",
-    "correction_factor": 0.999988939
+    "correction_factor": 0.999988807
   },
   {
     "callsign": "DL1HWS-3",
-    "correction_factor": 1.000001953
+    "correction_factor": 1.000001787
   },
   {
     "callsign": "DL3OBQ",
-    "correction_factor": 1.000013977
+    "correction_factor": 1.000003594
+  },
+  {
+    "callsign": "DL5RCN",
+    "correction_factor": 1.000013235
   },
   {
     "callsign": "DP5G",
-    "correction_factor": 1.000002399
+    "correction_factor": 1.000002343
   },
   {
     "callsign": "DR4W",
-    "correction_factor": 0.999997724
+    "correction_factor": 0.999998101
   },
   {
     "callsign": "E28AC",
-    "correction_factor": 0.99999745
+    "correction_factor": 0.999997169
   },
   {
-    "callsign": "EA1URA",
-    "correction_factor": 1.000002411
+    "callsign": "EA2CW",
+    "correction_factor": 0.999998783
   },
   {
     "callsign": "F1EYG",
-    "correction_factor": 0.999997319
-  },
-  {
-    "callsign": "F4BPO",
-    "correction_factor": 1.000000951
+    "correction_factor": 0.999997456
   },
   {
     "callsign": "F5VLY",
-    "correction_factor": 0.999997585
+    "correction_factor": 0.999997715
   },
   {
     "callsign": "F8DGY",
-    "correction_factor": 0.999994066
-  },
-  {
-    "callsign": "GM0UDL",
-    "correction_factor": 0.999994473
+    "correction_factor": 0.999994244
   },
   {
     "callsign": "HG0Y",
-    "correction_factor": 1.000007061
+    "correction_factor": 1.000007218
   },
   {
     "callsign": "IK3STG",
-    "correction_factor": 1.000004059
+    "correction_factor": 1.000004111
   },
   {
     "callsign": "IW9GDC",
-    "correction_factor": 0.999998825
-  },
-  {
-    "callsign": "JA1CCA",
-    "correction_factor": 1.000001646
+    "correction_factor": 0.999998482
   },
   {
     "callsign": "JH7CSU1",
-    "correction_factor": 1.000002096
+    "correction_factor": 1.000001772
   },
   {
     "callsign": "JI1HFJ",
-    "correction_factor": 0.999997946
+    "correction_factor": 0.999998714
   },
   {
     "callsign": "K5EM",
-    "correction_factor": 1.000003032
+    "correction_factor": 1.000002714
   },
   {
     "callsign": "K5TR",
-    "correction_factor": 1.000004903
+    "correction_factor": 1.000005487
+  },
+  {
+    "callsign": "K7EK",
+    "correction_factor": 1.000000989
+  },
+  {
+    "callsign": "K9QC",
+    "correction_factor": 1.000000981
+  },
+  {
+    "callsign": "KC4YVA",
+    "correction_factor": 1.000001158
+  },
+  {
+    "callsign": "KP3CW",
+    "correction_factor": 0.999999001
   },
   {
     "callsign": "KW7MM-2",
-    "correction_factor": 1.000001364
+    "correction_factor": 1.00000099
   },
   {
-    "callsign": "LB9KJ",
-    "correction_factor": 0.999998584
-  },
-  {
-    "callsign": "LU8XW",
-    "correction_factor": 1.000001355
+    "callsign": "KW7MM-3",
+    "correction_factor": 0.999998811
   },
   {
     "callsign": "LZ5DI",
-    "correction_factor": 1.000002207
+    "correction_factor": 1.000002634
   },
   {
     "callsign": "M1GEO",
-    "correction_factor": 1.000003952
+    "correction_factor": 1.000004395
   },
   {
     "callsign": "M9SJM",
-    "correction_factor": 1.000005867
+    "correction_factor": 1.000006178
   },
   {
-    "callsign": "N6TV",
-    "correction_factor": 1.000000978
+    "callsign": "N8DXE",
+    "correction_factor": 1.000001162
   },
   {
     "callsign": "NH6HI",
-    "correction_factor": 1.000001011
+    "correction_factor": 1.000001327
   },
   {
     "callsign": "OE3KLU",
-    "correction_factor": 1.000002365
+    "correction_factor": 1.000003325
   },
   {
     "callsign": "OH8KA",
-    "correction_factor": 0.999996065
+    "correction_factor": 1.00000797
   },
   {
     "callsign": "OK1HRA",
-    "correction_factor": 0.999996114
+    "correction_factor": 0.99999592
   },
   {
     "callsign": "OZ1AAB",
-    "correction_factor": 1.000001308
+    "correction_factor": 1.000001378
   },
   {
     "callsign": "PD2RPS",
-    "correction_factor": 1.000003651
+    "correction_factor": 1.000003852
   },
   {
     "callsign": "PY2KNK",
-    "correction_factor": 1.000004125
+    "correction_factor": 1.000005412
   },
   {
-    "callsign": "RL3A",
-    "correction_factor": 1.00000098
+    "callsign": "S53A",
+    "correction_factor": 0.999998565
   },
   {
     "callsign": "S53WW",
-    "correction_factor": 0.999998738
+    "correction_factor": 0.999998839
   },
   {
     "callsign": "S57C",
-    "correction_factor": 1.000002376
+    "correction_factor": 1.000004151
+  },
+  {
+    "callsign": "SM0TCZ",
+    "correction_factor": 1.000000972
   },
   {
     "callsign": "SQ5J",
-    "correction_factor": 1.000007372
+    "correction_factor": 1.000007242
   },
   {
     "callsign": "SZ1A",
-    "correction_factor": 1.000003444
+    "correction_factor": 0.999995778
   },
   {
     "callsign": "TF3Y",
-    "correction_factor": 1.000001852
+    "correction_factor": 1.000001712
   },
   {
     "callsign": "TI7W",
-    "correction_factor": 1.000001427
+    "correction_factor": 1.000001835
   },
   {
     "callsign": "UA4M",
-    "correction_factor": 1.000004558
+    "correction_factor": 1.000003722
   },
   {
     "callsign": "V51YJ",
-    "correction_factor": 1.00000246
+    "correction_factor": 1.000002128
   },
   {
     "callsign": "VE4DRK",
-    "correction_factor": 0.999993778
+    "correction_factor": 0.999993629
   },
   {
-    "callsign": "VE6WZ",
+    "callsign": "VE6JY",
     "correction_factor": 1.000001329
   },
   {
+    "callsign": "VE6WZ",
+    "correction_factor": 1.000001137
+  },
+  {
     "callsign": "VE7CC",
-    "correction_factor": 1.000001354
+    "correction_factor": 1.000001374
   },
   {
     "callsign": "VK2GEL",
-    "correction_factor": 1.00000113
-  },
-  {
-    "callsign": "VU2OY",
-    "correction_factor": 1.000021012
+    "correction_factor": 1.00000103
   },
   {
     "callsign": "VU2TUM",
-    "correction_factor": 1.000002116
-  },
-  {
-    "callsign": "W3DAN",
-    "correction_factor": 1.000001472
-  },
-  {
-    "callsign": "W4KAZ",
-    "correction_factor": 0.99999816
+    "correction_factor": 1.000002213
   },
   {
     "callsign": "W5ZN",
-    "correction_factor": 1.00000193
+    "correction_factor": 1.000002268
   },
   {
     "callsign": "W8WWV",
-    "correction_factor": 0.999998231
+    "correction_factor": 0.999998609
   },
   {
     "callsign": "WC8GOP",
-    "correction_factor": 0.999995602
+    "correction_factor": 0.999997262
   },
   {
     "callsign": "WS2C",
-    "correction_factor": 1.000007385
+    "correction_factor": 1.000007222
   },
   {
     "callsign": "ZL4YL",
-    "correction_factor": 1.000003502
+    "correction_factor": 1.000003403
   },
   {
     "callsign": "ZS1NN",
-    "correction_factor": 0.999995947
+    "correction_factor": 0.999995648
   }
 ]

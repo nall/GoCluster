@@ -672,6 +672,7 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	// In our model: DXCall = sender, DECall = receiver
 	s := spot.NewSpotNormalized(dxCall, deCall, freqKHz, norm.displayMode)
 	s.ModeNorm = norm.modeUpper
+	s.ModeProvenance = spot.ModeProvenanceSourceExplicit
 	s.IsHuman = false
 
 	// CRITICAL: Set the actual observation timestamp from PSKReporter

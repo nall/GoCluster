@@ -63,6 +63,9 @@ func parsePC11(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	parsed := spot.ParseSpotComment(comment, freq)
 	// PC11 timestamps are authoritative; ignore any comment time tokens.
 	s := spot.NewSpotNormalized(dx, spotter, freq, parsed.Mode)
+	if parsed.Mode != "" {
+		s.ModeProvenance = spot.ModeProvenanceCommentExplicit
+	}
 	s.Time = ts
 	s.Comment = parsed.Comment
 	s.SourceType = spot.SourcePeer
@@ -111,6 +114,9 @@ func parsePC61(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	parsed := spot.ParseSpotComment(comment, freq)
 	// PC61 timestamps are authoritative; ignore any comment time tokens.
 	s := spot.NewSpotNormalized(dx, spotter, freq, parsed.Mode)
+	if parsed.Mode != "" {
+		s.ModeProvenance = spot.ModeProvenanceCommentExplicit
+	}
 	s.Time = ts
 	s.Comment = parsed.Comment
 	s.SourceType = spot.SourcePeer

@@ -16,7 +16,7 @@ import (
 //  1. Explicit mode (already set on the spot)
 //  2. Recent DXcall+frequency cache (integer kHz)
 //  3. Digital frequency map (explicit skimmer/PSKReporter evidence + seeds)
-//  4. Allocation-based fallback (FinalizeMode)
+//  4. Region-aware final classifier (CW-safe / voice-default / blank)
 //
 // All caches are bounded and TTL-limited to keep memory stable under load.
 type ModeInferenceSettings struct {
@@ -40,46 +40,50 @@ type ModeSeed struct {
 // It is designed for single-goroutine use in the output pipeline and is not
 // concurrency-safe without external synchronization.
 type ModeAssigner struct {
-	now      func() time.Time
-	fallback func(freqKHz float64) string
-	dxCache  *dxFreqCache
-	digital  *digitalFreqMap
+	now           func() time.Time
+	classifyFinal func(*Spot) RegionalModeResult
+	dxCache       *dxFreqCache
+	digital       *digitalFreqMap
 	// Stats are updated from the output pipeline goroutine and read from stats/UI goroutines.
 	dxLookups         atomic.Uint64
 	dxHits            atomic.Uint64
 	explicitAssigned  atomic.Uint64
 	inferredAssigned  atomic.Uint64
-	fallbackAssigned  atomic.Uint64
+	regionalCW        atomic.Uint64
+	regionalVoice     atomic.Uint64
+	regionalMixed     atomic.Uint64
+	regionalUnknown   atomic.Uint64
 	digitalBucketsMax uint64
 }
 
 // ModeInferenceStats captures hot-path mode inference cache health.
 type ModeInferenceStats struct {
-	DXLookups      uint64
-	DXHits         uint64
-	DigitalBuckets uint64
-	DigitalMax     uint64
-	Explicit       uint64
-	Inferred       uint64
-	Fallback       uint64
+	DXLookups       uint64
+	DXHits          uint64
+	DigitalBuckets  uint64
+	DigitalMax      uint64
+	Explicit        uint64
+	Inferred        uint64
+	RegionalCW      uint64
+	RegionalVoice   uint64
+	RegionalMixed   uint64
+	RegionalUnknown uint64
 }
 
 // NewModeAssigner constructs a ModeAssigner with defaults applied.
-// Key aspects: Wires cache sizes/TTLs and fallback allocation logic.
+// Key aspects: Wires cache sizes/TTLs and the region-aware final classifier.
 // Upstream: main startup wiring.
 // Downstream: newModeAssigner.
 // NewModeAssigner builds a mode assigner using the provided settings.
 func NewModeAssigner(settings ModeInferenceSettings) *ModeAssigner {
-	return newModeAssigner(settings, time.Now, func(freq float64) string {
-		return FinalizeMode("", freq)
-	})
+	return newModeAssigner(settings, time.Now, ClassifyRegionalMode)
 }
 
-// Purpose: Internal constructor with injected time and fallback functions.
+// Purpose: Internal constructor with injected time and final-classifier functions.
 // Key aspects: Normalizes settings and seeds the digital frequency map.
 // Upstream: NewModeAssigner and tests.
 // Downstream: newDXFreqCache, newDigitalFreqMap, seedDigitalMap.
-func newModeAssigner(settings ModeInferenceSettings, now func() time.Time, fallback func(freqKHz float64) string) *ModeAssigner {
+func newModeAssigner(settings ModeInferenceSettings, now func() time.Time, classifyFinal func(*Spot) RegionalModeResult) *ModeAssigner {
 	if settings.DXFreqCacheTTL <= 0 {
 		settings.DXFreqCacheTTL = 5 * time.Minute
 	}
@@ -100,7 +104,7 @@ func newModeAssigner(settings ModeInferenceSettings, now func() time.Time, fallb
 	}
 	assigner := &ModeAssigner{
 		now:               now,
-		fallback:          fallback,
+		classifyFinal:     classifyFinal,
 		dxCache:           newDXFreqCache(settings.DXFreqCacheSize, settings.DXFreqCacheTTL),
 		digital:           newDigitalFreqMap(settings.DigitalCacheSize, settings.DigitalWindow, settings.DigitalMinCorroborate, settings.DigitalSeedTTL),
 		digitalBucketsMax: uint64(settings.DigitalCacheSize),
@@ -113,9 +117,9 @@ func newModeAssigner(settings ModeInferenceSettings, now func() time.Time, fallb
 // the mode was explicitly present in the comment/source before inference so
 // we can avoid feeding inferred data back into the digital map.
 // Purpose: Assign a mode to a spot using the inference pipeline.
-// Key aspects: Checks explicit mode, DX+freq cache, digital map, then fallback.
+// Key aspects: Checks explicit mode, DX+freq cache, digital map, then region-aware final policy.
 // Upstream: processOutputSpots.
-// Downstream: dxCache, digital map, and fallback.
+// Downstream: dxCache, digital map, and region classifier.
 func (a *ModeAssigner) Assign(s *Spot, explicitMode bool) string {
 	if a == nil || s == nil {
 		return ""
@@ -127,6 +131,11 @@ func (a *ModeAssigner) Assign(s *Spot, explicitMode bool) string {
 		mode := NormalizeVoiceMode(s.Mode, s.Frequency)
 		mode = strutil.NormalizeUpper(mode)
 		s.Mode = mode
+		switch s.ModeProvenance {
+		case ModeProvenanceSourceExplicit, ModeProvenanceCommentExplicit:
+		default:
+			s.ModeProvenance = ModeProvenanceSourceExplicit
+		}
 		if mode != "" {
 			a.explicitAssigned.Add(1)
 		}
@@ -137,7 +146,9 @@ func (a *ModeAssigner) Assign(s *Spot, explicitMode bool) string {
 			}
 			a.digital.Observe(freqKeyFromSpot(s), mode, spotter, now)
 		}
-		a.dxCache.Set(dxKeyFromSpot(s), mode, now)
+		if s.ModeProvenance.IsReusableEvidence() {
+			a.dxCache.Set(dxKeyFromSpot(s), mode, now)
+		}
 		return mode
 	}
 
@@ -145,6 +156,7 @@ func (a *ModeAssigner) Assign(s *Spot, explicitMode bool) string {
 	a.dxLookups.Add(1)
 	if cached, ok := a.dxCache.Get(key, now); ok {
 		s.Mode = cached
+		s.ModeProvenance = ModeProvenanceRecentEvidence
 		a.dxHits.Add(1)
 		a.inferredAssigned.Add(1)
 		a.dxCache.Set(key, cached, now)
@@ -153,20 +165,28 @@ func (a *ModeAssigner) Assign(s *Spot, explicitMode bool) string {
 
 	if inferred := a.digital.Infer(freqKeyFromSpot(s), now); inferred != "" {
 		s.Mode = inferred
+		s.ModeProvenance = ModeProvenanceDigitalFrequency
 		a.inferredAssigned.Add(1)
 		a.dxCache.Set(key, inferred, now)
 		return inferred
 	}
 
-	mode := ""
-	if a.fallback != nil {
-		mode = a.fallback(s.Frequency)
+	result := RegionalModeResult{}
+	if a.classifyFinal != nil {
+		result = a.classifyFinal(s)
 	}
-	mode = strutil.NormalizeUpper(mode)
-	if mode != "" {
-		s.Mode = mode
-		a.fallbackAssigned.Add(1)
-		a.dxCache.Set(key, mode, now)
+	mode := strutil.NormalizeUpper(result.Mode)
+	s.Mode = mode
+	s.ModeProvenance = result.Provenance
+	switch result.Provenance {
+	case ModeProvenanceRegionalCW:
+		a.regionalCW.Add(1)
+	case ModeProvenanceRegionalVoiceDefault:
+		a.regionalVoice.Add(1)
+	case ModeProvenanceRegionalMixedBlank:
+		a.regionalMixed.Add(1)
+	case ModeProvenanceRegionalUnknownBlank, ModeProvenanceUnknown:
+		a.regionalUnknown.Add(1)
 	}
 	return mode
 }
@@ -177,12 +197,15 @@ func (a *ModeAssigner) Stats() ModeInferenceStats {
 		return ModeInferenceStats{}
 	}
 	stats := ModeInferenceStats{
-		DXLookups:  a.dxLookups.Load(),
-		DXHits:     a.dxHits.Load(),
-		DigitalMax: a.digitalBucketsMax,
-		Explicit:   a.explicitAssigned.Load(),
-		Inferred:   a.inferredAssigned.Load(),
-		Fallback:   a.fallbackAssigned.Load(),
+		DXLookups:       a.dxLookups.Load(),
+		DXHits:          a.dxHits.Load(),
+		DigitalMax:      a.digitalBucketsMax,
+		Explicit:        a.explicitAssigned.Load(),
+		Inferred:        a.inferredAssigned.Load(),
+		RegionalCW:      a.regionalCW.Load(),
+		RegionalVoice:   a.regionalVoice.Load(),
+		RegionalMixed:   a.regionalMixed.Load(),
+		RegionalUnknown: a.regionalUnknown.Load(),
 	}
 	if a.digital != nil {
 		stats.DigitalBuckets = a.digital.BucketCount()

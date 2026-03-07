@@ -148,6 +148,18 @@ func TestPassCommands(t *testing.T) {
 			},
 		},
 		{
+			name: "pass mode unknown",
+			cmd:  "PASS MODE UNKNOWN",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.Modes[filter.UnknownModeToken] {
+					t.Fatalf("expected UNKNOWN mode token to be enabled")
+				}
+				if f.AllModes {
+					t.Fatalf("AllModes should be false when a specific mode is set")
+				}
+			},
+		},
+		{
 			name: "pass source human",
 			cmd:  "PASS SOURCE HUMAN",
 			check: func(t *testing.T, f *filter.Filter) {
@@ -400,6 +412,15 @@ func TestRejectCommands(t *testing.T) {
 			check: func(t *testing.T, f *filter.Filter) {
 				if !f.BlockModes["FT8"] {
 					t.Fatalf("expected FT8 mode to be blocked")
+				}
+			},
+		},
+		{
+			name: "reject mode unknown",
+			cmd:  "REJECT MODE UNKNOWN",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.BlockModes[filter.UnknownModeToken] {
+					t.Fatalf("expected UNKNOWN mode token to be blocked")
 				}
 			},
 		},

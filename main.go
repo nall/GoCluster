@@ -2504,12 +2504,15 @@ func processOutputSpots(
 			}
 			s.EnsureNormalized()
 			spot.ApplySourceHumanFlag(s)
+			ctyDB := ctyLookup()
 			explicitMode := strings.TrimSpace(s.Mode) != ""
+			if !explicitMode && ctyDB != nil {
+				hydrateDXMetadataForModeInference(s, ctyDB, metaCache)
+			}
 			if modeAssigner != nil {
 				modeAssigner.Assign(s, explicitMode)
 			}
 			s.EnsureNormalized()
-			ctyDB := ctyLookup()
 			dirty := false
 			modeUpper := s.ModeNorm
 			if refresher != nil {
@@ -2779,7 +2782,7 @@ func processOutputSpots(
 			if tracker != nil {
 				modeKey := modeUpper
 				if modeKey == "" {
-					modeKey = string(s.SourceType)
+					modeKey = filter.UnknownModeToken
 				}
 				tracker.IncrementMode(modeKey)
 
@@ -3751,12 +3754,46 @@ func metadataFromPrefix(info *cty.PrefixInfo) spot.CallMetadata {
 		return spot.CallMetadata{}
 	}
 	return spot.CallMetadata{
-		Continent: info.Continent,
-		Country:   info.Country,
-		CQZone:    info.CQZone,
-		ITUZone:   info.ITUZone,
-		ADIF:      info.ADIF,
+		Continent:  info.Continent,
+		Country:    info.Country,
+		CQZone:     info.CQZone,
+		IARURegion: spot.ResolveIARURegion(info.ADIF, info.Continent),
+		ITUZone:    info.ITUZone,
+		ADIF:       info.ADIF,
 	}
+}
+
+func mergeMetadataPreserveGrid(current spot.CallMetadata, info *cty.PrefixInfo) spot.CallMetadata {
+	next := metadataFromPrefix(info)
+	if grid := strings.TrimSpace(current.Grid); grid != "" {
+		next.Grid = grid
+		next.GridDerived = current.GridDerived
+	}
+	return next
+}
+
+func hydrateDXMetadataForModeInference(s *spot.Spot, ctyDB *cty.CTYDatabase, metaCache *callMetaCache) {
+	if s == nil || ctyDB == nil {
+		return
+	}
+	if s.DXMetadata.ADIF > 0 && s.DXMetadata.IARURegion != spot.IARURegionUnknown {
+		return
+	}
+	call := s.DXCallNorm
+	if call == "" {
+		call = s.DXCall
+	}
+	call = normalizeCallForMetadata(call)
+	if call == "" {
+		return
+	}
+	info := effectivePrefixInfo(ctyDB, metaCache, call)
+	if info == nil {
+		return
+	}
+	s.DXMetadata = mergeMetadataPreserveGrid(s.DXMetadata, info)
+	s.InvalidateMetadataCache()
+	s.EnsureNormalized()
 }
 
 const (
@@ -5962,17 +5999,20 @@ func formatPercentString(pct float64) string {
 
 func formatModeCacheLine(assigner *spot.ModeAssigner) string {
 	if assigner == nil {
-		return "[yellow]Mode cache[-]: [yellow]DX hit[-] n/a | [yellow]Digital[-] n/a | [yellow]Mix[-] E0 I0 F0"
+		return "[yellow]Mode cache[-]: [yellow]DX hit[-] n/a | [yellow]Digital[-] n/a | [yellow]Mix[-] E0 I0 RC0 RV0 RM0 RU0"
 	}
 	stats := assigner.Stats()
 	dxHitPct := percentValue(stats.DXHits, stats.DXLookups)
-	return fmt.Sprintf("[yellow]Mode cache[-]: [yellow]DX hit[-] %s | [yellow]Digital[-] %s/%s | [yellow]Mix[-] E%s I%s F%s",
+	return fmt.Sprintf("[yellow]Mode cache[-]: [yellow]DX hit[-] %s | [yellow]Digital[-] %s/%s | [yellow]Mix[-] E%s I%s RC%s RV%s RM%s RU%s",
 		formatPercentString(dxHitPct),
 		humanize.Comma(int64(stats.DigitalBuckets)),
 		humanize.Comma(int64(stats.DigitalMax)),
 		humanize.Comma(int64(stats.Explicit)),
 		humanize.Comma(int64(stats.Inferred)),
-		humanize.Comma(int64(stats.Fallback)),
+		humanize.Comma(int64(stats.RegionalCW)),
+		humanize.Comma(int64(stats.RegionalVoice)),
+		humanize.Comma(int64(stats.RegionalMixed)),
+		humanize.Comma(int64(stats.RegionalUnknown)),
 	)
 }
 

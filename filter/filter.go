@@ -32,6 +32,8 @@ import (
 
 // SupportedModes lists the commonly used modes that users can enable/disable
 // via the PASS MODE command. Exported so UI/commands can display them.
+const UnknownModeToken = "UNKNOWN"
+
 var SupportedModes = []string{
 	"CW",
 	"FT4",
@@ -43,6 +45,7 @@ var SupportedModes = []string{
 	"MSK144",
 	"PSK",
 	"SSTV",
+	UnknownModeToken,
 }
 
 // Purpose: Return a pointer to the provided bool.
@@ -63,6 +66,20 @@ func canonicalModeToken(mode string) string {
 	return mode
 }
 
+func modeFilterTokenForSpot(s *spot.Spot) string {
+	if s == nil {
+		return UnknownModeToken
+	}
+	modeUpper := s.ModeNorm
+	if modeUpper == "" {
+		modeUpper = canonicalModeToken(s.Mode)
+	}
+	if modeUpper == "" {
+		return UnknownModeToken
+	}
+	return modeUpper
+}
+
 // SupportedSources enumerates how telnet users can filter on Spot.IsHuman.
 //
 // HUMAN means the spot was marked as coming from a human operator (Spot.IsHuman=true).
@@ -77,9 +94,13 @@ const (
 	maxCQZone = 40
 )
 
+func builtInDefaultModeSelection() []string {
+	return []string{"CW", "LSB", "USB", UnknownModeToken, "RTTY"}
+}
+
 // defaultModeSelection controls which modes are enabled when a new filter is created.
-// The initial values match the curated CW/USB/LSB/RTTY set, but can be overridden.
-var defaultModeSelection = []string{"CW", "LSB", "USB", "RTTY"}
+// The initial values match the curated CW/USB/LSB/UNKNOWN/RTTY set, but can be overridden.
+var defaultModeSelection = builtInDefaultModeSelection()
 
 // defaultSourceSelection controls which Spot.IsHuman categories a brand-new
 // filter allows by default.
@@ -234,7 +255,7 @@ func MaxCQZone() int {
 // Downstream: defaultModeSelection.
 func SetDefaultModeSelection(modes []string) {
 	if len(modes) == 0 {
-		defaultModeSelection = []string{"CW", "LSB", "USB", "RTTY"}
+		defaultModeSelection = builtInDefaultModeSelection()
 		return
 	}
 	normalized := make([]string, 0, len(modes))
@@ -246,7 +267,7 @@ func SetDefaultModeSelection(modes []string) {
 		normalized = append(normalized, candidate)
 	}
 	if len(normalized) == 0 {
-		defaultModeSelection = []string{"CW", "LSB", "USB", "RTTY"}
+		defaultModeSelection = builtInDefaultModeSelection()
 		return
 	}
 	defaultModeSelection = normalized
@@ -599,6 +620,9 @@ func (f *Filter) SetBand(band string, enabled bool) {
 // Downstream: None.
 func (f *Filter) SetMode(mode string, enabled bool) {
 	mode = canonicalModeToken(mode)
+	if mode == "" || !IsSupportedMode(mode) {
+		return
+	}
 	applyAllowBlockToggle(&f.Modes, &f.BlockModes, mode, enabled, &f.AllModes, &f.BlockAllModes)
 }
 
@@ -1332,10 +1356,7 @@ func (f *Filter) matchesWithPath(s *spot.Spot, pathClass string) bool {
 		return false
 	}
 
-	modeUpper := s.ModeNorm
-	if modeUpper == "" {
-		modeUpper = strutil.NormalizeUpper(s.Mode)
-	}
+	modeUpper := modeFilterTokenForSpot(s)
 
 	bandNorm := spot.NormalizeBand(s.BandNorm)
 	if bandNorm == "" {
@@ -2170,10 +2191,31 @@ func (f *Filter) migratePSKModes() {
 	f.AllModes = len(f.Modes) == 0
 }
 
+// migrateLegacyUnknownMode adds UNKNOWN to legacy explicit mode allowlists so
+// saved users continue to see blank-mode spots after the final regional
+// classifier starts emitting them. Users who explicitly block UNKNOWN keep that
+// block, and permissive AllModes filters are left unchanged.
+func (f *Filter) migrateLegacyUnknownMode() {
+	if f == nil {
+		return
+	}
+	if f.AllModes {
+		return
+	}
+	if len(f.Modes) == 0 {
+		return
+	}
+	if f.BlockModes[UnknownModeToken] {
+		return
+	}
+	f.Modes[UnknownModeToken] = true
+}
+
 // Purpose: Repair zero-value filters loaded from disk.
-// Key aspects: Ensures maps/pointers exist and default flags are permissive.
+// Key aspects: Ensures maps/pointers exist, migrates legacy filter state, and
+// restores permissive defaults where the saved record left fields empty.
 // Upstream: LoadUserRecord or YAML decoding flow.
-// Downstream: migrateLegacyConfidence, boolPtr.
+// Downstream: migrateLegacyConfidence, migratePSKModes, migrateLegacyUnknownMode, boolPtr.
 func (f *Filter) normalizeDefaults() {
 	if f == nil {
 		return
@@ -2221,6 +2263,7 @@ func (f *Filter) normalizeDefaults() {
 		f.BlockPathClasses = make(map[string]bool)
 	}
 	f.migratePSKModes()
+	f.migrateLegacyUnknownMode()
 	if f.DXContinents == nil {
 		f.DXContinents = make(map[string]bool)
 	}

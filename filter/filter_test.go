@@ -610,6 +610,45 @@ func TestPSKVariantsMatchCanonicalModeFilter(t *testing.T) {
 	}
 }
 
+func TestDefaultFilterIncludesUnknownModeSpots(t *testing.T) {
+	f := NewFilter()
+	blank := &spot.Spot{Band: "20m"}
+	blank.EnsureNormalized()
+	if !f.Matches(blank) {
+		t.Fatalf("expected blank-mode spot to pass default filter because UNKNOWN is enabled by default")
+	}
+}
+
+func TestExplicitModeAllowlistExcludesUnknown(t *testing.T) {
+	f := NewFilter()
+	f.ResetModes()
+	f.SetMode("CW", true)
+
+	blank := &spot.Spot{Band: "20m"}
+	blank.EnsureNormalized()
+	if f.Matches(blank) {
+		t.Fatalf("expected blank-mode spot to fail CW-only mode filter")
+	}
+}
+
+func TestRejectUnknownModeSuppressesBlankSpots(t *testing.T) {
+	f := NewFilter()
+	f.ResetModes()
+	f.SetMode(UnknownModeToken, false)
+
+	blank := &spot.Spot{Band: "20m"}
+	blank.EnsureNormalized()
+	if f.Matches(blank) {
+		t.Fatalf("expected REJECT MODE UNKNOWN semantics to suppress blank-mode spots")
+	}
+
+	cw := &spot.Spot{Mode: "CW", Band: "20m"}
+	cw.EnsureNormalized()
+	if !f.Matches(cw) {
+		t.Fatalf("expected explicit CW spot to pass when only UNKNOWN is blocked")
+	}
+}
+
 func TestPathFilterWhitelist(t *testing.T) {
 	f := NewFilter()
 	f.SetPathClass(PathClassHigh, true)

@@ -84,6 +84,7 @@ filter:
     - CW
     - LSB
     - USB
+    - UNKNOWN
     - RTTY
     - MSK144
     - PSK31

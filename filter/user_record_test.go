@@ -199,6 +199,102 @@ func TestLoadUserRecordLegacyFilter(t *testing.T) {
 	}
 }
 
+func TestLoadUserRecordMigratesLegacyExplicitModesToIncludeUnknown(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	raw := []byte("modes:\n  CW: true\n  USB: true\nblockmodes: {}\nallmodes: false\n")
+	path := filepath.Join(UserDataDir, "LEGACY_UNKNOWN.yaml")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write legacy filter failed: %v", err)
+	}
+
+	record, err := LoadUserRecord("LEGACY_UNKNOWN")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if !record.Modes["CW"] || !record.Modes["USB"] {
+		t.Fatalf("expected existing explicit modes to remain enabled: %+v", record.Modes)
+	}
+	if !record.Modes[UnknownModeToken] {
+		t.Fatalf("expected UNKNOWN to be added to legacy explicit allowlist")
+	}
+}
+
+func TestLoadUserRecordKeepsExistingUnknownModeEntry(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	raw := []byte("modes:\n  CW: true\n  UNKNOWN: true\nblockmodes: {}\nallmodes: false\n")
+	path := filepath.Join(UserDataDir, "LEGACY_HAS_UNKNOWN.yaml")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write legacy filter failed: %v", err)
+	}
+
+	record, err := LoadUserRecord("LEGACY_HAS_UNKNOWN")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if !record.Modes[UnknownModeToken] {
+		t.Fatalf("expected UNKNOWN to remain enabled")
+	}
+	if got := len(record.Modes); got != 2 {
+		t.Fatalf("expected no extra mode mutations, got %d entries: %+v", got, record.Modes)
+	}
+}
+
+func TestLoadUserRecordPreservesExplicitUnknownBlock(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	raw := []byte("modes:\n  CW: true\nblockmodes:\n  UNKNOWN: true\nallmodes: false\n")
+	path := filepath.Join(UserDataDir, "LEGACY_BLOCK_UNKNOWN.yaml")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write legacy filter failed: %v", err)
+	}
+
+	record, err := LoadUserRecord("LEGACY_BLOCK_UNKNOWN")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if record.Modes[UnknownModeToken] {
+		t.Fatalf("expected UNKNOWN not to be auto-added when explicitly blocked")
+	}
+	if !record.BlockModes[UnknownModeToken] {
+		t.Fatalf("expected explicit UNKNOWN block to remain")
+	}
+}
+
+func TestLoadUserRecordLeavesAllModesRecordsPermissive(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	raw := []byte("modes: {}\nblockmodes: {}\nallmodes: true\n")
+	path := filepath.Join(UserDataDir, "LEGACY_ALL_MODES.yaml")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write legacy filter failed: %v", err)
+	}
+
+	record, err := LoadUserRecord("LEGACY_ALL_MODES")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if !record.AllModes {
+		t.Fatalf("expected all-modes record to remain permissive")
+	}
+	if len(record.Modes) != 0 {
+		t.Fatalf("expected all-modes record not to gain explicit UNKNOWN entry: %+v", record.Modes)
+	}
+}
+
 func TestSaveUserFilterPreservesRecentIPs(t *testing.T) {
 	tmp := t.TempDir()
 	orig := UserDataDir

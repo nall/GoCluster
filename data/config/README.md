@@ -11,7 +11,8 @@ Configuration is split by concern so you only edit the relevant file:
 - `runtime.yaml` - telnet server settings, buffer capacity, and filter defaults.
 - `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.
 - `peering.yaml` - DXSpider peer configuration (inbound/outbound, ACLs, topology cache).
-- `mode_allocations.yaml` - fallback mode inference by band for RBN/human ingest.
+- `iaru_regions.yaml` - DXCC/ADIF to IARU region mapping used by final regional mode policy.
+- `iaru_mode_inference.yaml` - region-aware frequency classification table for final mode labeling.
 
 Loader behavior:
 - The server defaults to this directory (`data/config`). Override with `DXC_CONFIG_PATH` to point at another directory.

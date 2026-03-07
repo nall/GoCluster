@@ -259,3 +259,39 @@ func TestACParserDropsMissingSNRForRBN(t *testing.T) {
 	default:
 	}
 }
+
+func TestACParserDropsModeLessRBNSpotEvenWithReport(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	line := "DX de K1ABC: 1843.0 OZ4ADX +5 dB CQ 0318Z"
+	c.parseSpot(line)
+
+	select {
+	case s := <-c.spotChan:
+		t.Fatalf("expected mode-less RBN spot to be dropped, got %+v", s)
+	default:
+	}
+}
+
+func TestACParserMinimalParseAllowsModeLessSpotWithReport(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.UseMinimalParser()
+	line := "DX de K1ABC: 1843.0 OZ4ADX +5 dB CQ 0318Z"
+	c.parseSpot(line)
+
+	var s *spot.Spot
+	select {
+	case s = <-c.spotChan:
+	default:
+		t.Fatalf("expected a parsed spot")
+	}
+
+	if s.Mode != "" {
+		t.Fatalf("expected empty mode for minimal parser, got %q", s.Mode)
+	}
+	if s.ModeProvenance != spot.ModeProvenanceUnknown {
+		t.Fatalf("expected unknown mode provenance, got %q", s.ModeProvenance)
+	}
+	if !s.HasReport || s.Report != 5 {
+		t.Fatalf("expected report +5 dB, got HasReport=%v Report=%d", s.HasReport, s.Report)
+	}
+}

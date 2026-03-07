@@ -1148,6 +1148,9 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 	}
 	parsed := spot.ParseSpotComment(comment, freq)
 	s := spot.NewSpotNormalized(dx, spotterNorm, freq, parsed.Mode)
+	if parsed.Mode != "" {
+		s.ModeProvenance = spot.ModeProvenanceCommentExplicit
+	}
 	s.Comment = parsed.Comment
 	s.Report = parsed.Report
 	s.HasReport = parsed.HasReport
