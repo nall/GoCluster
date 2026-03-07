@@ -168,15 +168,19 @@ func (m *Manager) Stop() {
 	}
 }
 
-func (m *Manager) PublishDX(s *spot.Spot) {
-	if m == nil || s == nil {
-		return
+// PublishDX publishes a locally produced spot to peers when the shared
+// forwarding policy allows it. Receive-only mode still permits DX command
+// spots while suppressing transit relay.
+func (m *Manager) PublishDX(s *spot.Spot) bool {
+	if m == nil || s == nil || !m.ShouldPublishLocalSpot(s) {
+		return false
 	}
 	hop := m.cfg.HopCount
 	if hop <= 0 {
 		hop = defaultHopCount
 	}
 	m.broadcastSpot(s, hop, m.localCall, nil)
+	return true
 }
 
 func (m *Manager) PublishWWV(ev WWVEvent) {
@@ -233,7 +237,7 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 			return
 		}
 		m.ingestSpot(spotEntry)
-		if frame.Hop > 1 {
+		if frame.Hop > 1 && m.shouldRelayDataFrame(frame.Type) {
 			key := dxKey(frame, spotEntry)
 			if m.dedupe.markSeen(key, now) {
 				if frame.Type == "PC26" {

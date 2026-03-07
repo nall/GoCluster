@@ -154,35 +154,6 @@ func TestShouldArchiveSpotSkipsTestSpotter(t *testing.T) {
 	}
 }
 
-func TestShouldPublishToPeersSourcePolicy(t *testing.T) {
-	tests := []struct {
-		name string
-		src  spot.SourceType
-		test bool
-		want bool
-	}{
-		{name: "manual allowed", src: spot.SourceManual, want: true},
-		{name: "manual test spotter blocked", src: spot.SourceManual, test: true, want: false},
-		{name: "upstream blocked", src: spot.SourceUpstream, want: false},
-		{name: "peer blocked", src: spot.SourcePeer, want: false},
-		{name: "rbn blocked", src: spot.SourceRBN, want: false},
-		{name: "ft8 blocked", src: spot.SourceFT8, want: false},
-		{name: "ft4 blocked", src: spot.SourceFT4, want: false},
-		{name: "pskreporter blocked", src: spot.SourcePSKReporter, want: false},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
-			s.SourceType = tc.src
-			s.IsTestSpotter = tc.test
-			if got := shouldPublishToPeers(s); got != tc.want {
-				t.Fatalf("shouldPublishToPeers(%s,test=%v)=%v want %v", tc.src, tc.test, got, tc.want)
-			}
-		})
-	}
-}
-
 // Purpose: Verify gridDBCheckOnMissEnabled defaults to true.
 // Key aspects: Clears env override before test.
 // Upstream: go test execution.

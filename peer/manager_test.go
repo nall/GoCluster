@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"dxcluster/config"
+	"dxcluster/spot"
 )
 
 // Ensure PC92 enqueue is non-blocking and drops when the queue is full.
@@ -93,6 +96,7 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 				writeCh:    make(chan string, 1),
 			}
 			m := &Manager{
+				cfg:      config.PeeringConfig{ForwardSpots: true},
 				dedupe:   newDedupeCache(time.Minute),
 				sessions: map[string]*session{"src": src, "dst": dst},
 			}
@@ -170,5 +174,101 @@ func TestHandleFramePC92DuplicateSuppressedBeforeTopologyEnqueue(t *testing.T) {
 	case got := <-dst.writeCh:
 		t.Fatalf("expected duplicate frame to be suppressed, got relayed %q", got)
 	default:
+	}
+}
+
+func TestPublishDXReceiveOnlyStillPublishesManualSpot(t *testing.T) {
+	dst := &session{
+		id:         "dst",
+		remoteCall: "DST",
+		pc9x:       true,
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	m := &Manager{
+		cfg:       config.PeeringConfig{ForwardSpots: false, HopCount: 3},
+		localCall: "LOCAL",
+		sessions:  map[string]*session{"dst": dst},
+	}
+
+	sp := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	if !m.PublishDX(sp) {
+		t.Fatal("expected manual DX spot to publish in receive-only mode")
+	}
+
+	select {
+	case got := <-dst.writeCh:
+		if !strings.HasPrefix(got, "PC61^") {
+			t.Fatalf("expected PC61 publish to pc9x peer, got %q", got)
+		}
+		if !strings.Contains(got, "^H3^") {
+			t.Fatalf("expected configured hop token in publish, got %q", got)
+		}
+	default:
+		t.Fatal("expected DX publish to destination peer")
+	}
+}
+
+func TestHandleFrameSpotRelaySuppressedWhenForwardSpotsDisabled(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{
+			name: "pc11 ingest only",
+			line: "PC11^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^H3^",
+		},
+		{
+			name: "pc26 ingest only",
+			line: "PC26^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^ ^H3^",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			src := &session{
+				id:         "src",
+				remoteCall: "SRC",
+				ctx:        context.Background(),
+				writeCh:    make(chan string, 1),
+			}
+			dst := &session{
+				id:         "dst",
+				remoteCall: "DST",
+				pc9x:       true,
+				ctx:        context.Background(),
+				writeCh:    make(chan string, 1),
+			}
+			ingest := make(chan *spot.Spot, 1)
+			m := &Manager{
+				cfg:      config.PeeringConfig{ForwardSpots: false},
+				dedupe:   newDedupeCache(time.Minute),
+				ingest:   ingest,
+				sessions: map[string]*session{"src": src, "dst": dst},
+			}
+
+			frame, err := ParseFrame(tc.line)
+			if err != nil {
+				t.Fatalf("ParseFrame: %v", err)
+			}
+
+			m.HandleFrame(frame, src)
+
+			select {
+			case got := <-ingest:
+				if got == nil {
+					t.Fatal("expected ingested spot, got nil")
+				}
+			default:
+				t.Fatal("expected inbound spot to be ingested locally")
+			}
+
+			select {
+			case got := <-dst.writeCh:
+				t.Fatalf("expected relay suppression, got %q", got)
+			default:
+			}
+		})
 	}
 }

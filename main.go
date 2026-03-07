@@ -989,7 +989,7 @@ func main() {
 			return
 		}
 		peerManager = pm
-		log.Printf("Peering: listen_port=%d peers=%d hop=%d keepalive=%ds", cfg.Peering.ListenPort, len(cfg.Peering.Peers), cfg.Peering.HopCount, cfg.Peering.KeepaliveSeconds)
+		log.Printf("Peering: listen_port=%d peers=%d hop=%d keepalive=%ds forward_spots=%t", cfg.Peering.ListenPort, len(cfg.Peering.Peers), cfg.Peering.HopCount, cfg.Peering.KeepaliveSeconds, cfg.Peering.ForwardSpots)
 	}
 
 	// Initialize archive writer (optional) before wiring consumers that need read access.
@@ -3028,10 +3028,11 @@ func processOutputSpots(
 				telnet.BroadcastSpot(s, allowFast, allowMed, allowSlow)
 				emittedNow = true
 			}
-			if peerManager != nil && archivePeerAllowMed && shouldPublishToPeers(s) {
+			if peerManager != nil && archivePeerAllowMed {
 				peerSpot := cloneSpotForPeerPublish(s)
-				peerManager.PublishDX(peerSpot)
-				emittedNow = true
+				if peerManager.PublishDX(peerSpot) {
+					emittedNow = true
+				}
 			}
 			if emittedNow && lastOutput != nil {
 				lastOutput.Store(time.Now().UTC().UnixNano())
@@ -3185,25 +3186,6 @@ func shouldBufferSpot(s *spot.Spot) bool {
 // Downstream: archive.Writer.Enqueue.
 func shouldArchiveSpot(s *spot.Spot) bool {
 	return s != nil && !s.IsTestSpotter
-}
-
-// Purpose: Decide whether a spot should be forwarded to peers.
-// Key aspects: Excludes skimmer/upstream/peer sources and test spotters.
-// Upstream: processOutputSpots.
-// Downstream: peer.Manager.PublishDX.
-func shouldPublishToPeers(s *spot.Spot) bool {
-	if s == nil || s.IsTestSpotter {
-		return false
-	}
-	if spot.IsSkimmerSource(s.SourceType) {
-		return false
-	}
-	switch s.SourceType {
-	case spot.SourceUpstream, spot.SourcePeer:
-		return false
-	default:
-		return true
-	}
 }
 
 // startPipelineHealthMonitor logs warnings when the output pipeline or dedup

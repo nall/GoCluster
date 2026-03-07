@@ -1,5 +1,6 @@
 peering:
   enabled: true                    # Enable DXSpider peering (PC11/PC61/PC92/PC51)
+  forward_spots: false             # Peer spot data-plane forwarding; false = receive-only except local DX posts
   local_callsign: "N2WQ-77"        # Our node callsign sent in PC92/PC19 frames
   listen_port: 6300                # Optional inbound listen port for peers
   hop_count: 99                    # Hop limit we advertise and decrement on forward

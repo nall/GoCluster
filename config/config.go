@@ -525,7 +525,10 @@ type ArchiveConfig struct {
 
 // PeeringConfig controls DXSpider node-to-node peering.
 type PeeringConfig struct {
-	Enabled       bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
+	// ForwardSpots controls peer data-plane forwarding of spot-bearing frames.
+	// Omitted or false disables transit relay; local DX command spots are still published.
+	ForwardSpots  bool   `yaml:"forward_spots"`
 	LocalCallsign string `yaml:"local_callsign"`
 	ListenPort    int    `yaml:"listen_port"`
 	HopCount      int    `yaml:"hop_count"`
@@ -2782,13 +2785,14 @@ func (c *Config) Print() {
 		fmt.Printf("Default sources: %s\n", strings.Join(c.Filter.DefaultSources, ", "))
 	}
 	if c.Peering.Enabled {
-		fmt.Printf("Peering: listen_port=%d peers=%d hop=%d transport=%s keepalive=%ds config=%ds topology=%s retention=%dh\n",
+		fmt.Printf("Peering: listen_port=%d peers=%d hop=%d transport=%s keepalive=%ds config=%ds forward_spots=%t topology=%s retention=%dh\n",
 			c.Peering.ListenPort,
 			len(c.Peering.Peers),
 			c.Peering.HopCount,
 			c.Peering.TelnetTransport,
 			c.Peering.KeepaliveSeconds,
 			c.Peering.ConfigSeconds,
+			c.Peering.ForwardSpots,
 			c.Peering.Topology.DBPath,
 			c.Peering.Topology.RetentionHours)
 	}
