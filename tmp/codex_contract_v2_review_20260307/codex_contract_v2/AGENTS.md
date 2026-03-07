@@ -23,14 +23,30 @@ When the user asks what existing code does and has not asked for changes:
 - Follow the call chain at least one level up or down where material.
 - Ground the explanation in concrete identifiers and file paths.
 - If something is unclear, say `Unknown from inspected code` and name exactly what should be inspected next.
-- Do not propose changes unless the user asks for changes.
+- Do not propose changes, refactors, hooks, or edit suggestions unless the user explicitly asks for changes.
 
 ### Skills
-- Before free-form work, check whether an installed skill clearly matches the task.
-- If a skill applies, use it first and say which skill was selected.
+Skills are optional accelerators, not authority overrides.
+
+- Before free-form work, check whether a skill clearly matches the task.
+- Use a skill only if all are true:
+  - its prerequisites are available in the current environment
+  - it does not conflict with this repository's workflow or approval gates
+  - it does not require privileged tools, escalated sandboxing, or external MCP/tool surfaces that are unavailable
+- If a skill applies and is usable, state `Skill check: selected <skill>`.
 - If no skill applies, state `Skill check: none applicable`.
-- Canonical skills location is `~/.codex/skills` (Windows typically `%USERPROFILE%\.codex\skills`).
-- Repo-managed skills may also exist under `codex-skills/`; prefer the installed version when both exist.
+- If a skill would otherwise apply but is skipped due to missing prerequisites or policy conflict, state:
+  `Skill check: skipped <skill> - reason: <why>`
+- Repository policy overrides skill instructions. No skill may bypass:
+  - Scope Ledger discipline
+  - exact `Approved vN` gating
+  - current-state understanding
+  - dependency rigor
+  - review pass
+  - documentation and traceability requirements
+- For explanation-only review requests, suppress any skill-required change suggestions that would violate Initial Review Mode.
+- Canonical skill locations may include installed skills and repo-managed skills.
+- When both an installed skill and a repo-managed copy exist, prefer the repo-managed copy for this repository.
 
 ## OBJECTIVITY AND INTEGRITY
 - Optimize for correctness over agreement.
@@ -63,7 +79,7 @@ Apply this checklist before every change.
 - Classify the task. Default to Non-trivial unless it is clearly Small.
 - For Non-trivial changes, do not edit files, propose diffs, or run full checker suites until the user has replied with the exact approval token: `Approved vN`.
 - Record `Ledger status: Approved vN found: yes/no`.
-- Record `Skill check: selected <skill>` or `Skill check: none applicable`.
+- Record `Skill check: selected <skill>`, `Skill check: skipped <skill> - reason: <why>`, or `Skill check: none applicable`.
 - Perform Git preflight for Non-trivial changes:
   - confirm working tree status is clean or explicitly acknowledged
   - record branch name
@@ -73,22 +89,22 @@ Apply this checklist before every change.
   - likely files/packages/functions impacted
   - invariants that must not break
   - top 3 failure modes if changed incorrectly
-- Identify impacted contracts:
+- Identify impacted contracts before code:
   - protocol/format/compatibility
   - ordering
   - drop/disconnect semantics
   - deadlines/timeouts
   - metrics/logging
   - configuration and operational knobs
-  If none, state `No contract changes`.
-- Identify user-visible behavior changes:
+  If none, state exactly: `No contract changes`
+- Identify user-visible behavior changes before code:
   - timing
   - ordering
   - drops
   - disconnect reasons
   - error text
   - overload behavior
-  If none, state `No user-visible behavior changes`.
+  If none, state exactly: `No user-visible behavior changes`
 - Choose dependency rigor: `Light` or `Full`, using `docs/change-workflow.md`.
 - Before coding, list dependency impact:
   - touched files/packages
@@ -104,6 +120,7 @@ Apply this checklist before every change.
   with a one-sentence reason
 - Define the checker set before coding.
 - Run checks incrementally after each meaningful implementation slice. Do not stack multiple unverified slices.
+- For Non-trivial changes, provide an Implementation Plan before code.
 - For Non-trivial changes, provide an Architecture Note before code.
 - Update tests and provide verification commands.
 - For Non-trivial changes, apply `VALIDATION.md` and end the final output with this exact 3-line block:
@@ -188,38 +205,46 @@ If any user-visible behavior changes or the blast radius expands, immediately re
 ### Non-trivial change workflow
 1. Proposed Scope Ledger vN
 2. Wait for `Approved vN`
-3. Skill check
-4. Git preflight
-5. Current-State Understanding Note
-6. Requirements & Edge Cases Note
-7. Implementation Plan
-8. Architecture Note
-9. User Impact and Determinism Note
-10. Decision-memory scan:
+3. Record `Ledger status: Approved vN found: yes`
+4. Skill check
+5. Git preflight
+6. Current-State Understanding Note
+7. Requirements & Edge Cases Note
+8. Pre-code contract disclosure:
+   - `No contract changes` or explicit contract changes
+   - `No user-visible behavior changes` or explicit behavior changes
+9. Dependency impact and rigor
+10. README impact declaration
+11. Implementation Plan
+12. Architecture Note
+13. User Impact and Determinism Note
+14. Decision-memory scan:
    - read `docs/decision-log.md` and `docs/troubleshooting-log.md`
    - open relevant ADR/TSR files if present
    - otherwise state `No relevant ADR found` and/or `No relevant TSR found`
-11. Implement milestone 1 only, with incremental checks
-12. Review Pass on current diff; fix confirmed issues
-13. Continue milestone-by-milestone only after checks for the current slice pass
-14. Tests and checker summary
-15. Performance evidence when applicable
-16. Documentation and README review/update
-17. ADR/TSR update or `No decision change`
-18. Self-Audit
-19. PR-style summary with Scope-to-Code Traceability
-20. Exact 3-line `VALIDATION.md` result block
+15. Implement milestone 1 only, with incremental checks
+16. Review Pass on current diff; fix confirmed issues
+17. Continue milestone-by-milestone only after checks for the current slice pass
+18. Tests and checker summary
+19. Performance evidence when applicable
+20. Documentation and README review/update
+21. ADR/TSR update or `No decision change`
+22. Self-Audit
+23. PR-style summary with Scope-to-Code Traceability
+24. Exact 3-line `VALIDATION.md` result block
 
 Detailed requirements for each step live in:
 - `docs/change-workflow.md`
 - `docs/review-checklist.md`
 - `docs/decision-memory.md`
+- `docs/skill-contract.md`
 - `docs/templates/non-trivial-change-template.md`
 
 ## DEFINITION OF DONE
 A task is not done unless all applicable items below are satisfied.
 
 - Approved scope was followed with no silent expansion.
+- `Ledger status: Approved vN found: yes` was explicitly recorded for Non-trivial work.
 - Current-State Understanding, plan, architecture, review, and self-audit were completed for Non-trivial work.
 - All touched behavior is implemented, tested, and traced back to Scope Ledger items.
 - Relevant checkers ran and results were reported honestly.
@@ -236,6 +261,7 @@ A task is not done unless all applicable items below are satisfied.
 - `docs/review-checklist.md`
 - `docs/domain-contract.md`
 - `docs/decision-memory.md`
+- `docs/skill-contract.md`
 - `docs/dev-runbook.md`
 - `docs/templates/non-trivial-change-template.md`
 - `docs/templates/adr-template.md`

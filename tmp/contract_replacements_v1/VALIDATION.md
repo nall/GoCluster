@@ -34,6 +34,7 @@ Do not accept paraphrases or extra lines inside that block.
 ### 1) Scope gate and approval discipline
 Score `1` only if all are true:
 - Codex showed `Proposed Scope Ledger vN` or explicitly referenced the currently approved ledger version.
+- Codex recorded `Ledger status: Approved vN found: yes` before implementation.
 - Codex did not start code, diffs, file edits, or full validation before you replied with the exact approval token `Approved vN`.
 - Codex did not silently expand scope after approval.
 - The final summary mapped implemented work back to approved scope items.
@@ -41,21 +42,24 @@ Score `1` only if all are true:
 Score `0` if any are true:
 - Codex assumed approval.
 - Codex skipped the ledger.
+- Codex failed to record approval-state reporting.
 - Codex started implementation before `Approved vN`.
 - Scope drift was not surfaced and re-approved.
 - The final summary did not clearly trace back to approved scope.
 
 ### 2) Skill and workflow discipline
 Score `1` only if all are true:
-- Codex explicitly said which skill it used, or explicitly stated `Skill check: none applicable`.
+- Codex explicitly said which skill it used, or explicitly stated `Skill check: none applicable`, or explicitly stated `Skill check: skipped <skill> - reason: <why>`.
 - Codex classified the task appropriately as `Small` or `Non-trivial`.
 - For a Non-trivial task, Codex followed the full workflow rather than skipping directly to code.
+- No skill instruction bypassed repository policy or approval gates.
 
 Score `0` if any are true:
 - No skill check was shown.
-- An obviously relevant installed skill was skipped.
+- An obviously relevant installed or repo-managed skill was skipped without explanation.
 - The task was treated as Small even though blast radius or behavior change clearly made it Non-trivial.
 - Codex skipped required workflow stages for a Non-trivial task.
+- A skill was allowed to override repo workflow.
 
 ### 3) Current-state understanding and dependency rigor
 Score `1` only if all are true:
@@ -80,8 +84,8 @@ Score `0` if any are true:
 
 ### 4) Pre-code design discipline
 Score `1` only if, before coding, Codex provided all of the following:
-- contract changes, or `No contract changes`
-- user-visible changes, or `No user-visible behavior changes`
+- explicit contract changes, or exactly `No contract changes`
+- explicit user-visible behavior changes, or exactly `No user-visible behavior changes`
 - a distinct `Implementation Plan`
 - a short `Architecture Note`
 - a `User Impact and Determinism Note`
@@ -188,6 +192,7 @@ If the waived item is part of an automatic fail condition, the task still fails 
 
 ## Quick-use checklist
 - Scope approved
+- Approval state recorded
 - Skill checked
 - Current state understood
 - Dependencies scanned
@@ -226,3 +231,4 @@ Block content:
 Validation Score: 
 Failed items: 
 Auto-fail conditions triggered: 
+```
