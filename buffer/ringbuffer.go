@@ -38,18 +38,27 @@ func NewRingBuffer(capacity int) *RingBuffer {
 	}
 }
 
-// Add publishes a new spot into the ring with a monotonic ID.
-// Key aspects: Uses atomic counter and pointer store to avoid partial reads.
+// Add publishes a new spot snapshot into the ring with a monotonic ID.
+// Key aspects: Stores an owned clone so later pipeline mutations cannot race
+// with recent-spot readers while still preserving the assigned ID on the caller.
 // Upstream: main.go spot ingestion/broadcast pipeline.
 // Downstream: atomic counter and slot store; Spot.ID mutation.
 func (rb *RingBuffer) Add(s *spot.Spot) {
+	if rb == nil || s == nil {
+		return
+	}
 	// Assign monotonic ID using atomic counter
 	newID := rb.total.Add(1)
 	s.ID = newID
+	snapshot := s.Clone()
+	if snapshot == nil {
+		return
+	}
+	snapshot.ID = newID
 
 	idx := (newID - 1) % uint64(rb.capacity)
 	// Publishing via atomic.Store ensures readers either see the previous spot or this one, never partial state
-	rb.slots[idx].Store(s)
+	rb.slots[idx].Store(snapshot)
 }
 
 // GetRecent returns up to N most recent spots in reverse chronological order.

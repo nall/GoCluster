@@ -440,7 +440,17 @@ func (s *Spot) EnsureNormalized() {
 	}
 }
 
-// CloneWithComment returns a shallow copy of the spot with the comment replaced.
+// Clone returns an owned snapshot of the spot with formatting cache cleared.
+// Use this when handing a spot to an asynchronous sink that must not observe
+// later mutations performed by the original owner.
+func (s *Spot) Clone() *Spot {
+	if s == nil {
+		return nil
+	}
+	return s.CloneWithComment(s.Comment)
+}
+
+// CloneWithComment returns an owned snapshot of the spot with the comment replaced.
 // The formatted cache is reset so formatting reflects the new comment.
 func (s *Spot) CloneWithComment(comment string) *Spot {
 	if s == nil {

@@ -228,12 +228,17 @@ func (w *Writer) Stop() {
 	}
 }
 
-// Enqueue tries to enqueue a spot for archival without blocking.
-// Key aspects: Drops silently when the queue is full to protect the hot path.
+// Enqueue tries to enqueue a spot snapshot for archival without blocking.
+// Key aspects: Clones before queueing so the archive writer owns the queued
+// value and later normalization cannot race with the live pipeline.
 // Upstream: main.go spot ingest/broadcast.
 // Downstream: writer queue channel.
 func (w *Writer) Enqueue(s *spot.Spot) {
 	if w == nil || s == nil {
+		return
+	}
+	snapshot := s.Clone()
+	if snapshot == nil {
 		return
 	}
 	select {
@@ -242,7 +247,7 @@ func (w *Writer) Enqueue(s *spot.Spot) {
 	default:
 	}
 	select {
-	case w.queue <- s:
+	case w.queue <- snapshot:
 	default:
 		// Drop silently to avoid interfering with the hot path.
 	}

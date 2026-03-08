@@ -95,9 +95,11 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 				ctx:        context.Background(),
 				writeCh:    make(chan string, 1),
 			}
+			ingest := make(chan *spot.Spot, 1)
 			m := &Manager{
 				cfg:      config.PeeringConfig{ForwardSpots: true},
 				dedupe:   newDedupeCache(time.Minute),
+				ingest:   ingest,
 				sessions: map[string]*session{"src": src, "dst": dst},
 			}
 
@@ -107,6 +109,15 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 			}
 
 			m.HandleFrame(frame, src)
+
+			select {
+			case got := <-ingest:
+				if got == nil {
+					t.Fatal("expected inbound spot to be ingested locally")
+				}
+			default:
+				t.Fatal("expected inbound spot to be ingested locally")
+			}
 
 			select {
 			case got := <-dst.writeCh:
@@ -126,6 +137,94 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 			default:
 			}
 		})
+	}
+}
+
+func TestInboundSpotNotRelayedWhenLocalIngestQueueFull(t *testing.T) {
+	src := &session{
+		id:         "src",
+		remoteCall: "SRC",
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	dst := &session{
+		id:         "dst",
+		remoteCall: "DST",
+		pc9x:       true,
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	ingest := make(chan *spot.Spot, 1)
+	ingest <- spot.NewSpot("BUSY1", "LOCAL", 14074.0, "FT8")
+	m := &Manager{
+		cfg:      config.PeeringConfig{ForwardSpots: true},
+		dedupe:   newDedupeCache(time.Minute),
+		ingest:   ingest,
+		sessions: map[string]*session{"src": src, "dst": dst},
+	}
+
+	frame, err := ParseFrame("PC61^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^203.0.113.7^H3^")
+	if err != nil {
+		t.Fatalf("ParseFrame: %v", err)
+	}
+
+	m.HandleFrame(frame, src)
+
+	if got := len(ingest); got != 1 {
+		t.Fatalf("expected ingest queue to stay full after local drop, got len=%d", got)
+	}
+	select {
+	case got := <-dst.writeCh:
+		t.Fatalf("expected relay suppression when local ingest drops, got %q", got)
+	default:
+	}
+}
+
+func TestInboundSpotRelayedWhenLocallyAccepted(t *testing.T) {
+	src := &session{
+		id:         "src",
+		remoteCall: "SRC",
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	dst := &session{
+		id:         "dst",
+		remoteCall: "DST",
+		pc9x:       true,
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	ingest := make(chan *spot.Spot, 1)
+	m := &Manager{
+		cfg:      config.PeeringConfig{ForwardSpots: true},
+		dedupe:   newDedupeCache(time.Minute),
+		ingest:   ingest,
+		sessions: map[string]*session{"src": src, "dst": dst},
+	}
+
+	frame, err := ParseFrame("PC61^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN^203.0.113.7^H3^")
+	if err != nil {
+		t.Fatalf("ParseFrame: %v", err)
+	}
+
+	m.HandleFrame(frame, src)
+
+	select {
+	case got := <-ingest:
+		if got == nil {
+			t.Fatal("expected local ingest acceptance")
+		}
+	default:
+		t.Fatal("expected local ingest acceptance")
+	}
+
+	select {
+	case got := <-dst.writeCh:
+		if !strings.HasPrefix(got, "PC61^") {
+			t.Fatalf("expected relayed PC61 frame, got %q", got)
+		}
+	default:
+		t.Fatal("expected relay after local acceptance")
 	}
 }
 

@@ -236,8 +236,8 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 			log.Printf("Peering: parse %s from %s failed: %v", frame.Type, sessionLabel(sess), err)
 			return
 		}
-		m.ingestSpot(spotEntry)
-		if frame.Hop > 1 && m.shouldRelayDataFrame(frame.Type) {
+		accepted := m.ingestSpot(spotEntry)
+		if accepted && frame.Hop > 1 && m.shouldRelayDataFrame(frame.Type) {
 			key := dxKey(frame, spotEntry)
 			if m.dedupe.markSeen(key, now) {
 				if frame.Type == "PC26" {
@@ -264,20 +264,22 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 	}
 }
 
-func (m *Manager) ingestSpot(s *spot.Spot) {
+func (m *Manager) ingestSpot(s *spot.Spot) bool {
 	if m == nil || s == nil || m.ingest == nil {
-		return
+		return false
 	}
 	if m.maxAgeSeconds > 0 {
 		if age := time.Since(s.Time); age > time.Duration(m.maxAgeSeconds)*time.Second {
 			// Drop stale spots before they enter the shared pipeline to avoid wasting dedupe/work.
-			return
+			return false
 		}
 	}
 	select {
 	case m.ingest <- s:
+		return true
 	default:
 		log.Printf("Peering: ingest queue full, dropping spot from %s", s.SourceNode)
+		return false
 	}
 }
 

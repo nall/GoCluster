@@ -1777,42 +1777,7 @@ func cloneSpotForPeerPublish(src *spot.Spot) *spot.Spot {
 	if mode == "" {
 		return src
 	}
-	clone := &spot.Spot{
-		ID:                 src.ID,
-		DXCall:             src.DXCall,
-		DECall:             src.DECall,
-		Frequency:          src.Frequency,
-		Band:               src.Band,
-		Mode:               src.Mode,
-		Report:             src.Report,
-		HasReport:          src.HasReport,
-		Time:               src.Time,
-		Comment:            src.Comment,
-		SourceType:         src.SourceType,
-		SourceNode:         src.SourceNode,
-		SpotterIP:          src.SpotterIP,
-		TTL:                src.TTL,
-		IsHuman:            src.IsHuman,
-		IsTestSpotter:      src.IsTestSpotter,
-		IsBeacon:           src.IsBeacon,
-		DXMetadata:         src.DXMetadata,
-		DEMetadata:         src.DEMetadata,
-		Confidence:         src.Confidence,
-		ModeNorm:           src.ModeNorm,
-		BandNorm:           src.BandNorm,
-		DXCallNorm:         src.DXCallNorm,
-		DECallNorm:         src.DECallNorm,
-		DXContinentNorm:    src.DXContinentNorm,
-		DEContinentNorm:    src.DEContinentNorm,
-		DXGridNorm:         src.DXGridNorm,
-		DEGridNorm:         src.DEGridNorm,
-		DXGrid2:            src.DXGrid2,
-		DEGrid2:            src.DEGrid2,
-		DECallStripped:     src.DECallStripped,
-		DECallNormStripped: src.DECallNormStripped,
-	}
-	clone.Comment = mode
-	return clone
+	return src.CloneWithComment(mode)
 }
 
 // applyLicenseGate runs the FCC license check after all corrections and returns true when the spot should be dropped.

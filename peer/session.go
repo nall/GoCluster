@@ -27,8 +27,9 @@ const (
 )
 
 var (
-	errSessionWriteQueueFull = errors.New("peer: write queue full")
-	errSessionContextUnset   = errors.New("peer: session context not initialized")
+	errSessionWriteQueueFull    = errors.New("peer: write queue full")
+	errSessionPriorityQueueFull = errors.New("peer: priority queue full")
+	errSessionContextUnset      = errors.New("peer: session context not initialized")
 )
 
 type session struct {
@@ -283,6 +284,24 @@ func (s *session) sendPriorityLine(line string) bool {
 	}
 }
 
+// sendControlLine enqueues liveness/config traffic on the priority lane.
+// Missing a control frame means the session is no longer healthy, so a full
+// priority lane closes the session and lets the reconnect path take over.
+func (s *session) sendControlLine(line string) error {
+	if s == nil || s.ctx == nil {
+		return errSessionContextUnset
+	}
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.priorityLineCh <- line:
+		return nil
+	default:
+		s.close()
+		return errSessionPriorityQueueFull
+	}
+}
+
 // sendPriorityRaw enqueues telnet negotiation replies without blocking.
 func (s *session) sendPriorityRaw(data []byte) bool {
 	if s == nil || len(data) == 0 {
@@ -377,14 +396,20 @@ func (s *session) keepaliveLoop() {
 			// Always emit PC51 pings so peers that still expect legacy liveness
 			// see activity even when the session uses pc9x.
 			line := fmt.Sprintf("PC51^%s^%s^1^", s.remoteCall, s.localCall)
-			if err := s.sendLine(line); err != nil && !errors.Is(err, errSessionWriteQueueFull) && !errors.Is(err, context.Canceled) {
-				log.Printf("Peering: keepalive enqueue failed for %s: %v", s.peer.host, err)
+			if err := s.sendControlLine(line); err != nil {
+				if !errors.Is(err, context.Canceled) {
+					log.Printf("Peering: keepalive enqueue failed for %s: %v", s.peer.host, err)
+				}
+				return
 			}
 			// For pc9x sessions, also send a PC92 keepalive to refresh topology.
 			if s.pc9x {
 				line := s.buildPC92Keepalive()
-				if err := s.sendLine(line); err != nil && !errors.Is(err, errSessionWriteQueueFull) && !errors.Is(err, context.Canceled) {
-					log.Printf("Peering: PC92 keepalive enqueue failed for %s: %v", s.peer.host, err)
+				if err := s.sendControlLine(line); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						log.Printf("Peering: PC92 keepalive enqueue failed for %s: %v", s.peer.host, err)
+					}
+					return
 				}
 			}
 		case <-cfgC:
@@ -392,8 +417,11 @@ func (s *session) keepaliveLoop() {
 			// purges nodes that miss several config intervals.
 			if s.pc9x {
 				line := s.buildPC92Config()
-				if err := s.sendLine(line); err != nil && !errors.Is(err, errSessionWriteQueueFull) && !errors.Is(err, context.Canceled) {
-					log.Printf("Peering: PC92 config enqueue failed for %s: %v", s.peer.host, err)
+				if err := s.sendControlLine(line); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						log.Printf("Peering: PC92 config enqueue failed for %s: %v", s.peer.host, err)
+					}
+					return
 				}
 			}
 		}

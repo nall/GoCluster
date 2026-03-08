@@ -1,6 +1,7 @@
 package telnet
 
 import (
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -175,6 +176,63 @@ func TestHandleClientPreloginTimeoutReleasesTicket(t *testing.T) {
 	if timeouts == 0 {
 		t.Fatal("expected prelogin timeout counter increment")
 	}
+}
+
+func TestPreloginTicketReleasedOnTransportWrapFailure(t *testing.T) {
+	s := newPreloginTestServer(nil)
+	s.useZiutek = true
+	s.wrapConnFn = func(conn net.Conn) (net.Conn, net.Conn, error) {
+		return nil, nil, errors.New("wrap failed")
+	}
+
+	ticket, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.60", 6000))
+	if ticket == nil || reason != "" {
+		t.Fatalf("expected prelogin ticket acquisition, got ticket=%v reason=%q", ticket, reason)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		s.handleClient(serverConn, ticket)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClient did not exit after wrap failure")
+	}
+
+	active, _, _, _, _, _, _ := s.PreloginMetricSnapshot()
+	if active != 0 {
+		t.Fatalf("expected prelogin active gauge 0 after wrap failure, got %d", active)
+	}
+}
+
+func TestPreloginActiveGaugeRecoversAfterEarlySetupFailure(t *testing.T) {
+	s := newPreloginTestServer(nil)
+	s.maxPreloginSessions = 1
+	s.useZiutek = true
+	s.wrapConnFn = func(conn net.Conn) (net.Conn, net.Conn, error) {
+		return nil, nil, errors.New("wrap failed")
+	}
+
+	ticket, reason := s.tryAcquirePrelogin(tcpAddr("203.0.113.61", 6100))
+	if ticket == nil || reason != "" {
+		t.Fatalf("expected first prelogin ticket acquisition, got ticket=%v reason=%q", ticket, reason)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+	s.handleClient(serverConn, ticket)
+
+	nextTicket, nextReason := s.tryAcquirePrelogin(tcpAddr("203.0.113.62", 6200))
+	if nextTicket == nil || nextReason != "" {
+		t.Fatalf("expected capacity recovery after setup failure, got ticket=%v reason=%q", nextTicket, nextReason)
+	}
+	nextTicket.Release()
 }
 
 func TestTryAcquirePreloginHonorsGlobalRate(t *testing.T) {

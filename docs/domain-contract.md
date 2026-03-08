@@ -59,6 +59,12 @@ These rules must be explicit, deterministic, and testable.
 ### Prioritization
 - Control messages drain before spots.
 - Control traffic must not be starved by high-volume spot traffic.
+- Peer liveness/config traffic must bypass the normal peer spot backlog.
+- If the peer control-priority lane is full, close the peer session and rely on reconnect/backoff rather than silently dropping keepalives.
+
+### Relay under overload
+- Do not relay inbound peer spot data after the local ingest queue already dropped it.
+- A node that is shedding inbound peer spots locally must not continue acting as a transit hop for those same frames.
 
 ### Sustained slow consumer policy
 If the spot drop rate exceeds 5% over a rolling 30-second window, with a minimum sample threshold to avoid noise:
