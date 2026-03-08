@@ -1138,6 +1138,88 @@ type CTYConfig struct {
 	RefreshUTC string `yaml:"refresh_utc"`
 }
 
+type loadRawPresence struct {
+	ctyEnabledSet                                   bool
+	hasSecondaryFastPrefer                          bool
+	hasSecondaryMedPrefer                           bool
+	hasSecondarySlowPrefer                          bool
+	hasSecondaryFastWindow                          bool
+	hasSecondaryMedWindow                           bool
+	hasSecondarySlowWindow                          bool
+	legacySecondaryWindow                           bool
+	legacySecondaryPrefer                           bool
+	hasAdaptiveMinReportsEnabled                    bool
+	hasArchiveCleanupYield                          bool
+	hasPSKRMQTTTimeout                              bool
+	hasFamilyTruncationEnabled                      bool
+	hasFamilyTruncationPrefix                       bool
+	hasFamilyTruncationSuffix                       bool
+	hasFamilyTruncationRelaxEnabled                 bool
+	hasFamilyTruncationRelaxCandidate               bool
+	hasFamilyTruncationRelaxSubject                 bool
+	hasFamilyTruncationLengthBonusCandidate         bool
+	hasFamilyTruncationLengthBonusSubject           bool
+	hasFamilyTruncationDelta2Candidate              bool
+	hasFamilyTruncationDelta2Subject                bool
+	hasFamilyTelnetSuppressionEnabled               bool
+	hasResolverNeighborhoodAllowTruncation          bool
+	hasResolverRecentPlus1Enabled                   bool
+	hasResolverRecentPlus1RequireSubjectWeaker      bool
+	hasResolverRecentPlus1AllowTruncation           bool
+	hasBayesBonusRequireCandidateValidated          bool
+	hasBayesBonusRequireSubjectUnvalidatedDistance2 bool
+	hasUIColor                                      bool
+	hasUIClearScreen                                bool
+	hasLoggingDropDedupeWindow                      bool
+	hasReputationIPInfoPebbleLoadIPv4               bool
+	hasReputationIPInfoDeleteCSVAfterImport         bool
+	hasReputationIPInfoKeepGzip                     bool
+	hasReputationIPInfoPebbleCleanup                bool
+	hasReputationIPInfoPebbleCompact                bool
+}
+
+func captureLoadRawPresence(raw map[string]any) loadRawPresence {
+	return loadRawPresence{
+		ctyEnabledSet:                                   yamlKeyPresent(raw, "cty", "enabled"),
+		hasSecondaryFastPrefer:                          yamlKeyPresent(raw, "dedup", "secondary_fast_prefer_stronger_snr"),
+		hasSecondaryMedPrefer:                           yamlKeyPresent(raw, "dedup", "secondary_med_prefer_stronger_snr"),
+		hasSecondarySlowPrefer:                          yamlKeyPresent(raw, "dedup", "secondary_slow_prefer_stronger_snr"),
+		hasSecondaryFastWindow:                          yamlKeyPresent(raw, "dedup", "secondary_fast_window_seconds"),
+		hasSecondaryMedWindow:                           yamlKeyPresent(raw, "dedup", "secondary_med_window_seconds"),
+		hasSecondarySlowWindow:                          yamlKeyPresent(raw, "dedup", "secondary_slow_window_seconds"),
+		legacySecondaryWindow:                           yamlKeyPresent(raw, "dedup", "secondary_window_seconds"),
+		legacySecondaryPrefer:                           yamlKeyPresent(raw, "dedup", "secondary_prefer_stronger_snr"),
+		hasAdaptiveMinReportsEnabled:                    yamlKeyPresent(raw, "call_correction", "adaptive_min_reports", "enabled"),
+		hasArchiveCleanupYield:                          yamlKeyPresent(raw, "archive", "cleanup_batch_yield_ms"),
+		hasPSKRMQTTTimeout:                              yamlKeyPresent(raw, "pskreporter", "mqtt_qos12_enqueue_timeout_ms"),
+		hasFamilyTruncationEnabled:                      yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "enabled"),
+		hasFamilyTruncationPrefix:                       yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_prefix_match"),
+		hasFamilyTruncationSuffix:                       yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_suffix_match"),
+		hasFamilyTruncationRelaxEnabled:                 yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "enabled"),
+		hasFamilyTruncationRelaxCandidate:               yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "require_candidate_validated"),
+		hasFamilyTruncationRelaxSubject:                 yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "require_subject_unvalidated"),
+		hasFamilyTruncationLengthBonusCandidate:         yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "length_bonus", "require_candidate_validated"),
+		hasFamilyTruncationLengthBonusSubject:           yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "length_bonus", "require_subject_unvalidated"),
+		hasFamilyTruncationDelta2Candidate:              yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "delta2_rails", "require_candidate_validated"),
+		hasFamilyTruncationDelta2Subject:                yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "delta2_rails", "require_subject_unvalidated"),
+		hasFamilyTelnetSuppressionEnabled:               yamlKeyPresent(raw, "call_correction", "family_policy", "telnet_suppression", "enabled"),
+		hasResolverNeighborhoodAllowTruncation:          yamlKeyPresent(raw, "call_correction", "resolver_neighborhood_allow_truncation_family"),
+		hasResolverRecentPlus1Enabled:                   yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_enabled"),
+		hasResolverRecentPlus1RequireSubjectWeaker:      yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_require_subject_weaker"),
+		hasResolverRecentPlus1AllowTruncation:           yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_allow_truncation_family"),
+		hasBayesBonusRequireCandidateValidated:          yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_candidate_validated"),
+		hasBayesBonusRequireSubjectUnvalidatedDistance2: yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_subject_unvalidated_distance2"),
+		hasUIColor:                              yamlKeyPresent(raw, "ui", "color"),
+		hasUIClearScreen:                        yamlKeyPresent(raw, "ui", "clear_screen"),
+		hasLoggingDropDedupeWindow:              yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
+		hasReputationIPInfoPebbleLoadIPv4:       yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4"),
+		hasReputationIPInfoDeleteCSVAfterImport: yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import"),
+		hasReputationIPInfoKeepGzip:             yamlKeyPresent(raw, "reputation", "ipinfo_keep_gzip"),
+		hasReputationIPInfoPebbleCleanup:        yamlKeyPresent(raw, "reputation", "ipinfo_pebble_cleanup"),
+		hasReputationIPInfoPebbleCompact:        yamlKeyPresent(raw, "reputation", "ipinfo_pebble_compact"),
+	}
+}
+
 // Load reads configuration from a YAML directory (or a single YAML file if a file
 // path is explicitly supplied), applies defaults, and validates key fields so the
 // rest of the cluster can rely on a consistent baseline.
@@ -1175,43 +1257,52 @@ func Load(path string) (*Config, error) {
 	}
 	cfg.LoadedFrom = filepath.Clean(path)
 
-	ctyEnabledSet := yamlKeyPresent(raw, "cty", "enabled")
-	hasSecondaryFastPrefer := yamlKeyPresent(raw, "dedup", "secondary_fast_prefer_stronger_snr")
-	hasSecondaryMedPrefer := yamlKeyPresent(raw, "dedup", "secondary_med_prefer_stronger_snr")
-	hasSecondarySlowPrefer := yamlKeyPresent(raw, "dedup", "secondary_slow_prefer_stronger_snr")
-	hasSecondaryFastWindow := yamlKeyPresent(raw, "dedup", "secondary_fast_window_seconds")
-	hasSecondaryMedWindow := yamlKeyPresent(raw, "dedup", "secondary_med_window_seconds")
-	hasSecondarySlowWindow := yamlKeyPresent(raw, "dedup", "secondary_slow_window_seconds")
-	legacySecondaryWindow := yamlKeyPresent(raw, "dedup", "secondary_window_seconds")
-	legacySecondaryPrefer := yamlKeyPresent(raw, "dedup", "secondary_prefer_stronger_snr")
-	hasAdaptiveMinReportsEnabled := yamlKeyPresent(raw, "call_correction", "adaptive_min_reports", "enabled")
-	hasArchiveCleanupYield := yamlKeyPresent(raw, "archive", "cleanup_batch_yield_ms")
-	hasPSKRMQTTTimeout := yamlKeyPresent(raw, "pskreporter", "mqtt_qos12_enqueue_timeout_ms")
-	hasFamilyTruncationEnabled := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "enabled")
-	hasFamilyTruncationPrefix := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_prefix_match")
-	hasFamilyTruncationSuffix := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_suffix_match")
-	hasFamilyTruncationRelaxEnabled := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "enabled")
-	hasFamilyTruncationRelaxCandidate := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "require_candidate_validated")
-	hasFamilyTruncationRelaxSubject := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "relax_advantage", "require_subject_unvalidated")
-	hasFamilyTruncationLengthBonusCandidate := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "length_bonus", "require_candidate_validated")
-	hasFamilyTruncationLengthBonusSubject := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "length_bonus", "require_subject_unvalidated")
-	hasFamilyTruncationDelta2Candidate := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "delta2_rails", "require_candidate_validated")
-	hasFamilyTruncationDelta2Subject := yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "delta2_rails", "require_subject_unvalidated")
-	hasFamilyTelnetSuppressionEnabled := yamlKeyPresent(raw, "call_correction", "family_policy", "telnet_suppression", "enabled")
-	hasResolverNeighborhoodAllowTruncation := yamlKeyPresent(raw, "call_correction", "resolver_neighborhood_allow_truncation_family")
-	hasResolverRecentPlus1Enabled := yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_enabled")
-	hasResolverRecentPlus1RequireSubjectWeaker := yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_require_subject_weaker")
-	hasResolverRecentPlus1AllowTruncation := yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_allow_truncation_family")
-	hasBayesBonusRequireCandidateValidated := yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_candidate_validated")
-	hasBayesBonusRequireSubjectUnvalidatedDistance2 := yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_subject_unvalidated_distance2")
+	presence := captureLoadRawPresence(raw)
 
-	if legacySecondaryWindow || legacySecondaryPrefer {
+	if presence.legacySecondaryWindow || presence.legacySecondaryPrefer {
 		fmt.Printf("Warning: dedup.secondary_window_seconds and dedup.secondary_prefer_stronger_snr are deprecated and ignored; use secondary_fast_* / secondary_med_* / secondary_slow_* instead.\n")
 	}
 
-	// UI defaults favor the lightweight ANSI renderer unless overridden. Mode
-	// is normalized to a small, explicit set to keep startup behavior
-	// predictable and YAML-driven.
+	if err := normalizeUIConfig(&cfg, raw, presence); err != nil {
+		return nil, err
+	}
+	if err := normalizeLoggingAndPropReportConfig(&cfg, presence); err != nil {
+		return nil, err
+	}
+	normalizeFeedConfig(&cfg, presence)
+	if err := normalizeArchiveAndStatsConfig(&cfg, presence); err != nil {
+		return nil, err
+	}
+	if err := normalizeCallCorrectionConfig(&cfg, presence); err != nil {
+		return nil, err
+	}
+	normalizeCallCacheConfig(&cfg)
+	if err := normalizeTelnetConfig(&cfg); err != nil {
+		return nil, err
+	}
+	if err := normalizeFeedTransportConfig(&cfg); err != nil {
+		return nil, err
+	}
+	if err := normalizePeeringConfig(&cfg); err != nil {
+		return nil, err
+	}
+	// Keep outbound peer enablement explicit: omitted or false stays disabled.
+	// This avoids accidental dial loops for placeholder entries.
+	normalizeSignalPolicyConfig(&cfg)
+	if err := normalizeReferenceDataConfig(&cfg, presence); err != nil {
+		return nil, err
+	}
+	normalizeDedupAndBufferConfig(&cfg, presence)
+	if err := normalizeSkewConfig(&cfg); err != nil {
+		return nil, err
+	}
+	normalizeReputationConfig(&cfg, presence)
+	return &cfg, nil
+}
+
+func normalizeUIConfig(cfg *Config, raw map[string]any, presence loadRawPresence) error {
+	// UI defaults stay YAML-driven and deterministic; omitted booleans must not
+	// behave like explicit false values.
 	uiMode := strings.ToLower(strings.TrimSpace(cfg.UI.Mode))
 	if uiMode == "" {
 		uiMode = "ansi"
@@ -1224,7 +1315,7 @@ func Load(path string) (*Config, error) {
 	case "auto", "ansi_poc":
 		cfg.UI.Mode = "ansi"
 	default:
-		return nil, fmt.Errorf("invalid ui.mode %q: must be ansi, tview, tview-v2, or headless", cfg.UI.Mode)
+		return fmt.Errorf("invalid ui.mode %q: must be ansi, tview, tview-v2, or headless", cfg.UI.Mode)
 	}
 	if cfg.UI.RefreshMS <= 0 {
 		cfg.UI.RefreshMS = 250
@@ -1244,22 +1335,22 @@ func Load(path string) (*Config, error) {
 	if cfg.UI.PaneLines.System <= 0 {
 		cfg.UI.PaneLines.System = 40
 	}
-	if !yamlKeyPresent(raw, "ui", "color") {
+	if !presence.hasUIColor {
 		cfg.UI.Color = true
 	}
-	if !yamlKeyPresent(raw, "ui", "clear_screen") {
+	if !presence.hasUIClearScreen {
 		cfg.UI.ClearScreen = true
 	}
+	return normalizeUIV2(&cfg.UI, raw)
+}
 
-	if err := normalizeUIV2(&cfg.UI, raw); err != nil {
-		return nil, err
-	}
+func normalizeLoggingAndPropReportConfig(cfg *Config, presence loadRawPresence) error {
 	cfg.Logging.Dir = strings.TrimSpace(cfg.Logging.Dir)
-	if !yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds") {
+	if !presence.hasLoggingDropDedupeWindow {
 		cfg.Logging.DropDedupeWindowSeconds = 120
 	}
 	if cfg.Logging.DropDedupeWindowSeconds < 0 {
-		return nil, fmt.Errorf("invalid logging.drop_dedupe_window_seconds %d (must be >= 0)", cfg.Logging.DropDedupeWindowSeconds)
+		return fmt.Errorf("invalid logging.drop_dedupe_window_seconds %d (must be >= 0)", cfg.Logging.DropDedupeWindowSeconds)
 	}
 	if cfg.Logging.Enabled {
 		if cfg.Logging.Dir == "" {
@@ -1275,11 +1366,14 @@ func Load(path string) (*Config, error) {
 		cfg.PropReport.RefreshUTC = "00:05"
 	}
 	if _, err := time.Parse("15:04", cfg.PropReport.RefreshUTC); err != nil {
-		return nil, fmt.Errorf("invalid prop report refresh time %q: %w", cfg.PropReport.RefreshUTC, err)
+		return fmt.Errorf("invalid prop report refresh time %q: %w", cfg.PropReport.RefreshUTC, err)
 	}
+	return nil
+}
 
-	// RBN ingest buffers should be sized to absorb decode bursts; fall back to
-	// generous defaults when omitted.
+func normalizeFeedConfig(cfg *Config, presence loadRawPresence) {
+	// Feed buffers and keepalives need deterministic defaults because callers
+	// assume these are always normalized after config.Load returns.
 	if cfg.RBN.SlotBuffer <= 0 {
 		cfg.RBN.SlotBuffer = 4000
 	}
@@ -1307,7 +1401,6 @@ func Load(path string) (*Config, error) {
 	if cfg.HumanTelnet.KeepaliveSec == 0 {
 		cfg.HumanTelnet.KeepaliveSec = 240
 	}
-
 	if cfg.PSKReporter.Workers < 0 {
 		cfg.PSKReporter.Workers = 0
 	}
@@ -1320,7 +1413,7 @@ func Load(path string) (*Config, error) {
 	if cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS < 0 {
 		cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS = 0
 	}
-	if cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS == 0 && !hasPSKRMQTTTimeout {
+	if cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS == 0 && !presence.hasPSKRMQTTTimeout {
 		cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS = defaultPSKReporterQoS12EnqueueTimeoutMS
 	}
 	if cfg.PSKReporter.SpotChannelSize <= 0 {
@@ -1335,8 +1428,9 @@ func Load(path string) (*Config, error) {
 	if cfg.PSKReporter.MaxPayloadBytes <= 0 {
 		cfg.PSKReporter.MaxPayloadBytes = 4096
 	}
+}
 
-	// Archive defaults keep the writer lightweight and non-blocking.
+func normalizeArchiveAndStatsConfig(cfg *Config, presence loadRawPresence) error {
 	if cfg.Archive.QueueSize <= 0 {
 		cfg.Archive.QueueSize = 10000
 	}
@@ -1347,7 +1441,7 @@ func Load(path string) (*Config, error) {
 		cfg.Archive.BatchIntervalMS = 200
 	}
 	if cfg.Archive.CleanupIntervalSeconds <= 0 {
-		cfg.Archive.CleanupIntervalSeconds = 3600 // hourly
+		cfg.Archive.CleanupIntervalSeconds = 3600
 	}
 	if cfg.Archive.CleanupBatchSize <= 0 {
 		cfg.Archive.CleanupBatchSize = 2000
@@ -1355,14 +1449,14 @@ func Load(path string) (*Config, error) {
 	if cfg.Archive.CleanupBatchYieldMS < 0 {
 		cfg.Archive.CleanupBatchYieldMS = 0
 	}
-	if cfg.Archive.CleanupBatchYieldMS == 0 && !hasArchiveCleanupYield {
+	if cfg.Archive.CleanupBatchYieldMS == 0 && !presence.hasArchiveCleanupYield {
 		cfg.Archive.CleanupBatchYieldMS = 5
 	}
 	if cfg.Archive.RetentionFTSeconds <= 0 {
-		cfg.Archive.RetentionFTSeconds = 3600 // 1 hour by default for FT modes
+		cfg.Archive.RetentionFTSeconds = 3600
 	}
 	if cfg.Archive.RetentionDefaultSeconds <= 0 {
-		cfg.Archive.RetentionDefaultSeconds = 86400 // 1 day for other modes
+		cfg.Archive.RetentionDefaultSeconds = 86400
 	}
 	if strings.TrimSpace(cfg.Archive.DBPath) == "" {
 		cfg.Archive.DBPath = "data/archive/pebble"
@@ -1381,14 +1475,30 @@ func Load(path string) (*Config, error) {
 	case "off", "normal", "full", "extra":
 		cfg.Archive.Synchronous = syncMode
 	default:
-		return nil, fmt.Errorf("invalid archive.synchronous %q: must be off, normal, full, or extra", cfg.Archive.Synchronous)
+		return fmt.Errorf("invalid archive.synchronous %q: must be off, normal, full, or extra", cfg.Archive.Synchronous)
 	}
-
 	if cfg.Stats.DisplayIntervalSeconds <= 0 {
 		cfg.Stats.DisplayIntervalSeconds = 30
 	}
-	// Call-correction defaults keep resolver rails strict unless the operator opts in
-	// to looser thresholds.
+	return nil
+}
+
+func normalizeCallCorrectionConfig(cfg *Config, presence loadRawPresence) error {
+	normalizeCallCorrectionCoreConfig(cfg)
+	normalizeCallCorrectionResolverConfig(cfg, presence)
+	normalizeCallCorrectionBayesDefaultsConfig(cfg, presence)
+	if err := normalizeCallCorrectionTemporalConfig(cfg); err != nil {
+		return err
+	}
+	normalizeCallCorrectionFamilyPolicyConfig(cfg, presence)
+	if err := validateCallCorrectionStabilizerTimeoutAction(cfg); err != nil {
+		return err
+	}
+	normalizeCallCorrectionWeightsAndAdaptiveConfig(cfg, presence)
+	return nil
+}
+
+func normalizeCallCorrectionCoreConfig(cfg *Config) {
 	if cfg.CallCorrection.MinConsensusReports <= 0 {
 		cfg.CallCorrection.MinConsensusReports = 4
 	}
@@ -1538,6 +1648,9 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.StabilizerMaxPending <= 0 {
 		cfg.CallCorrection.StabilizerMaxPending = 20000
 	}
+}
+
+func normalizeCallCorrectionResolverConfig(cfg *Config, presence loadRawPresence) {
 	if cfg.CallCorrection.StabilizerPDelayConfidencePercent < 0 {
 		cfg.CallCorrection.StabilizerPDelayConfidencePercent = 0
 	}
@@ -1574,24 +1687,27 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.ResolverNeighborhoodMaxDistance <= 0 {
 		cfg.CallCorrection.ResolverNeighborhoodMaxDistance = 1
 	}
-	if !hasResolverNeighborhoodAllowTruncation {
+	if !presence.hasResolverNeighborhoodAllowTruncation {
 		cfg.CallCorrection.ResolverNeighborhoodAllowTruncation = true
 	}
-	if !hasResolverRecentPlus1Enabled {
+	if !presence.hasResolverRecentPlus1Enabled {
 		cfg.CallCorrection.ResolverRecentPlus1Enabled = true
 	}
 	if cfg.CallCorrection.ResolverRecentPlus1MinUniqueWinner <= 0 {
 		cfg.CallCorrection.ResolverRecentPlus1MinUniqueWinner = 3
 	}
-	if !hasResolverRecentPlus1RequireSubjectWeaker {
+	if !presence.hasResolverRecentPlus1RequireSubjectWeaker {
 		cfg.CallCorrection.ResolverRecentPlus1RequireSubjectWeaker = true
 	}
 	if cfg.CallCorrection.ResolverRecentPlus1MaxDistance <= 0 {
 		cfg.CallCorrection.ResolverRecentPlus1MaxDistance = 1
 	}
-	if !hasResolverRecentPlus1AllowTruncation {
+	if !presence.hasResolverRecentPlus1AllowTruncation {
 		cfg.CallCorrection.ResolverRecentPlus1AllowTruncation = true
 	}
+}
+
+func normalizeCallCorrectionBayesDefaultsConfig(cfg *Config, presence loadRawPresence) {
 	if cfg.CallCorrection.BayesBonus.WeightDistance1Milli <= 0 {
 		cfg.CallCorrection.BayesBonus.WeightDistance1Milli = 350
 	}
@@ -1716,12 +1832,15 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.BayesBonus.AdvantageExtraConfidenceDistance2 < cfg.CallCorrection.BayesBonus.AdvantageExtraConfidenceDistance1 {
 		cfg.CallCorrection.BayesBonus.AdvantageExtraConfidenceDistance2 = cfg.CallCorrection.BayesBonus.AdvantageExtraConfidenceDistance1
 	}
-	if !hasBayesBonusRequireCandidateValidated {
+	if !presence.hasBayesBonusRequireCandidateValidated {
 		cfg.CallCorrection.BayesBonus.RequireCandidateValidated = true
 	}
-	if !hasBayesBonusRequireSubjectUnvalidatedDistance2 {
+	if !presence.hasBayesBonusRequireSubjectUnvalidatedDistance2 {
 		cfg.CallCorrection.BayesBonus.RequireSubjectUnvalidatedDistance2 = true
 	}
+}
+
+func normalizeCallCorrectionTemporalConfig(cfg *Config) error {
 	cfg.CallCorrection.TemporalDecoder.Scope = strings.ToLower(strings.TrimSpace(cfg.CallCorrection.TemporalDecoder.Scope))
 	if cfg.CallCorrection.TemporalDecoder.Scope == "" {
 		cfg.CallCorrection.TemporalDecoder.Scope = "uncertain_only"
@@ -1729,7 +1848,7 @@ func Load(path string) (*Config, error) {
 	switch cfg.CallCorrection.TemporalDecoder.Scope {
 	case "uncertain_only", "all_correction_candidates":
 	default:
-		return nil, fmt.Errorf("invalid call_correction.temporal_decoder.scope %q (expected uncertain_only or all_correction_candidates)", cfg.CallCorrection.TemporalDecoder.Scope)
+		return fmt.Errorf("invalid call_correction.temporal_decoder.scope %q (expected uncertain_only or all_correction_candidates)", cfg.CallCorrection.TemporalDecoder.Scope)
 	}
 	if cfg.CallCorrection.TemporalDecoder.LagSeconds <= 0 {
 		cfg.CallCorrection.TemporalDecoder.LagSeconds = 2
@@ -1780,7 +1899,7 @@ func Load(path string) (*Config, error) {
 	switch cfg.CallCorrection.TemporalDecoder.OverflowAction {
 	case "fallback_resolver", "abstain", "bypass":
 	default:
-		return nil, fmt.Errorf("invalid call_correction.temporal_decoder.overflow_action %q (expected fallback_resolver, abstain, or bypass)", cfg.CallCorrection.TemporalDecoder.OverflowAction)
+		return fmt.Errorf("invalid call_correction.temporal_decoder.overflow_action %q (expected fallback_resolver, abstain, or bypass)", cfg.CallCorrection.TemporalDecoder.OverflowAction)
 	}
 	if cfg.CallCorrection.TemporalDecoder.MaxPending <= 0 {
 		cfg.CallCorrection.TemporalDecoder.MaxPending = 25000
@@ -1794,7 +1913,11 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.TemporalDecoder.MaxEventsPerKey > 256 {
 		cfg.CallCorrection.TemporalDecoder.MaxEventsPerKey = 256
 	}
-	if !hasFamilyTruncationEnabled {
+	return nil
+}
+
+func normalizeCallCorrectionFamilyPolicyConfig(cfg *Config, presence loadRawPresence) {
+	if !presence.hasFamilyTruncationEnabled {
 		cfg.CallCorrection.FamilyPolicy.Truncation.Enabled = true
 	}
 	if cfg.CallCorrection.FamilyPolicy.Truncation.MaxLengthDelta <= 0 {
@@ -1803,22 +1926,22 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.FamilyPolicy.Truncation.MinShorterLength <= 0 {
 		cfg.CallCorrection.FamilyPolicy.Truncation.MinShorterLength = 3
 	}
-	if !hasFamilyTruncationPrefix {
+	if !presence.hasFamilyTruncationPrefix {
 		cfg.CallCorrection.FamilyPolicy.Truncation.AllowPrefixMatch = true
 	}
-	if !hasFamilyTruncationSuffix {
+	if !presence.hasFamilyTruncationSuffix {
 		cfg.CallCorrection.FamilyPolicy.Truncation.AllowSuffixMatch = true
 	}
-	if !hasFamilyTruncationRelaxEnabled {
+	if !presence.hasFamilyTruncationRelaxEnabled {
 		cfg.CallCorrection.FamilyPolicy.Truncation.RelaxAdvantage.Enabled = true
 	}
 	if cfg.CallCorrection.FamilyPolicy.Truncation.RelaxAdvantage.MinAdvantage < 0 {
 		cfg.CallCorrection.FamilyPolicy.Truncation.RelaxAdvantage.MinAdvantage = 0
 	}
-	if !hasFamilyTruncationRelaxCandidate {
+	if !presence.hasFamilyTruncationRelaxCandidate {
 		cfg.CallCorrection.FamilyPolicy.Truncation.RelaxAdvantage.RequireCandidateValidated = true
 	}
-	if !hasFamilyTruncationRelaxSubject {
+	if !presence.hasFamilyTruncationRelaxSubject {
 		cfg.CallCorrection.FamilyPolicy.Truncation.RelaxAdvantage.RequireSubjectUnvalidated = true
 	}
 	if cfg.CallCorrection.FamilyPolicy.Truncation.LengthBonus.Max < 0 {
@@ -1828,10 +1951,10 @@ func Load(path string) (*Config, error) {
 		if cfg.CallCorrection.FamilyPolicy.Truncation.LengthBonus.Max <= 0 {
 			cfg.CallCorrection.FamilyPolicy.Truncation.LengthBonus.Max = 1
 		}
-		if !hasFamilyTruncationLengthBonusCandidate {
+		if !presence.hasFamilyTruncationLengthBonusCandidate {
 			cfg.CallCorrection.FamilyPolicy.Truncation.LengthBonus.RequireCandidateValidated = true
 		}
-		if !hasFamilyTruncationLengthBonusSubject {
+		if !presence.hasFamilyTruncationLengthBonusSubject {
 			cfg.CallCorrection.FamilyPolicy.Truncation.LengthBonus.RequireSubjectUnvalidated = true
 		}
 	}
@@ -1839,14 +1962,14 @@ func Load(path string) (*Config, error) {
 		cfg.CallCorrection.FamilyPolicy.Truncation.Delta2Rails.ExtraConfidencePercent = 0
 	}
 	if cfg.CallCorrection.FamilyPolicy.Truncation.Delta2Rails.Enabled {
-		if !hasFamilyTruncationDelta2Candidate {
+		if !presence.hasFamilyTruncationDelta2Candidate {
 			cfg.CallCorrection.FamilyPolicy.Truncation.Delta2Rails.RequireCandidateValidated = true
 		}
-		if !hasFamilyTruncationDelta2Subject {
+		if !presence.hasFamilyTruncationDelta2Subject {
 			cfg.CallCorrection.FamilyPolicy.Truncation.Delta2Rails.RequireSubjectUnvalidated = false
 		}
 	}
-	if !hasFamilyTelnetSuppressionEnabled {
+	if !presence.hasFamilyTelnetSuppressionEnabled {
 		cfg.CallCorrection.FamilyPolicy.TelnetSuppression.Enabled = true
 	}
 	if cfg.CallCorrection.FamilyPolicy.TelnetSuppression.WindowSeconds <= 0 {
@@ -1869,11 +1992,9 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.StabilizerTimeoutAction == "" {
 		cfg.CallCorrection.StabilizerTimeoutAction = "release"
 	}
-	switch cfg.CallCorrection.StabilizerTimeoutAction {
-	case "release", "suppress":
-	default:
-		return nil, fmt.Errorf("invalid call_correction.stabilizer_timeout_action %q (expected release or suppress)", cfg.CallCorrection.StabilizerTimeoutAction)
-	}
+}
+
+func normalizeCallCorrectionWeightsAndAdaptiveConfig(cfg *Config, presence loadRawPresence) {
 	if cfg.CallCorrection.MorseWeights.Insert <= 0 {
 		cfg.CallCorrection.MorseWeights.Insert = 1
 	}
@@ -1910,7 +2031,6 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.AdaptiveRefresh.MinSpotsSinceLastRefresh <= 0 {
 		cfg.CallCorrection.AdaptiveRefresh.MinSpotsSinceLastRefresh = 1000
 	}
-	// Adaptive min_reports defaults (per band-group activity)
 	if cfg.CallCorrection.AdaptiveMinReports.WindowMinutes <= 0 {
 		cfg.CallCorrection.AdaptiveMinReports.WindowMinutes = 10
 	}
@@ -1920,7 +2040,7 @@ func Load(path string) (*Config, error) {
 	if cfg.CallCorrection.AdaptiveMinReports.HysteresisWindows <= 0 {
 		cfg.CallCorrection.AdaptiveMinReports.HysteresisWindows = 2
 	}
-	if !cfg.CallCorrection.AdaptiveMinReports.Enabled && !hasAdaptiveMinReportsEnabled {
+	if !cfg.CallCorrection.AdaptiveMinReports.Enabled && !presence.hasAdaptiveMinReportsEnabled {
 		cfg.CallCorrection.AdaptiveMinReports.Enabled = true
 	}
 	if len(cfg.CallCorrection.AdaptiveMinReports.Groups) == 0 {
@@ -1959,12 +2079,27 @@ func Load(path string) (*Config, error) {
 		cfg.CallCorrection.BandStateOverrides,
 		cfg.CallCorrection.FrequencyToleranceHz,
 	)
+}
+
+func validateCallCorrectionStabilizerTimeoutAction(cfg *Config) error {
+	switch cfg.CallCorrection.StabilizerTimeoutAction {
+	case "release", "suppress":
+		return nil
+	default:
+		return fmt.Errorf("invalid call_correction.stabilizer_timeout_action %q (expected release or suppress)", cfg.CallCorrection.StabilizerTimeoutAction)
+	}
+}
+
+func normalizeCallCacheConfig(cfg *Config) {
 	if cfg.CallCache.Size <= 0 {
 		cfg.CallCache.Size = 4096
 	}
 	if cfg.CallCache.TTLSeconds <= 0 {
 		cfg.CallCache.TTLSeconds = 600
 	}
+}
+
+func normalizeTelnetConfig(cfg *Config) error {
 	if cfg.Telnet.BroadcastQueue <= 0 {
 		cfg.Telnet.BroadcastQueue = 2048
 	}
@@ -2071,7 +2206,7 @@ func Load(path string) (*Config, error) {
 		cfg.Telnet.DropExtremeRate = 0.80
 	}
 	if cfg.Telnet.DropExtremeRate > 1 {
-		return nil, fmt.Errorf("invalid telnet.drop_extreme_rate %.2f (must be 0 < rate <= 1)", cfg.Telnet.DropExtremeRate)
+		return fmt.Errorf("invalid telnet.drop_extreme_rate %.2f (must be 0 < rate <= 1)", cfg.Telnet.DropExtremeRate)
 	}
 	if cfg.Telnet.DropExtremeWindowSeconds <= 0 {
 		cfg.Telnet.DropExtremeWindowSeconds = 30
@@ -2083,34 +2218,42 @@ func Load(path string) (*Config, error) {
 		cfg.Telnet.NearbyLoginWarning = "NEARBY filter is ON. Disable NEARBY if you want to use regular location filters"
 	}
 	if cfg.Telnet.OutputLineLength < 65 {
-		return nil, fmt.Errorf("invalid telnet.output_line_length %d (minimum 65)", cfg.Telnet.OutputLineLength)
+		return fmt.Errorf("invalid telnet.output_line_length %d (minimum 65)", cfg.Telnet.OutputLineLength)
 	}
 	if transport, ok := normalizeTelnetTransport(cfg.Telnet.Transport); ok {
 		cfg.Telnet.Transport = transport
 	} else {
-		return nil, fmt.Errorf("invalid telnet.transport %q (expected %q or %q)", cfg.Telnet.Transport, TelnetTransportNative, TelnetTransportZiutek)
+		return fmt.Errorf("invalid telnet.transport %q (expected %q or %q)", cfg.Telnet.Transport, TelnetTransportNative, TelnetTransportZiutek)
 	}
 	if echoMode, ok := normalizeTelnetEchoMode(cfg.Telnet.EchoMode); ok {
 		cfg.Telnet.EchoMode = echoMode
 	} else {
-		return nil, fmt.Errorf("invalid telnet.echo_mode %q (expected %q, %q, or %q)", cfg.Telnet.EchoMode, TelnetEchoServer, TelnetEchoLocal, TelnetEchoOff)
+		return fmt.Errorf("invalid telnet.echo_mode %q (expected %q, %q, or %q)", cfg.Telnet.EchoMode, TelnetEchoServer, TelnetEchoLocal, TelnetEchoOff)
 	}
+	return nil
+}
+
+func normalizeFeedTransportConfig(cfg *Config) error {
 	// Provide operator-facing telnet prompts even when omitted from YAML.
 	if transport, ok := normalizeTelnetTransport(cfg.RBN.TelnetTransport); ok {
 		cfg.RBN.TelnetTransport = transport
 	} else {
-		return nil, fmt.Errorf("invalid rbn.telnet_transport %q (expected %q or %q)", cfg.RBN.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
+		return fmt.Errorf("invalid rbn.telnet_transport %q (expected %q or %q)", cfg.RBN.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
 	}
 	if transport, ok := normalizeTelnetTransport(cfg.RBNDigital.TelnetTransport); ok {
 		cfg.RBNDigital.TelnetTransport = transport
 	} else {
-		return nil, fmt.Errorf("invalid rbn_digital.telnet_transport %q (expected %q or %q)", cfg.RBNDigital.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
+		return fmt.Errorf("invalid rbn_digital.telnet_transport %q (expected %q or %q)", cfg.RBNDigital.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
 	}
 	if transport, ok := normalizeTelnetTransport(cfg.HumanTelnet.TelnetTransport); ok {
 		cfg.HumanTelnet.TelnetTransport = transport
 	} else {
-		return nil, fmt.Errorf("invalid human_telnet.telnet_transport %q (expected %q or %q)", cfg.HumanTelnet.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
+		return fmt.Errorf("invalid human_telnet.telnet_transport %q (expected %q or %q)", cfg.HumanTelnet.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
 	}
+	return nil
+}
+
+func normalizePeeringConfig(cfg *Config) error {
 	if strings.TrimSpace(cfg.Peering.LocalCallsign) == "" {
 		cfg.Peering.LocalCallsign = cfg.Server.NodeID
 	}
@@ -2138,7 +2281,7 @@ func Load(path string) (*Config, error) {
 	if transport, ok := normalizeTelnetTransport(cfg.Peering.TelnetTransport); ok {
 		cfg.Peering.TelnetTransport = transport
 	} else {
-		return nil, fmt.Errorf("invalid peering.telnet_transport %q (expected %q or %q)", cfg.Peering.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
+		return fmt.Errorf("invalid peering.telnet_transport %q (expected %q or %q)", cfg.Peering.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
 	}
 	if cfg.Peering.KeepaliveSeconds <= 0 {
 		// Default to a short heartbeat to keep remote DXSpider peers from idling us out.
@@ -2186,9 +2329,10 @@ func Load(path string) (*Config, error) {
 	if cfg.Peering.Topology.PersistIntervalSeconds <= 0 {
 		cfg.Peering.Topology.PersistIntervalSeconds = 300
 	}
-	// Keep outbound peer enablement explicit: omitted or false stays disabled.
-	// This avoids accidental dial loops for placeholder entries.
+	return nil
+}
 
+func normalizeSignalPolicyConfig(cfg *Config) {
 	// Harmonic guardrails ensure suppression logic runs with bounded windows and tolerances.
 	if cfg.Harmonics.RecencySeconds <= 0 {
 		cfg.Harmonics.RecencySeconds = 120
@@ -2239,7 +2383,19 @@ func Load(path string) (*Config, error) {
 	if cfg.ModeInference.DigitalCacheSize <= 0 {
 		cfg.ModeInference.DigitalCacheSize = 5000
 	}
+}
 
+func normalizeReferenceDataConfig(cfg *Config, presence loadRawPresence) error {
+	normalizeCTYConfig(cfg, presence)
+	normalizeKnownCallsConfig(cfg)
+	if err := normalizeFCCULSConfig(cfg); err != nil {
+		return err
+	}
+	normalizeGridConfig(cfg)
+	return nil
+}
+
+func normalizeCTYConfig(cfg *Config, presence loadRawPresence) {
 	if strings.TrimSpace(cfg.CTY.File) == "" {
 		cfg.CTY.File = "data/cty/cty.plist"
 	}
@@ -2249,16 +2405,21 @@ func Load(path string) (*Config, error) {
 	if cfg.CTY.RefreshUTC == "" {
 		cfg.CTY.RefreshUTC = "00:45"
 	}
-	if !ctyEnabledSet {
+	if !presence.ctyEnabledSet {
 		cfg.CTY.Enabled = true
 	}
+}
 
+func normalizeKnownCallsConfig(cfg *Config) {
 	if strings.TrimSpace(cfg.KnownCalls.File) == "" {
 		cfg.KnownCalls.File = "data/scp/MASTER.SCP"
 	}
 	if cfg.KnownCalls.RefreshUTC == "" {
 		cfg.KnownCalls.RefreshUTC = "01:00"
 	}
+}
+
+func normalizeFCCULSConfig(cfg *Config) error {
 	// ULS fetch defaults keep the downloader pointed at the official FCC archive
 	// and provide safe on-disk locations when omitted.
 	if strings.TrimSpace(cfg.FCCULS.URL) == "" {
@@ -2283,8 +2444,12 @@ func Load(path string) (*Config, error) {
 		cfg.FCCULS.CacheTTLSeconds = 21600
 	}
 	if _, err := time.Parse("15:04", cfg.FCCULS.RefreshUTC); err != nil {
-		return nil, fmt.Errorf("invalid FCC ULS refresh time %q: %w", cfg.FCCULS.RefreshUTC, err)
+		return fmt.Errorf("invalid FCC ULS refresh time %q: %w", cfg.FCCULS.RefreshUTC, err)
 	}
+	return nil
+}
+
+func normalizeGridConfig(cfg *Config) {
 	// Grid store defaults keep the local cache warm and bound persistence churn.
 	if strings.TrimSpace(cfg.GridDBPath) == "" {
 		cfg.GridDBPath = "data/grids/pebble"
@@ -2332,7 +2497,9 @@ func Load(path string) (*Config, error) {
 	if cfg.GridPreflightTimeoutMS <= 0 {
 		cfg.GridPreflightTimeoutMS = 2000
 	}
+}
 
+func normalizeDedupAndBufferConfig(cfg *Config, presence loadRawPresence) {
 	// Normalize dedup settings so the window drives behavior.
 	if cfg.Dedup.ClusterWindowSeconds < 0 {
 		cfg.Dedup.ClusterWindowSeconds = 0
@@ -2346,33 +2513,33 @@ func Load(path string) (*Config, error) {
 	if cfg.Dedup.SecondarySlowWindowSeconds < 0 {
 		cfg.Dedup.SecondarySlowWindowSeconds = 0
 	}
-	if !hasSecondaryFastWindow && cfg.Dedup.SecondaryFastWindowSeconds == 0 {
+	if !presence.hasSecondaryFastWindow && cfg.Dedup.SecondaryFastWindowSeconds == 0 {
 		cfg.Dedup.SecondaryFastWindowSeconds = 120
 	}
-	if !hasSecondaryMedWindow && cfg.Dedup.SecondaryMedWindowSeconds == 0 {
+	if !presence.hasSecondaryMedWindow && cfg.Dedup.SecondaryMedWindowSeconds == 0 {
 		cfg.Dedup.SecondaryMedWindowSeconds = 300
 	}
-	if !hasSecondarySlowWindow && cfg.Dedup.SecondarySlowWindowSeconds == 0 {
+	if !presence.hasSecondarySlowWindow && cfg.Dedup.SecondarySlowWindowSeconds == 0 {
 		cfg.Dedup.SecondarySlowWindowSeconds = 480
 	}
-	if !cfg.Dedup.SecondaryFastPreferStrong && !hasSecondaryFastPrefer && cfg.Dedup.PreferStrongerSNR {
+	if !cfg.Dedup.SecondaryFastPreferStrong && !presence.hasSecondaryFastPrefer && cfg.Dedup.PreferStrongerSNR {
 		cfg.Dedup.SecondaryFastPreferStrong = cfg.Dedup.PreferStrongerSNR
 	}
-	if !cfg.Dedup.SecondaryMedPreferStrong && !hasSecondaryMedPrefer && cfg.Dedup.PreferStrongerSNR {
+	if !cfg.Dedup.SecondaryMedPreferStrong && !presence.hasSecondaryMedPrefer && cfg.Dedup.PreferStrongerSNR {
 		cfg.Dedup.SecondaryMedPreferStrong = cfg.Dedup.PreferStrongerSNR
 	}
-	if !cfg.Dedup.SecondarySlowPreferStrong && !hasSecondarySlowPrefer && cfg.Dedup.PreferStrongerSNR {
+	if !cfg.Dedup.SecondarySlowPreferStrong && !presence.hasSecondarySlowPrefer && cfg.Dedup.PreferStrongerSNR {
 		cfg.Dedup.SecondarySlowPreferStrong = cfg.Dedup.PreferStrongerSNR
 	}
 	if cfg.Dedup.OutputBufferSize <= 0 {
 		cfg.Dedup.OutputBufferSize = 1000
 	}
-	if strings.TrimSpace(cfg.CTY.File) == "" {
-		cfg.CTY.File = "data/cty/cty.plist"
-	}
 	if cfg.Buffer.Capacity <= 0 {
 		cfg.Buffer.Capacity = 300000
 	}
+}
+
+func normalizeSkewConfig(cfg *Config) error {
 	// Skew fetch defaults keep the daily scheduler pointed at SM7IUN's published list.
 	if strings.TrimSpace(cfg.Skew.URL) == "" {
 		cfg.Skew.URL = "https://sm7iun.se/rbnskew.csv"
@@ -2387,158 +2554,161 @@ func Load(path string) (*Config, error) {
 		cfg.Skew.RefreshUTC = "00:30"
 	}
 	if _, err := time.Parse("15:04", cfg.Skew.RefreshUTC); err != nil {
-		return nil, fmt.Errorf("invalid skew refresh time %q: %w", cfg.Skew.RefreshUTC, err)
+		return fmt.Errorf("invalid skew refresh time %q: %w", cfg.Skew.RefreshUTC, err)
 	}
+	return nil
+}
 
-	if cfg.Reputation.Enabled {
-		if strings.TrimSpace(cfg.Reputation.IPInfoSnapshotPath) == "" {
-			cfg.Reputation.IPInfoSnapshotPath = "data/ipinfo/location.csv"
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoAPIBaseURL) == "" {
-			cfg.Reputation.IPInfoAPIBaseURL = "https://ipinfo.io"
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoDownloadPath) == "" {
-			cfg.Reputation.IPInfoDownloadPath = "data/ipinfo/ipinfo_lite.csv.gz"
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoDownloadURL) == "" {
-			cfg.Reputation.IPInfoDownloadURL = "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=$TOKEN"
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoDownloadToken) == "" {
-			cfg.Reputation.IPInfoDownloadToken = "8a74cd36c1905b"
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoRefreshUTC) == "" {
-			cfg.Reputation.IPInfoRefreshUTC = "03:00"
-		}
-		if cfg.Reputation.IPInfoDownloadTimeoutMS <= 0 {
-			cfg.Reputation.IPInfoDownloadTimeoutMS = 15000
-		}
-		if cfg.Reputation.IPInfoImportTimeoutMS <= 0 {
-			cfg.Reputation.IPInfoImportTimeoutMS = 600000
-		}
-		if cfg.Reputation.SnapshotMaxAgeSeconds <= 0 {
-			cfg.Reputation.SnapshotMaxAgeSeconds = 26 * 3600
-		}
-		if strings.TrimSpace(cfg.Reputation.IPInfoPebblePath) == "" {
-			cfg.Reputation.IPInfoPebblePath = "data/ipinfo/pebble"
-		}
-		if cfg.Reputation.IPInfoPebbleCacheMB <= 0 {
-			cfg.Reputation.IPInfoPebbleCacheMB = 64
-		}
-		if !yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4") {
-			cfg.Reputation.IPInfoPebbleLoadIPv4 = true
-		}
-		if !yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import") {
-			cfg.Reputation.IPInfoDeleteCSVAfterImport = true
-		}
-		if !yamlKeyPresent(raw, "reputation", "ipinfo_keep_gzip") {
-			cfg.Reputation.IPInfoKeepGzip = true
-		}
-		if !yamlKeyPresent(raw, "reputation", "ipinfo_pebble_cleanup") {
-			cfg.Reputation.IPInfoPebbleCleanup = true
-		}
-		if !yamlKeyPresent(raw, "reputation", "ipinfo_pebble_compact") {
-			cfg.Reputation.IPInfoPebbleCompact = true
-		}
-		if cfg.Reputation.IPInfoAPITimeoutMS <= 0 {
-			cfg.Reputation.IPInfoAPITimeoutMS = 250
-		}
-		if cfg.Reputation.CymruLookupTimeoutMS <= 0 {
-			cfg.Reputation.CymruLookupTimeoutMS = 250
-		}
-		if cfg.Reputation.CymruCacheTTLSeconds <= 0 {
-			cfg.Reputation.CymruCacheTTLSeconds = 86400
-		}
-		if cfg.Reputation.CymruNegativeTTLSeconds <= 0 {
-			cfg.Reputation.CymruNegativeTTLSeconds = 300
-		}
-		if cfg.Reputation.CymruWorkers <= 0 {
-			cfg.Reputation.CymruWorkers = 2
-		}
-		if cfg.Reputation.InitialWaitSeconds <= 0 {
-			cfg.Reputation.InitialWaitSeconds = 60
-		}
-		if cfg.Reputation.RampWindowSeconds <= 0 {
-			cfg.Reputation.RampWindowSeconds = 60
-		}
-		if cfg.Reputation.PerBandStart <= 0 {
-			cfg.Reputation.PerBandStart = 1
-		}
-		if cfg.Reputation.PerBandCap <= 0 {
-			cfg.Reputation.PerBandCap = 5
-		}
-		if cfg.Reputation.TotalCapStart <= 0 {
-			cfg.Reputation.TotalCapStart = 5
-		}
-		if cfg.Reputation.TotalCapPostRamp <= 0 {
-			cfg.Reputation.TotalCapPostRamp = 10
-		}
-		if cfg.Reputation.TotalCapRampDelaySeconds < 0 {
-			cfg.Reputation.TotalCapRampDelaySeconds = 0
-		}
-		if cfg.Reputation.CountryMismatchExtraWaitSeconds <= 0 {
-			cfg.Reputation.CountryMismatchExtraWaitSeconds = 60
-		}
-		if cfg.Reputation.DisagreementPenaltySeconds <= 0 {
-			cfg.Reputation.DisagreementPenaltySeconds = 60
-		}
-		if cfg.Reputation.UnknownPenaltySeconds <= 0 {
-			cfg.Reputation.UnknownPenaltySeconds = 60
-		}
-		if !cfg.Reputation.ResetOnNewASN {
-			cfg.Reputation.ResetOnNewASN = true
-		}
-		if !cfg.Reputation.DisagreementResetOnNew {
-			cfg.Reputation.DisagreementResetOnNew = true
-		}
-		if strings.TrimSpace(cfg.Reputation.CountryFlipScope) == "" {
-			cfg.Reputation.CountryFlipScope = "country"
-		}
-		if cfg.Reputation.MaxASNHistory <= 0 {
-			cfg.Reputation.MaxASNHistory = 5
-		}
-		if cfg.Reputation.MaxCountryHistory <= 0 {
-			cfg.Reputation.MaxCountryHistory = 5
-		}
-		if cfg.Reputation.StateTTLSeconds <= 0 {
-			cfg.Reputation.StateTTLSeconds = 7200
-		}
-		if cfg.Reputation.StateMaxEntries <= 0 {
-			cfg.Reputation.StateMaxEntries = 100000
-		}
-		if cfg.Reputation.PrefixTTLSeconds <= 0 {
-			cfg.Reputation.PrefixTTLSeconds = 3600
-		}
-		if cfg.Reputation.PrefixMaxEntries <= 0 {
-			cfg.Reputation.PrefixMaxEntries = 200000
-		}
-		if cfg.Reputation.LookupCacheTTLSeconds <= 0 {
-			cfg.Reputation.LookupCacheTTLSeconds = 86400
-		}
-		if cfg.Reputation.LookupCacheMaxEntries <= 0 {
-			cfg.Reputation.LookupCacheMaxEntries = 200000
-		}
-		if cfg.Reputation.IPv4BucketSize <= 0 {
-			cfg.Reputation.IPv4BucketSize = 64
-		}
-		if cfg.Reputation.IPv4BucketRefillPerSec <= 0 {
-			cfg.Reputation.IPv4BucketRefillPerSec = 8
-		}
-		if cfg.Reputation.IPv6BucketSize <= 0 {
-			cfg.Reputation.IPv6BucketSize = 32
-		}
-		if cfg.Reputation.IPv6BucketRefillPerSec <= 0 {
-			cfg.Reputation.IPv6BucketRefillPerSec = 4
-		}
-		if cfg.Reputation.DropLogSampleRate <= 0 {
-			cfg.Reputation.DropLogSampleRate = 1
-		} else if cfg.Reputation.DropLogSampleRate > 1 {
-			cfg.Reputation.DropLogSampleRate = 1
-		}
-		if strings.TrimSpace(cfg.Reputation.ReputationDir) == "" {
-			cfg.Reputation.ReputationDir = "data/reputation"
-		}
+func normalizeReputationConfig(cfg *Config, presence loadRawPresence) {
+	if !cfg.Reputation.Enabled {
+		return
 	}
-	return &cfg, nil
+	if strings.TrimSpace(cfg.Reputation.IPInfoSnapshotPath) == "" {
+		cfg.Reputation.IPInfoSnapshotPath = "data/ipinfo/location.csv"
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoAPIBaseURL) == "" {
+		cfg.Reputation.IPInfoAPIBaseURL = "https://ipinfo.io"
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoDownloadPath) == "" {
+		cfg.Reputation.IPInfoDownloadPath = "data/ipinfo/ipinfo_lite.csv.gz"
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoDownloadURL) == "" {
+		cfg.Reputation.IPInfoDownloadURL = "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=$TOKEN"
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoDownloadToken) == "" {
+		cfg.Reputation.IPInfoDownloadToken = "8a74cd36c1905b"
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoRefreshUTC) == "" {
+		cfg.Reputation.IPInfoRefreshUTC = "03:00"
+	}
+	if cfg.Reputation.IPInfoDownloadTimeoutMS <= 0 {
+		cfg.Reputation.IPInfoDownloadTimeoutMS = 15000
+	}
+	if cfg.Reputation.IPInfoImportTimeoutMS <= 0 {
+		cfg.Reputation.IPInfoImportTimeoutMS = 600000
+	}
+	if cfg.Reputation.SnapshotMaxAgeSeconds <= 0 {
+		cfg.Reputation.SnapshotMaxAgeSeconds = 26 * 3600
+	}
+	if strings.TrimSpace(cfg.Reputation.IPInfoPebblePath) == "" {
+		cfg.Reputation.IPInfoPebblePath = "data/ipinfo/pebble"
+	}
+	if cfg.Reputation.IPInfoPebbleCacheMB <= 0 {
+		cfg.Reputation.IPInfoPebbleCacheMB = 64
+	}
+	if !presence.hasReputationIPInfoPebbleLoadIPv4 {
+		cfg.Reputation.IPInfoPebbleLoadIPv4 = true
+	}
+	if !presence.hasReputationIPInfoDeleteCSVAfterImport {
+		cfg.Reputation.IPInfoDeleteCSVAfterImport = true
+	}
+	if !presence.hasReputationIPInfoKeepGzip {
+		cfg.Reputation.IPInfoKeepGzip = true
+	}
+	if !presence.hasReputationIPInfoPebbleCleanup {
+		cfg.Reputation.IPInfoPebbleCleanup = true
+	}
+	if !presence.hasReputationIPInfoPebbleCompact {
+		cfg.Reputation.IPInfoPebbleCompact = true
+	}
+	if cfg.Reputation.IPInfoAPITimeoutMS <= 0 {
+		cfg.Reputation.IPInfoAPITimeoutMS = 250
+	}
+	if cfg.Reputation.CymruLookupTimeoutMS <= 0 {
+		cfg.Reputation.CymruLookupTimeoutMS = 250
+	}
+	if cfg.Reputation.CymruCacheTTLSeconds <= 0 {
+		cfg.Reputation.CymruCacheTTLSeconds = 86400
+	}
+	if cfg.Reputation.CymruNegativeTTLSeconds <= 0 {
+		cfg.Reputation.CymruNegativeTTLSeconds = 300
+	}
+	if cfg.Reputation.CymruWorkers <= 0 {
+		cfg.Reputation.CymruWorkers = 2
+	}
+	if cfg.Reputation.InitialWaitSeconds <= 0 {
+		cfg.Reputation.InitialWaitSeconds = 60
+	}
+	if cfg.Reputation.RampWindowSeconds <= 0 {
+		cfg.Reputation.RampWindowSeconds = 60
+	}
+	if cfg.Reputation.PerBandStart <= 0 {
+		cfg.Reputation.PerBandStart = 1
+	}
+	if cfg.Reputation.PerBandCap <= 0 {
+		cfg.Reputation.PerBandCap = 5
+	}
+	if cfg.Reputation.TotalCapStart <= 0 {
+		cfg.Reputation.TotalCapStart = 5
+	}
+	if cfg.Reputation.TotalCapPostRamp <= 0 {
+		cfg.Reputation.TotalCapPostRamp = 10
+	}
+	if cfg.Reputation.TotalCapRampDelaySeconds < 0 {
+		cfg.Reputation.TotalCapRampDelaySeconds = 0
+	}
+	if cfg.Reputation.CountryMismatchExtraWaitSeconds <= 0 {
+		cfg.Reputation.CountryMismatchExtraWaitSeconds = 60
+	}
+	if cfg.Reputation.DisagreementPenaltySeconds <= 0 {
+		cfg.Reputation.DisagreementPenaltySeconds = 60
+	}
+	if cfg.Reputation.UnknownPenaltySeconds <= 0 {
+		cfg.Reputation.UnknownPenaltySeconds = 60
+	}
+	if !cfg.Reputation.ResetOnNewASN {
+		cfg.Reputation.ResetOnNewASN = true
+	}
+	if !cfg.Reputation.DisagreementResetOnNew {
+		cfg.Reputation.DisagreementResetOnNew = true
+	}
+	if strings.TrimSpace(cfg.Reputation.CountryFlipScope) == "" {
+		cfg.Reputation.CountryFlipScope = "country"
+	}
+	if cfg.Reputation.MaxASNHistory <= 0 {
+		cfg.Reputation.MaxASNHistory = 5
+	}
+	if cfg.Reputation.MaxCountryHistory <= 0 {
+		cfg.Reputation.MaxCountryHistory = 5
+	}
+	if cfg.Reputation.StateTTLSeconds <= 0 {
+		cfg.Reputation.StateTTLSeconds = 7200
+	}
+	if cfg.Reputation.StateMaxEntries <= 0 {
+		cfg.Reputation.StateMaxEntries = 100000
+	}
+	if cfg.Reputation.PrefixTTLSeconds <= 0 {
+		cfg.Reputation.PrefixTTLSeconds = 3600
+	}
+	if cfg.Reputation.PrefixMaxEntries <= 0 {
+		cfg.Reputation.PrefixMaxEntries = 200000
+	}
+	if cfg.Reputation.LookupCacheTTLSeconds <= 0 {
+		cfg.Reputation.LookupCacheTTLSeconds = 86400
+	}
+	if cfg.Reputation.LookupCacheMaxEntries <= 0 {
+		cfg.Reputation.LookupCacheMaxEntries = 200000
+	}
+	if cfg.Reputation.IPv4BucketSize <= 0 {
+		cfg.Reputation.IPv4BucketSize = 64
+	}
+	if cfg.Reputation.IPv4BucketRefillPerSec <= 0 {
+		cfg.Reputation.IPv4BucketRefillPerSec = 8
+	}
+	if cfg.Reputation.IPv6BucketSize <= 0 {
+		cfg.Reputation.IPv6BucketSize = 32
+	}
+	if cfg.Reputation.IPv6BucketRefillPerSec <= 0 {
+		cfg.Reputation.IPv6BucketRefillPerSec = 4
+	}
+	if cfg.Reputation.DropLogSampleRate <= 0 {
+		cfg.Reputation.DropLogSampleRate = 1
+	} else if cfg.Reputation.DropLogSampleRate > 1 {
+		cfg.Reputation.DropLogSampleRate = 1
+	}
+	if strings.TrimSpace(cfg.Reputation.ReputationDir) == "" {
+		cfg.Reputation.ReputationDir = "data/reputation"
+	}
 }
 
 // Purpose: Load and merge all YAML files from a config directory.

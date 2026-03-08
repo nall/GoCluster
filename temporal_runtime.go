@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"time"
 
+	"dxcluster/config"
 	"dxcluster/internal/correctionflow"
 	"dxcluster/spot"
 )
@@ -32,6 +33,18 @@ type runtimeTemporalItem struct {
 }
 
 type runtimeTemporalHeap []*runtimeTemporalItem
+
+// runtimeTemporalController owns main-loop temporal pending state, heap order,
+// and deterministic request ids. It is used only by the single output
+// goroutine; the decoder retains its own internal locking as before.
+type runtimeTemporalController struct {
+	enabled bool
+	decoder *correctionflow.TemporalDecoder
+	pending map[uint64]runtimeTemporalPending
+	queue   runtimeTemporalHeap
+	nextID  uint64
+	seq     uint64
+}
 
 func (h runtimeTemporalHeap) Len() int { return len(h) }
 
@@ -91,4 +104,110 @@ func runtimeTemporalNextDue(h *runtimeTemporalHeap) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return head.due, true
+}
+
+func newRuntimeTemporalController(cfg config.CallCorrectionConfig) *runtimeTemporalController {
+	controller := &runtimeTemporalController{}
+	if !cfg.Enabled || !cfg.TemporalDecoder.Enabled {
+		return controller
+	}
+	controller.decoder = correctionflow.NewTemporalDecoder(cfg)
+	if controller.decoder == nil || !controller.decoder.Enabled() {
+		controller.decoder = nil
+		return controller
+	}
+	controller.enabled = true
+	controller.pending = make(map[uint64]runtimeTemporalPending)
+	controller.nextID = 1
+	heap.Init(&controller.queue)
+	return controller
+}
+
+func (c *runtimeTemporalController) Enabled() bool {
+	return c != nil && c.enabled && c.decoder != nil
+}
+
+func (c *runtimeTemporalController) Observe(
+	observedAt time.Time,
+	key spot.ResolverSignalKey,
+	subject string,
+	pending runtimeTemporalPending,
+) (bool, uint64, string) {
+	if !c.Enabled() {
+		return false, 0, "disabled"
+	}
+	observedAt = observedAt.UTC()
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	id := c.nextID
+	c.nextID++
+	accepted, reason := c.decoder.Observe(correctionflow.TemporalObservation{
+		ID:          id,
+		ObservedAt:  observedAt,
+		Key:         key,
+		SubjectCall: subject,
+		Selection:   pending.selection,
+	})
+	if !accepted {
+		return false, id, reason
+	}
+	pending.id = id
+	pending.maxAt = observedAt.Add(c.decoder.MaxWaitDuration())
+	c.pending[id] = pending
+	heap.Push(&c.queue, &runtimeTemporalItem{
+		id:  id,
+		due: observedAt.Add(c.decoder.LagDuration()),
+		seq: c.seq,
+	})
+	c.seq++
+	return true, id, ""
+}
+
+func (c *runtimeTemporalController) Drain(now time.Time, force bool) []runtimeTemporalRelease {
+	if !c.Enabled() {
+		return nil
+	}
+	now = now.UTC()
+	due := popRuntimeTemporalDue(&c.queue, now)
+	if len(due) == 0 {
+		return nil
+	}
+	releases := make([]runtimeTemporalRelease, 0, len(due))
+	for _, item := range due {
+		if item == nil {
+			continue
+		}
+		pending, ok := c.pending[item.id]
+		if !ok || pending.spot == nil {
+			continue
+		}
+		decision := c.decoder.Evaluate(item.id, now, force)
+		if decision.Action == correctionflow.TemporalDecisionActionDefer {
+			nextDue := pending.maxAt
+			if nextDue.Before(now) {
+				nextDue = now
+			}
+			heap.Push(&c.queue, &runtimeTemporalItem{
+				id:  item.id,
+				due: nextDue,
+				seq: c.seq,
+			})
+			c.seq++
+			continue
+		}
+		delete(c.pending, item.id)
+		releases = append(releases, runtimeTemporalRelease{
+			pending:  pending,
+			decision: decision,
+		})
+	}
+	return releases
+}
+
+func (c *runtimeTemporalController) NextDue() (time.Time, bool) {
+	if !c.Enabled() {
+		return time.Time{}, false
+	}
+	return runtimeTemporalNextDue(&c.queue)
 }
