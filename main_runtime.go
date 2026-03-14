@@ -947,7 +947,7 @@ func (r *clusterRuntime) buildTelnetServerOptions() telnet.ServerOptions {
 		RejectWriteDeadline:      time.Duration(r.cfg.Telnet.RejectWriteDeadlineMS) * time.Millisecond,
 		Transport:                r.cfg.Telnet.Transport,
 		EchoMode:                 r.cfg.Telnet.EchoMode,
-		SkipHandshake:            r.cfg.Telnet.SkipHandshake,
+		HandshakeMode:            string(r.cfg.Telnet.SkipHandshake),
 		ReadIdleTimeout:          time.Duration(r.cfg.Telnet.ReadIdleTimeoutSeconds) * time.Second,
 		LoginTimeout:             time.Duration(r.cfg.Telnet.LoginTimeoutSeconds) * time.Second,
 		MaxPreloginSessions:      r.cfg.Telnet.MaxPreloginSessions,

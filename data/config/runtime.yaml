@@ -24,13 +24,11 @@ telnet:
   admission_log_interval_seconds: 10                     # Aggregate admission reject summaries over this interval
   admission_log_sample_rate: 0.05                        # Sample rate for per-event reject logs (0..1)
   admission_log_max_reason_lines_per_interval: 20        # Max sampled reject lines emitted per interval
-  welcome_message: |
-    <CLUSTER> DX Telnet cluster
-    Uptime: <UPTIME> | Users: <USER_COUNT>
-    IP address reputation powered by IPinfo
-    
-    Please enter your call:
+  welcome_message: ""
+  login_prompt: "login: "
   login_greeting: |
+    Hello <CALL>, this is <CLUSTER>
+    Cluster: Users <USER_COUNT>  Uptime <UPTIME>
     Last login: <LAST_LOGIN> from <LAST_IP>
     Current commands: <DIALECT> (<DIALECT_SOURCE>).
     Use DIALECT LIST or DIALECT <DIALECT_DEFAULT> to change.
@@ -67,7 +65,7 @@ telnet:
   reject_workers: 2                # Async reject writers so accept loop never blocks on reject I/O
   reject_queue_size: 1024          # Bounded queue for reject jobs (queue full => immediate close without banner)
   reject_write_deadline_ms: 500    # Deadline for writing reject banner before close
-  skip_handshake: false            # Set true to disable Telnet option negotiation (raw TCP clients); IAC bytes are still stripped from input
+  skip_handshake: "minimal"        # Handshake mode: full, minimal, or none. Legacy true/false still load as none/full.
   login_line_limit: 32             # Max bytes accepted for the initial login prompt (DoS guardrail)
   command_line_limit: 128          # Max bytes accepted for post-login commands (filters, etc.)
   output_line_length: 76           # DX cluster output line length (no CRLF, 1-based columns, minimum 65)

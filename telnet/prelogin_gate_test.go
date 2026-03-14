@@ -137,7 +137,7 @@ func TestTryAcquirePreloginEvictsIdleStateWhenTrackerFull(t *testing.T) {
 
 func TestHandleClientPreloginTimeoutReleasesTicket(t *testing.T) {
 	s := NewServer(ServerOptions{
-		SkipHandshake:            true,
+		HandshakeMode:            telnetHandshakeNone,
 		WelcomeMessage:           "",
 		LoginPrompt:              "",
 		PreloginTimeout:          20 * time.Millisecond,

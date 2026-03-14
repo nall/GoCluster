@@ -26,6 +26,13 @@ const (
 	TelnetEchoLocal = "local"
 	// TelnetEchoOff disables server echo and requests client echo off (best-effort).
 	TelnetEchoOff = "off"
+	// TelnetHandshakeFull preserves the historical full telnet option negotiation.
+	TelnetHandshakeFull = "full"
+	// TelnetHandshakeMinimal emits a reduced IAC prelude intended to avoid clients
+	// that render raw DO/DONT bytes while still advertising the core options.
+	TelnetHandshakeMinimal = "minimal"
+	// TelnetHandshakeNone disables all telnet option negotiation.
+	TelnetHandshakeNone = "none"
 )
 
 // Purpose: Normalize and validate the telnet transport setting.
@@ -57,6 +64,43 @@ func normalizeTelnetEchoMode(value string) (string, bool) {
 	switch trimmed {
 	case TelnetEchoServer, TelnetEchoLocal, TelnetEchoOff:
 		return trimmed, true
+	default:
+		return "", false
+	}
+}
+
+// TelnetHandshakeMode controls the raw IAC prelude sent to inbound telnet
+// clients. The YAML key remains `skip_handshake` for backward compatibility:
+// legacy booleans still load and map to explicit modes during normalization.
+type TelnetHandshakeMode string
+
+func (m *TelnetHandshakeMode) UnmarshalYAML(node *yaml.Node) error {
+	if node == nil {
+		*m = ""
+		return nil
+	}
+	if node.Kind != yaml.ScalarNode {
+		return fmt.Errorf("telnet.skip_handshake must be a scalar")
+	}
+	*m = TelnetHandshakeMode(strutil.NormalizeLower(strings.TrimSpace(node.Value)))
+	return nil
+}
+
+// Purpose: Normalize and validate the inbound telnet handshake mode.
+// Key aspects: Defaults omitted values to minimal; accepts legacy bool strings.
+// Upstream: Load config normalization.
+// Downstream: telnet server option wiring and startup logging.
+func normalizeTelnetHandshakeMode(value TelnetHandshakeMode) (TelnetHandshakeMode, bool) {
+	trimmed := strutil.NormalizeLower(string(value))
+	switch trimmed {
+	case "":
+		return TelnetHandshakeMode(TelnetHandshakeMinimal), true
+	case TelnetHandshakeFull, "false":
+		return TelnetHandshakeMode(TelnetHandshakeFull), true
+	case TelnetHandshakeMinimal:
+		return TelnetHandshakeMode(TelnetHandshakeMinimal), true
+	case TelnetHandshakeNone, "true":
+		return TelnetHandshakeMode(TelnetHandshakeNone), true
 	default:
 		return "", false
 	}
@@ -166,8 +210,10 @@ type TelnetConfig struct {
 	WorkerQueue      int    `yaml:"worker_queue_size"`
 	ClientBuffer     int    `yaml:"client_buffer_size"`
 	// ControlQueueSize bounds per-client control output (bulletins, prompts, keepalives).
-	ControlQueueSize int  `yaml:"control_queue_size"`
-	SkipHandshake    bool `yaml:"skip_handshake"`
+	ControlQueueSize int `yaml:"control_queue_size"`
+	// SkipHandshake retains the historical YAML key name while now accepting
+	// `full`, `minimal`, or `none`. Legacy booleans still map to `full`/`none`.
+	SkipHandshake TelnetHandshakeMode `yaml:"skip_handshake"`
 	// RejectWorkers configures asynchronous pre-auth reject writers.
 	RejectWorkers int `yaml:"reject_workers"`
 	// RejectQueueSize bounds queued reject jobs so accept never blocks on reject I/O.
@@ -2230,6 +2276,11 @@ func normalizeTelnetConfig(cfg *Config) error {
 	} else {
 		return fmt.Errorf("invalid telnet.echo_mode %q (expected %q, %q, or %q)", cfg.Telnet.EchoMode, TelnetEchoServer, TelnetEchoLocal, TelnetEchoOff)
 	}
+	if handshakeMode, ok := normalizeTelnetHandshakeMode(cfg.Telnet.SkipHandshake); ok {
+		cfg.Telnet.SkipHandshake = handshakeMode
+	} else {
+		return fmt.Errorf("invalid telnet.skip_handshake %q (expected %q, %q, or %q; legacy booleans false/true are also accepted)", cfg.Telnet.SkipHandshake, TelnetHandshakeFull, TelnetHandshakeMinimal, TelnetHandshakeNone)
+	}
 	return nil
 }
 
@@ -2784,7 +2835,7 @@ func (c *Config) Print() {
 	if c.Telnet.BroadcastWorkers > 0 {
 		workerDesc = fmt.Sprintf("%d", c.Telnet.BroadcastWorkers)
 	}
-	fmt.Printf("Telnet: port %d (transport=%s echo_mode=%s broadcast workers=%s queue=%d worker_queue=%d client_buffer=%d skip_handshake=%t)\n",
+	fmt.Printf("Telnet: port %d (transport=%s echo_mode=%s broadcast workers=%s queue=%d worker_queue=%d client_buffer=%d skip_handshake=%s)\n",
 		c.Telnet.Port,
 		c.Telnet.Transport,
 		c.Telnet.EchoMode,

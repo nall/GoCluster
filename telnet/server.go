@@ -174,7 +174,7 @@ type Server struct {
 	rejectQueue           chan rejectJob                             // Bounded async reject queue
 	rejectWorkerOnce      sync.Once                                  // Ensures reject workers start once
 	processor             *commands.Processor                        // Command processor for user commands
-	skipHandshake         bool                                       // When true, omit Telnet IAC negotiation
+	handshakeMode         string                                     // Telnet IAC negotiation policy ("full", "minimal", "none")
 	transport             string                                     // Telnet transport backend ("native" or "ziutek")
 	useZiutek             bool                                       // True when the external telnet transport is enabled
 	wrapConnFn            func(net.Conn) (net.Conn, net.Conn, error) // Optional transport wrapper hook for deterministic tests
@@ -1616,9 +1616,12 @@ const (
 )
 
 const (
-	telnetEchoServer = "server"
-	telnetEchoLocal  = "local"
-	telnetEchoOff    = "off"
+	telnetEchoServer       = "server"
+	telnetEchoLocal        = "local"
+	telnetEchoOff          = "off"
+	telnetHandshakeFull    = "full"
+	telnetHandshakeMinimal = "minimal"
+	telnetHandshakeNone    = "none"
 )
 
 const (
@@ -1704,7 +1707,7 @@ type ServerOptions struct {
 	RejectQueueSize          int
 	RejectWriteDeadline      time.Duration
 	KeepaliveSeconds         int
-	SkipHandshake            bool
+	HandshakeMode            string
 	Transport                string
 	EchoMode                 string
 	ReadIdleTimeout          time.Duration
@@ -1779,7 +1782,7 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		keepaliveInterval:     time.Duration(config.KeepaliveSeconds) * time.Second,
 		clientBufferSize:      config.ClientBuffer,
 		controlQueueSize:      config.ControlQueue,
-		skipHandshake:         config.SkipHandshake,
+		handshakeMode:         config.HandshakeMode,
 		transport:             config.Transport,
 		useZiutek:             useZiutek,
 		echoMode:              config.EchoMode,
@@ -1896,6 +1899,7 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 		config.EchoMode = "server"
 	}
 	config.EchoMode = strings.ToLower(strings.TrimSpace(config.EchoMode))
+	config.HandshakeMode = normalizeHandshakeMode(config.HandshakeMode)
 	if config.LoginLineLimit <= 0 {
 		config.LoginLineLimit = defaultLoginLineLimit
 	}
@@ -1984,6 +1988,17 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 		config.NearbyLoginWarning = nearbyLoginWarningMsg
 	}
 	return config
+}
+
+func normalizeHandshakeMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case telnetHandshakeFull:
+		return telnetHandshakeFull
+	case telnetHandshakeNone:
+		return telnetHandshakeNone
+	default:
+		return telnetHandshakeMinimal
+	}
 }
 
 // Start begins listening for telnet connections
@@ -3124,30 +3139,47 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 // predictable across telnet clients. It writes directly to the raw connection
 // to avoid IAC escaping by higher-level telnet transports.
 func (s *Server) negotiateTelnet(client *Client) {
-	if s.skipHandshake || client == nil || client.conn == nil {
+	if client == nil || client.conn == nil {
+		return
+	}
+	mode := telnetHandshakeMinimal
+	if s != nil {
+		mode = normalizeHandshakeMode(s.handshakeMode)
+	}
+	if mode == telnetHandshakeNone {
 		return
 	}
 	conn := client.conn
+
 	// Prefer full-duplex sessions by suppressing go-ahead.
 	sendTelnetOption(conn, WILL, 3)
-	sendTelnetOption(conn, DO, 3)
+
+	if mode == telnetHandshakeFull {
+		sendTelnetOption(conn, DO, 3)
+	}
 
 	switch s.echoMode {
 	case telnetEchoServer:
 		// Server will echo input; ask the client to disable local echo.
 		sendTelnetOption(conn, WILL, 1)
-		sendTelnetOption(conn, DONT, 1)
+		if mode == telnetHandshakeFull {
+			sendTelnetOption(conn, DONT, 1)
+		}
 	case telnetEchoLocal:
 		// Server will not echo; most clients enable local echo in response.
 		sendTelnetOption(conn, WONT, 1)
 	case telnetEchoOff:
 		// Best-effort: request no echo from either side.
 		sendTelnetOption(conn, WONT, 1)
-		sendTelnetOption(conn, DONT, 1)
+		if mode == telnetHandshakeFull {
+			sendTelnetOption(conn, DONT, 1)
+		}
 	default:
 		// Fall back to server echo if the mode is unknown.
 		sendTelnetOption(conn, WILL, 1)
-		sendTelnetOption(conn, DONT, 1)
+		if mode == telnetHandshakeFull {
+			sendTelnetOption(conn, DONT, 1)
+		}
 	}
 }
 
