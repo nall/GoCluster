@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"dxcluster/config"
+	"dxcluster/cty"
 	"dxcluster/spot"
 	"dxcluster/stats"
+	"dxcluster/telnet"
 	"dxcluster/ui"
 )
 
@@ -927,6 +929,97 @@ func TestEvaluateTelnetStabilizerDelayVPassesThrough(t *testing.T) {
 	}
 	if decision.Reason != stabilizerDelayReasonNone {
 		t.Fatalf("expected none reason, got %q", decision.Reason.String())
+	}
+}
+
+func TestEvaluateTelnetStabilizerDelayLocalSelfSpotPassesThrough(t *testing.T) {
+	store := newRecentBandStoreForStabilizerAdmissionTests()
+	cfg := config.CallCorrectionConfig{
+		StabilizerEnabled:            true,
+		StabilizerMaxChecks:          5,
+		StabilizerAmbiguousMaxChecks: 2,
+	}
+	s := spot.NewSpot("K1SELF", "K1SELF", 28400.0, "SSB")
+	s.Confidence = "S"
+	s.EnsureNormalized()
+
+	snapshot := spot.ResolverSnapshot{
+		State:          spot.ResolverStateSplit,
+		TotalReporters: 5,
+	}
+	decision := evaluateTelnetStabilizerDelay(s, store, cfg, time.Now().UTC(), snapshot, true)
+	if decision.ShouldDelay {
+		t.Fatalf("did not expect local self spot to be delayed")
+	}
+	if decision.Reason != stabilizerDelayReasonNone {
+		t.Fatalf("expected none reason, got %q", decision.Reason.String())
+	}
+}
+
+func TestLocalSelfSpotResolverStageForcesVAndAdmitsCustomSCP(t *testing.T) {
+	store, err := spot.OpenCustomSCPStore(spot.CustomSCPOptions{
+		Path:           filepath.Join(t.TempDir(), "scp"),
+		CoreMinScore:   1,
+		CoreMinH3Cells: 1,
+	})
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	cfg := config.CallCorrectionConfig{
+		Enabled: true,
+		CustomSCP: config.CallCorrectionCustomSCPConfig{
+			Enabled: true,
+		},
+		TemporalDecoder: config.CallCorrectionTemporalDecoderConfig{
+			Enabled:             true,
+			Scope:               "all_correction_candidates",
+			LagSeconds:          2,
+			MaxWaitSeconds:      6,
+			BeamSize:            8,
+			MaxObsCandidates:    8,
+			StayBonus:           120,
+			SwitchPenalty:       160,
+			FamilySwitchPenalty: 60,
+			Edit1SwitchPenalty:  90,
+			MinScore:            0,
+			MinMarginScore:      0,
+			OverflowAction:      "fallback_resolver",
+			MaxPending:          100,
+			MaxActiveKeys:       16,
+			MaxEventsPerKey:     32,
+		},
+	}
+	pipeline := &outputPipeline{
+		telnet:        &telnet.Server{},
+		correctionCfg: cfg,
+		ctyLookup: func() *cty.CTYDatabase {
+			return nil
+		},
+		temporal: newRuntimeTemporalController(cfg),
+	}
+
+	s := spot.NewSpot("K1SELF", "K1SELF", 28400.0, "SSB")
+	ctx, ok := pipeline.prepareSpotContext(s)
+	if !ok {
+		t.Fatalf("expected self spot context")
+	}
+	if !pipeline.applyResolverStage(ctx, nil) {
+		t.Fatalf("expected self spot to pass resolver stage")
+	}
+	if s.Confidence != "V" {
+		t.Fatalf("expected V confidence, got %q", s.Confidence)
+	}
+	if _, pending := pipeline.temporal.NextDue(); pending {
+		t.Fatalf("did not expect self spot to enter temporal hold")
+	}
+
+	recordRecentBandObservation(s, nil, store, cfg)
+	if !store.StaticContains("K1SELF") {
+		t.Fatalf("expected V self spot to enter custom_scp static membership")
 	}
 }
 

@@ -68,6 +68,14 @@ func TestShouldPublishLocalSpotForwardEnabledUsesPeerPublishPolicy(t *testing.T)
 	}
 }
 
+func TestShouldPublishLocalSelfSpotWhenForwardingDisabled(t *testing.T) {
+	m := &Manager{cfg: config.PeeringConfig{ForwardSpots: false}}
+	s := spot.NewSpot("K1SELF", "K1SELF", 28400.0, "SSB")
+	if !m.ShouldPublishLocalSpot(s) {
+		t.Fatalf("expected local self spot to remain peer-publish eligible")
+	}
+}
+
 func TestShouldRelayDataFrame(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -1323,6 +1323,9 @@ const (
 // shouldDelayTelnetByStabilizer is a compatibility wrapper used by tests and
 // non-resolver call sites to evaluate baseline stabilizer delay eligibility.
 func shouldDelayTelnetByStabilizer(s *spot.Spot, store spot.RecentSupportStore, cfg config.CallCorrectionConfig, now time.Time) bool {
+	if spot.IsLocalSelfSpot(s) {
+		return false
+	}
 	return correctionflow.ShouldDelayTelnetByStabilizer(s, store, cfg, now)
 }
 
@@ -1334,6 +1337,9 @@ func evaluateTelnetStabilizerDelay(
 	resolverSnapshot spot.ResolverSnapshot,
 	resolverSnapshotOK bool,
 ) stabilizerDelayDecision {
+	if spot.IsLocalSelfSpot(s) {
+		return stabilizerDelayDecision{Reason: stabilizerDelayReasonNone}
+	}
 	return correctionflow.EvaluateStabilizerDelay(s, store, cfg, now, resolverSnapshot, resolverSnapshotOK)
 }
 
@@ -2109,6 +2115,10 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 	selectionOverride *correctionflow.ResolverPrimarySelection,
 ) bool {
 	if spotEntry == nil {
+		return false
+	}
+	if spot.IsLocalSelfSpot(spotEntry) {
+		spotEntry.Confidence = "V"
 		return false
 	}
 	if !spot.IsCallCorrectionCandidate(spotEntry.Mode) {

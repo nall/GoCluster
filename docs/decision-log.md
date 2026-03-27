@@ -65,3 +65,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0053 | Peering Receive-Only Forwarding Knob With Local DX Exception | Accepted | 2026-03-07 | config, peer, main output pipeline | - | - | `docs/decisions/ADR-0053-peering-receive-only-forwarding-knob.md` |
 | ADR-0054 | Peering Control-Plane Priority and Local-Acceptance Relay Gate | Accepted | 2026-03-07 | peer | - | - | `docs/decisions/ADR-0054-peering-control-priority-and-local-acceptance-relay.md` |
 | ADR-0055 | FT2 Explicit Mode Support and Filter Contract | Accepted | 2026-03-27 | spot, pskreporter, filter, telnet, commands, docs | - | - | `docs/decisions/ADR-0055-ft2-explicit-mode-support-and-filter-contract.md` |
+| ADR-0056 | Local Self-Spots Use an Operator-Authoritative V Path | Accepted | 2026-03-27 | commands, main output pipeline, telnet, custom_scp, docs | - | - | `docs/decisions/ADR-0056-local-self-spots-operator-authoritative-v-path.md` |

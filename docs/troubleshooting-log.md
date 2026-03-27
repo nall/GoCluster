@@ -24,3 +24,4 @@ This index tracks troubleshooting records (`TSR-XXXX`) that can lead to ADRs.
 | TSR-0011 | Peering Enabled Flag Overridden by Host/Port Auto-Enable | Resolved | 2026-03-03 | config, peer | ADR-0047 | `docs/troubleshooting/TSR-0011-peering-enabled-flag-override.md` |
 | TSR-0012 | PC92 Hop Suffix Amplification and Overlong Diagnostics Gap | Resolved | 2026-03-05 | peer/protocol, peer/manager, peer/reader | ADR-0050 | `docs/troubleshooting/TSR-0012-pc92-hop-suffix-amplification-and-overlong-gap.md` |
 | TSR-0013 | FT2 Mode Token and Operator-Surface Gap | Resolved | 2026-03-27 | spot, pskreporter, filter, telnet, commands, docs | ADR-0055 | `docs/troubleshooting/TSR-0013-ft2-mode-token-and-operator-surface-gap.md` |
+| TSR-0014 | Local Self-Spot Delay and Confidence Semantics | Resolved | 2026-03-27 | commands, main output pipeline, telnet, custom_scp, docs | ADR-0056 | `docs/troubleshooting/TSR-0014-local-self-spot-delay-and-confidence.md` |

@@ -49,6 +49,14 @@ func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (*outputSpotContext, b
 
 func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRelease *runtimeTemporalRelease) bool {
 	s := ctx.spot
+	if spot.IsLocalSelfSpot(s) {
+		// Local self-spots are operator-authoritative input. Keep the existing
+		// pipeline ownership, but bypass resolver/temporal mutation and stamp V
+		// so telnet timing and custom_scp admission remain immediate.
+		s.Confidence = "V"
+		ctx.dirty = true
+		return true
+	}
 	if p.telnet == nil || s.IsBeacon {
 		return true
 	}
