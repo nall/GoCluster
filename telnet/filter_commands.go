@@ -410,7 +410,7 @@ func parseCCDialect(tokens, upper []string) (parsedFilterCommand, bool, string) 
 		}
 		return cmd, true, ""
 	default:
-		// Mode shortcuts: SET/FT8, SET/NOFT8, etc. (CC supports CW, FT4, FT8, RTTY)
+		// Mode shortcuts: SET/FT8, SET/NOFT8, etc. (CC supports CW, FT2, FT4, FT8, RTTY)
 		if len(upper) == 1 && strings.HasPrefix(upper[0], "SET/NO") {
 			mode := strings.TrimPrefix(upper[0], "SET/NO")
 			if isCCMode(mode) {
@@ -2029,7 +2029,7 @@ func featureLabels(name string) (enable string, disable string, status string) {
 func isCCMode(mode string) bool {
 	mode = strutil.NormalizeUpper(mode)
 	switch mode {
-	case "CW", "FT4", "FT8", "RTTY":
+	case "CW", "FT2", "FT4", "FT8", "RTTY":
 		return true
 	default:
 		return false

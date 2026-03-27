@@ -65,3 +65,28 @@ func TestMinimalParserExtractsLowercaseDBReport(t *testing.T) {
 		t.Fatalf("expected dB token stripped from comment, got %q", s.Comment)
 	}
 }
+
+func TestMinimalParserPreservesExplicitFT2Mode(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.UseMinimalParser()
+
+	line := "DX de EB3WH: 14080.0 PD5XMAS FT2 -12 dB SES XMAS AWARD 1801Z"
+	c.parseSpot(line)
+
+	var s *spot.Spot
+	select {
+	case s = <-c.spotChan:
+	default:
+		t.Fatalf("expected a parsed spot")
+	}
+
+	if s.Mode != "FT2" {
+		t.Fatalf("expected mode FT2, got %q", s.Mode)
+	}
+	if s.ModeNorm != "FT2" {
+		t.Fatalf("expected FT2 ModeNorm, got %q", s.ModeNorm)
+	}
+	if s.ModeProvenance != spot.ModeProvenanceCommentExplicit {
+		t.Fatalf("expected comment explicit mode provenance, got %q", s.ModeProvenance)
+	}
+}

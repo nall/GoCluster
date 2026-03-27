@@ -148,6 +148,18 @@ func TestPassCommands(t *testing.T) {
 			},
 		},
 		{
+			name: "pass mode ft2",
+			cmd:  "PASS MODE FT2",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.Modes["FT2"] {
+					t.Fatalf("expected FT2 mode to be enabled")
+				}
+				if f.AllModes {
+					t.Fatalf("AllModes should be false when a specific mode is set")
+				}
+			},
+		},
+		{
 			name: "pass mode unknown",
 			cmd:  "PASS MODE UNKNOWN",
 			check: func(t *testing.T, f *filter.Filter) {
@@ -412,6 +424,15 @@ func TestRejectCommands(t *testing.T) {
 			check: func(t *testing.T, f *filter.Filter) {
 				if !f.BlockModes["FT8"] {
 					t.Fatalf("expected FT8 mode to be blocked")
+				}
+			},
+		},
+		{
+			name: "reject mode ft2",
+			cmd:  "REJECT MODE FT2",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.BlockModes["FT2"] {
+					t.Fatalf("expected FT2 mode to be blocked")
 				}
 			},
 		},
@@ -1097,12 +1118,28 @@ func TestCCDialectAliases(t *testing.T) {
 		t.Fatalf("expected FT8 enabled via CC dialect")
 	}
 
+	resp, handled = engine.Handle(client, "SET/FT2")
+	if !handled || resp == "" {
+		t.Fatalf("expected SET/FT2 handled with response, got handled=%v resp=%q", handled, resp)
+	}
+	if !client.filter.Modes["FT2"] {
+		t.Fatalf("expected FT2 enabled via CC dialect")
+	}
+
 	resp, handled = engine.Handle(client, "SET/NOFT8")
 	if !handled || resp == "" {
 		t.Fatalf("expected SET/NOFT8 handled with response, got handled=%v resp=%q", handled, resp)
 	}
 	if !client.filter.BlockModes["FT8"] {
 		t.Fatalf("expected FT8 blocked via CC dialect")
+	}
+
+	resp, handled = engine.Handle(client, "SET/NOFT2")
+	if !handled || resp == "" {
+		t.Fatalf("expected SET/NOFT2 handled with response, got handled=%v resp=%q", handled, resp)
+	}
+	if !client.filter.BlockModes["FT2"] {
+		t.Fatalf("expected FT2 blocked via CC dialect")
 	}
 }
 

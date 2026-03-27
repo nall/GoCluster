@@ -36,6 +36,7 @@ const UnknownModeToken = "UNKNOWN"
 
 var SupportedModes = []string{
 	"CW",
+	"FT2",
 	"FT4",
 	"FT8",
 	"JS8",

@@ -476,7 +476,7 @@ func buildHelpCatalog(dialect string) helpCatalog {
 				"Alias of PASS MODE <MODE>.",
 			},
 		)
-		setModeLines = appendListSection(setModeLines, "Modes:", []string{"CW", "FT4", "FT8", "RTTY"})
+		setModeLines = appendListSection(setModeLines, "Modes:", []string{"CW", "FT2", "FT4", "FT8", "RTTY"})
 		add("SET/<MODE>", "SET/<MODE> - Allow a mode.", setModeLines)
 
 		setNoModeLines := helpEntryLines(
@@ -487,7 +487,7 @@ func buildHelpCatalog(dialect string) helpCatalog {
 				"Alias of REJECT MODE <MODE>.",
 			},
 		)
-		setNoModeLines = appendListSection(setNoModeLines, "Modes:", []string{"CW", "FT4", "FT8", "RTTY"})
+		setNoModeLines = appendListSection(setNoModeLines, "Modes:", []string{"CW", "FT2", "FT4", "FT8", "RTTY"})
 		add("SET/NO<MODE>", "SET/NO<MODE> - Block a mode.", setNoModeLines)
 
 		catalog.order = []string{
@@ -745,7 +745,7 @@ func normalizeHelpTopic(dialect string, topic string) string {
 
 func isCCHelpMode(mode string) bool {
 	switch strutil.NormalizeUpper(mode) {
-	case "CW", "FT4", "FT8", "RTTY":
+	case "CW", "FT2", "FT4", "FT8", "RTTY":
 		return true
 	default:
 		return false
@@ -897,7 +897,7 @@ func filterHelpLines(dialect string) []string {
 			"SET/WWV | SET/NOWWV",
 			"SET/WCY | SET/NOWCY",
 			"SET/SKIMMER | SET/NOSKIMMER",
-			"SET/<MODE> | SET/NO<MODE> (CW, FT4, FT8, RTTY)",
+			"SET/<MODE> | SET/NO<MODE> (CW, FT2, FT4, FT8, RTTY)",
 			"SET/NOFILTER",
 			"SET/FILTER <type> <list>",
 			"UNSET/FILTER <type> <list>",

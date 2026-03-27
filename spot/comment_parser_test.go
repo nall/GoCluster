@@ -1,6 +1,7 @@
 package spot
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -131,6 +132,18 @@ func TestParseSpotCommentPSK31SetsMode(t *testing.T) {
 	}
 }
 
+func TestParseSpotCommentFT2SetsMode(t *testing.T) {
+	comment := "CQ TEST FT2"
+	result := ParseSpotComment(comment, 14080.0)
+
+	if result.Mode != "FT2" {
+		t.Fatalf("expected mode FT2, got %q", result.Mode)
+	}
+	if strings.TrimSpace(result.Comment) != "CQ TEST" {
+		t.Fatalf("expected comment without mode token, got %q", result.Comment)
+	}
+}
+
 func TestParseSpotCommentJS8SetsMode(t *testing.T) {
 	comment := "CQ JS8 TEST"
 	result := ParseSpotComment(comment, 7078.0)
@@ -165,4 +178,32 @@ func TestParseSpotCommentNoExplicitModeLeavesBlank(t *testing.T) {
 	if result.Comment != "CQ TEST" {
 		t.Fatalf("expected comment preserved, got %q", result.Comment)
 	}
+}
+
+func FuzzParseSpotComment(f *testing.F) {
+	seeds := []struct {
+		comment string
+		freq    float64
+	}{
+		{"FT2 -12 dB CQ TEST", 14080.0},
+		{"FT8 73 CQ", 14074.0},
+		{"RTTY 45 BPS TEST", 14070.0},
+		{"CQ JS8 TEST", 7078.0},
+		{"CQ TEST", 7000.0},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.comment, seed.freq)
+	}
+
+	f.Fuzz(func(t *testing.T, comment string, freq float64) {
+		if math.IsNaN(freq) || math.IsInf(freq, 0) {
+			freq = 0
+		}
+		result := ParseSpotComment(comment, freq)
+		switch result.Mode {
+		case "", "CW", "RTTY", "FT2", "FT8", "FT4", "PSK31", "PSK63", "PSK125", "JS8", "SSTV", "MSK144", "USB", "LSB":
+		default:
+			t.Fatalf("unexpected parsed mode %q", result.Mode)
+		}
+	})
 }

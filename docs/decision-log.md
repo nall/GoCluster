@@ -64,3 +64,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0052 | Region-Aware Final Mode Inference and UNKNOWN Filter Token | Accepted | 2026-03-07 | spot, main output pipeline, filter, telnet, docs | ADR-0051 | - | `docs/decisions/ADR-0052-region-aware-mode-inference-and-unknown-filter-token.md` |
 | ADR-0053 | Peering Receive-Only Forwarding Knob With Local DX Exception | Accepted | 2026-03-07 | config, peer, main output pipeline | - | - | `docs/decisions/ADR-0053-peering-receive-only-forwarding-knob.md` |
 | ADR-0054 | Peering Control-Plane Priority and Local-Acceptance Relay Gate | Accepted | 2026-03-07 | peer | - | - | `docs/decisions/ADR-0054-peering-control-priority-and-local-acceptance-relay.md` |
+| ADR-0055 | FT2 Explicit Mode Support and Filter Contract | Accepted | 2026-03-27 | spot, pskreporter, filter, telnet, commands, docs | - | - | `docs/decisions/ADR-0055-ft2-explicit-mode-support-and-filter-contract.md` |

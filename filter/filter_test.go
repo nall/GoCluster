@@ -610,6 +610,22 @@ func TestPSKVariantsMatchCanonicalModeFilter(t *testing.T) {
 	}
 }
 
+func TestFT2MatchesExplicitModeFilter(t *testing.T) {
+	f := NewFilter()
+	f.ResetModes()
+	f.SetMode("FT2", true)
+
+	ft2 := &spot.Spot{
+		Mode: "FT2",
+		Band: "20m",
+	}
+	ft2.EnsureNormalized()
+
+	if !f.Matches(ft2) {
+		t.Fatalf("expected FT2 spot to pass when FT2 is allowed")
+	}
+}
+
 func TestDefaultFilterIncludesUnknownModeSpots(t *testing.T) {
 	f := NewFilter()
 	blank := &spot.Spot{Band: "20m"}

@@ -114,6 +114,34 @@ func TestDXCommandValidation(t *testing.T) {
 	}
 }
 
+func TestDXCommandParsesFT2Mode(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	p := NewProcessor(nil, nil, input, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("DX 14080 K8ZB FT2 CQ TEST", "N2WQ", "", nil, "classic")
+	if !strings.Contains(resp, "Spot queued") {
+		t.Fatalf("expected queue response, got %q", resp)
+	}
+
+	select {
+	case s := <-input:
+		if s.Mode != "FT2" {
+			t.Fatalf("expected FT2 mode, got %q", s.Mode)
+		}
+		if s.ModeNorm != "FT2" {
+			t.Fatalf("expected FT2 ModeNorm, got %q", s.ModeNorm)
+		}
+		if s.ModeProvenance != spot.ModeProvenanceCommentExplicit {
+			t.Fatalf("expected comment explicit mode provenance, got %q", s.ModeProvenance)
+		}
+		if strings.TrimSpace(s.Comment) != "CQ TEST" {
+			t.Fatalf("expected cleaned comment, got %q", s.Comment)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for FT2 spot")
+	}
+}
+
 func TestDXCommandCTYValidation(t *testing.T) {
 	ctyDB := loadTestCTY(t)
 	ctyLookup := func() *cty.CTYDatabase { return ctyDB }
@@ -501,6 +529,11 @@ func TestHelpTopicCCDialect(t *testing.T) {
 		t.Fatalf("expected mode shortcuts in help, got %q", resp)
 	}
 
+	resp = p.ProcessCommandForClient("HELP SET/FT2", "N2WQ", "", nil, "cc")
+	if !strings.Contains(resp, "Modes:") || !strings.Contains(resp, "FT2") {
+		t.Fatalf("expected FT2 mode shortcut in help, got %q", resp)
+	}
+
 	resp = p.ProcessCommandForClient("HELP SHOW DX", "N2WQ", "", nil, "cc")
 	if !strings.Contains(resp, "SHOW/DX - Alias of SHOW MYDX") {
 		t.Fatalf("expected HELP SHOW DX to map to SHOW/DX in cc, got %q", resp)
@@ -570,8 +603,8 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		{"SET/NOSELF", []string{"SET/NOSELF - Disable self spots", "Alias of REJECT SELF"}},
 		{"SET/SKIMMER", []string{"SET/SKIMMER - Allow skimmer spots", "Alias of PASS SOURCE SKIMMER"}},
 		{"SET/NOSKIMMER", []string{"SET/NOSKIMMER - Block skimmer spots", "Alias of REJECT SOURCE SKIMMER"}},
-		{"SET/FT8", []string{"SET/<MODE> - Allow a mode", "Alias of PASS MODE <MODE>"}},
-		{"SET/NOFT8", []string{"SET/NO<MODE> - Block a mode", "Alias of REJECT MODE <MODE>"}},
+		{"SET/FT2", []string{"SET/<MODE> - Allow a mode", "Alias of PASS MODE <MODE>"}},
+		{"SET/NOFT2", []string{"SET/NO<MODE> - Block a mode", "Alias of REJECT MODE <MODE>"}},
 		{"DIALECT", []string{"DIALECT - Show or switch filter command dialect", "DIALECT LIST"}},
 		{"BYE", []string{"BYE - Disconnect", "Usage: BYE"}},
 	}

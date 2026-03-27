@@ -192,6 +192,29 @@ func TestHandlePayloadAllowsPSKVariantsWithCanonicalAllowlist(t *testing.T) {
 	}
 }
 
+func TestHandlePayloadAllowsFT2WhenConfigured(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, []string{"FT2"}, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	msg := PSKRMessage{
+		Frequency:    14080000,
+		Mode:         "FT2",
+		Report:       intPtr(5),
+		Timestamp:    time.Now().Unix(),
+		SenderCall:   "K1ABC",
+		ReceiverCall: "N0CALL",
+	}
+	payload, _ := json.Marshal(msg)
+
+	client.handlePayload(payload)
+	select {
+	case spot := <-client.spotChan:
+		if spot.Mode != "FT2" || spot.ModeNorm != "FT2" {
+			t.Fatalf("expected FT2 spot, got Mode=%q ModeNorm=%q", spot.Mode, spot.ModeNorm)
+		}
+	default:
+		t.Fatalf("expected FT2 to be accepted when FT2 is allowed")
+	}
+}
+
 func TestHandlePayloadRoutesPathOnlyMode(t *testing.T) {
 	client := NewClient("localhost", 1883, nil, []string{"FT8"}, []string{"WSPR"}, "", 1, 0, 0, 0, nil, false, 2, 0)
 	msg := PSKRMessage{
