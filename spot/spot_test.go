@@ -416,6 +416,32 @@ func TestFormatDXClusterAlignmentNoConfidence(t *testing.T) {
 	}
 }
 
+func TestFormatDXClusterNoModeDoesNotAddLeadingCommentSpace(t *testing.T) {
+	s := &Spot{
+		DXCall:    "K1ABC",
+		DECall:    "W3LPL",
+		Frequency: 7009.5,
+		Time:      time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
+		Comment:   "abcd",
+		DXMetadata: CallMetadata{
+			Grid: "FN20",
+		},
+	}
+
+	got := s.FormatDXCluster()
+	layout := CurrentDXClusterLayout()
+
+	commentIdx := strings.Index(got, "abcd")
+	if commentIdx != 39 {
+		t.Fatalf("expected comment to start at 0-based index 39 (1-based column 40), got %d in %q", commentIdx, got)
+	}
+
+	gridIdx := strings.LastIndex(got, "FN20")
+	if gridIdx != layout.GridColumn-1 {
+		t.Fatalf("expected grid to start at 0-based index %d (1-based column %d), got %d in %q", layout.GridColumn-1, layout.GridColumn, gridIdx, got)
+	}
+}
+
 func TestFormatDXClusterAlignmentWithConfidence(t *testing.T) {
 	s := &Spot{
 		DXCall:     "KE0UI",

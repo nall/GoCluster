@@ -692,6 +692,7 @@ func (s *Spot) FormatDXCluster() string {
 		writeSpaces(&b, spacesToComment)
 
 		// Build comment section: Mode + signal report (when present) + optional comment.
+		commentStart := b.Len()
 		b.AppendString(s.Mode)
 		if s.HasReport {
 			b.AppendByte(' ')
@@ -709,15 +710,19 @@ func (s *Spot) FormatDXCluster() string {
 			// Reserve one column before the fixed tail so grid/confidence/time are
 			// always visually separated from the comment payload.
 			remaining := (tailStartIdx - 1) - b.Len()
-			if remaining > 1 {
-				b.AppendByte(' ')
-				remaining--
-				if remaining > 0 {
-					if len(trimmed) > remaining {
-						trimmed = trimmed[:remaining]
-					}
-					b.AppendString(trimmed)
+			if b.Len() > commentStart {
+				if remaining <= 1 {
+					remaining = 0
+				} else {
+					b.AppendByte(' ')
+					remaining--
 				}
+			}
+			if remaining > 0 {
+				if len(trimmed) > remaining {
+					trimmed = trimmed[:remaining]
+				}
+				b.AppendString(trimmed)
 			}
 		}
 
