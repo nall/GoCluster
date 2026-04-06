@@ -485,6 +485,9 @@ func TestHelpPerDialect(t *testing.T) {
 	if !strings.Contains(classic, "List types:") || !strings.Contains(classic, "Supported bands:") {
 		t.Fatalf("classic help missing list sections: %q", classic)
 	}
+	if !strings.Contains(classic, "Confidence glyphs:") || !strings.Contains(classic, "One reporter only;") {
+		t.Fatalf("classic help missing confidence legend: %q", classic)
+	}
 
 	cc := p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "cc")
 	if !strings.Contains(strings.ToUpper(cc), "CC SHORTCUTS:") || !strings.Contains(cc, "SHOW/DX -") || !strings.Contains(cc, "SET/ANN -") {
@@ -492,6 +495,9 @@ func TestHelpPerDialect(t *testing.T) {
 	}
 	if !strings.Contains(cc, "SET/FILTER <type>/ON") || !strings.Contains(cc, "SET/FILTER <type>/OFF") {
 		t.Fatalf("cc help missing ON/OFF mapping: %q", cc)
+	}
+	if !strings.Contains(cc, "Confidence glyphs:") || !strings.Contains(cc, "The call was corrected.") {
+		t.Fatalf("cc help missing confidence legend: %q", cc)
 	}
 }
 

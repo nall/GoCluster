@@ -891,6 +891,17 @@ func filterHelpLines(dialect string) []string {
 		"PASS SELF | REJECT SELF",
 		"PASS NEARBY ON|OFF",
 	}
+	lines = append(lines, "", "Confidence glyphs:")
+	for _, note := range []string{
+		"? - One reporter only; no prior/static support promoted it to S.",
+		"S - One reporter only, but the call has static or recent on-band support.",
+		"P - Multiple spotters support the displayed call at 50% or less.",
+		"V - Multiple spotters support the displayed call at over 50%.",
+		"C - The call was corrected.",
+		"B - A correction was attempted, but base-call or CTY validation failed, so the original call was kept.",
+	} {
+		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
+	}
 	if strings.EqualFold(strings.TrimSpace(dialect), "cc") {
 		lines = append(lines,
 			"",
