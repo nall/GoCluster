@@ -844,7 +844,22 @@ func (r *clusterRuntime) initializeServices() bool {
 		return false
 	}
 	r.initializeArchiveWriter()
-	r.processor = commands.NewProcessor(r.spotBuffer, r.archiveWriter, r.ingestInput, r.ctyLookup, r.repGate, r.repDropReporter)
+	r.processor = commands.NewProcessor(
+		r.spotBuffer,
+		r.archiveWriter,
+		r.ingestInput,
+		r.ctyLookup,
+		r.repGate,
+		r.repDropReporter,
+		commands.WithPathGlyphHelp(commands.PathGlyphHelpConfig{
+			Enabled:      r.pathCfg.Enabled && r.pathCfg.DisplayEnabled,
+			High:         r.pathCfg.GlyphSymbols.High,
+			Medium:       r.pathCfg.GlyphSymbols.Medium,
+			Low:          r.pathCfg.GlyphSymbols.Low,
+			Unlikely:     r.pathCfg.GlyphSymbols.Unlikely,
+			Insufficient: r.pathCfg.GlyphSymbols.Insufficient,
+		}),
+	)
 	if !r.initializeTelnetServer() {
 		return false
 	}

@@ -501,6 +501,48 @@ func TestHelpPerDialect(t *testing.T) {
 	}
 }
 
+func TestHelpPathGlyphLegendUsesConfiguredSymbols(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil, WithPathGlyphHelp(PathGlyphHelpConfig{
+		Enabled:      true,
+		High:         ">",
+		Medium:       "=",
+		Low:          "<",
+		Unlikely:     "-",
+		Insufficient: " ",
+	}))
+
+	resp := p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "go")
+	for _, want := range []string{
+		"Path reliability glyphs:",
+		`">" - HIGH: favorable path.`,
+		`"=" - MEDIUM: workable path.`,
+		`"<" - LOW: weak or marginal path.`,
+		`"-" - UNLIKELY: poor path.`,
+		`" " - INSUFFICIENT: not enough recent evidence.`,
+		"PATH filters use HIGH, MEDIUM, LOW, UNLIKELY, INSUFFICIENT.",
+	} {
+		if !strings.Contains(resp, want) {
+			t.Fatalf("expected configured path glyph help %q in %q", want, resp)
+		}
+	}
+}
+
+func TestHelpPathGlyphLegendOmittedWhenDisabled(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil, WithPathGlyphHelp(PathGlyphHelpConfig{
+		Enabled:      false,
+		High:         ">",
+		Medium:       "=",
+		Low:          "<",
+		Unlikely:     "-",
+		Insufficient: " ",
+	}))
+
+	resp := p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "go")
+	if strings.Contains(resp, "Path reliability glyphs:") {
+		t.Fatalf("expected path glyph legend omitted when disabled, got %q", resp)
+	}
+}
+
 func TestShowDXDialectVariants(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
 	filterFn := func(s *spot.Spot) bool { return s != nil }
@@ -538,8 +580,17 @@ func TestShowDXDialectVariants(t *testing.T) {
 
 func TestHelpLineWidth(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
+	pWithPathGlyphs := NewProcessor(nil, nil, nil, nil, nil, nil, WithPathGlyphHelp(PathGlyphHelpConfig{
+		Enabled:      true,
+		High:         ">",
+		Medium:       "=",
+		Low:          "<",
+		Unlikely:     "-",
+		Insufficient: " ",
+	}))
 	helps := []string{
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "classic"),
+		pWithPathGlyphs.ProcessCommandForClient("HELP", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP DX", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go"),

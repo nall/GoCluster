@@ -26,24 +26,41 @@ type archiveReader interface {
 	RecentFiltered(limit int, match func(*spot.Spot) bool) ([]*spot.Spot, error)
 }
 
+// PathGlyphHelpConfig carries the configured telnet path glyph display mapping
+// into HELP rendering. It is a startup snapshot, so Processor never performs
+// config I/O or depends on runtime reload behavior.
+type PathGlyphHelpConfig struct {
+	Enabled      bool
+	High         string
+	Medium       string
+	Low          string
+	Unlikely     string
+	Insufficient string
+}
+
+// ProcessorOption customizes Processor construction without widening the core
+// command-call surface.
+type ProcessorOption func(*Processor)
+
 // Processor handles telnet command parsing and replies that rely on shared state
 // (recent spots in the archive).
 type Processor struct {
-	spotBuffer *buffer.RingBuffer
-	archive    archiveReader
-	spotInput  chan<- *spot.Spot
-	ctyLookup  func() *cty.CTYDatabase
-	prefixIdx  *prefixIndex
-	repGate    *reputation.Gate
-	repReport  func(reputation.DropEvent)
+	spotBuffer    *buffer.RingBuffer
+	archive       archiveReader
+	spotInput     chan<- *spot.Spot
+	ctyLookup     func() *cty.CTYDatabase
+	prefixIdx     *prefixIndex
+	repGate       *reputation.Gate
+	repReport     func(reputation.DropEvent)
+	pathGlyphHelp PathGlyphHelpConfig
 }
 
 // NewProcessor constructs a command processor bound to shared spot state.
 // Key aspects: SHOW/DX uses archive history; DX commands can enqueue spots.
 // Upstream: Telnet server initialization.
 // Downstream: Processor methods (ProcessCommand, handleShowDX, handleDX).
-func NewProcessor(buf *buffer.RingBuffer, archive archiveReader, spotInput chan<- *spot.Spot, ctyLookup func() *cty.CTYDatabase, repGate *reputation.Gate, repReport func(reputation.DropEvent)) *Processor {
-	return &Processor{
+func NewProcessor(buf *buffer.RingBuffer, archive archiveReader, spotInput chan<- *spot.Spot, ctyLookup func() *cty.CTYDatabase, repGate *reputation.Gate, repReport func(reputation.DropEvent), opts ...ProcessorOption) *Processor {
+	p := &Processor{
 		spotBuffer: buf,
 		archive:    archive,
 		spotInput:  spotInput,
@@ -51,6 +68,23 @@ func NewProcessor(buf *buffer.RingBuffer, archive archiveReader, spotInput chan<
 		prefixIdx:  &prefixIndex{},
 		repGate:    repGate,
 		repReport:  repReport,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(p)
+		}
+	}
+	return p
+}
+
+// WithPathGlyphHelp configures top-level HELP to describe the actual glyphs
+// shown in telnet output for path reliability.
+func WithPathGlyphHelp(cfg PathGlyphHelpConfig) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.pathGlyphHelp = cfg
 	}
 }
 
@@ -149,6 +183,7 @@ func (p *Processor) handleHelp(dialect string, topic string) string {
 	}
 	lines = append(lines, "Type HELP <command> for details.")
 	lines = append(lines, filterHelpLines(dialect)...)
+	lines = append(lines, pathGlyphHelpLines(p.pathGlyphHelp)...)
 	lines = append(lines, "")
 	lines = append(lines, "List types:")
 	lines = append(lines, wrapListLines(filterListTypes())...)
@@ -921,6 +956,34 @@ func filterHelpLines(dialect string) []string {
 		)
 	}
 	return lines
+}
+
+func pathGlyphHelpLines(cfg PathGlyphHelpConfig) []string {
+	if !cfg.Enabled {
+		return nil
+	}
+	if cfg.High == "" || cfg.Medium == "" || cfg.Low == "" || cfg.Unlikely == "" || cfg.Insufficient == "" {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Path reliability glyphs:",
+	}
+	for _, note := range []string{
+		fmt.Sprintf("%s - HIGH: favorable path.", quoteHelpGlyph(cfg.High)),
+		fmt.Sprintf("%s - MEDIUM: workable path.", quoteHelpGlyph(cfg.Medium)),
+		fmt.Sprintf("%s - LOW: weak or marginal path.", quoteHelpGlyph(cfg.Low)),
+		fmt.Sprintf("%s - UNLIKELY: poor path.", quoteHelpGlyph(cfg.Unlikely)),
+		fmt.Sprintf("%s - INSUFFICIENT: not enough recent evidence.", quoteHelpGlyph(cfg.Insufficient)),
+		"PATH filters use HIGH, MEDIUM, LOW, UNLIKELY, INSUFFICIENT.",
+	} {
+		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
+	}
+	return lines
+}
+
+func quoteHelpGlyph(glyph string) string {
+	return strconv.Quote(glyph)
 }
 
 func normalizeDialectString(dialect string) string {
