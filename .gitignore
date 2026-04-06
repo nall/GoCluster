@@ -12,7 +12,7 @@
 logs/
 archive data/
 data/archive
-data/cty
+data/cty/
 data/grids
 data/fcc
 data/rbn
@@ -20,7 +20,7 @@ data/reports
 data/ipinfo
 data/reputation
 data/scp
-data/skm_correction
+data/skm_correction/
 data/users
 cmd/rbn_backtest/data/
 # *.db

@@ -91,6 +91,68 @@ func TestDXCommandQueuesSpot(t *testing.T) {
 	}
 }
 
+func TestDXCommandQueuesLoggerStyleSpot(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	p := NewProcessor(nil, nil, input, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("DX K8ZB 7001.25 Testing...1...2...3", "N2WQ", "203.0.113.5", nil, "classic")
+	if !strings.Contains(resp, "Spot queued") {
+		t.Fatalf("expected queue response, got %q", resp)
+	}
+
+	select {
+	case s := <-input:
+		if s.DXCall != "K8ZB" {
+			t.Fatalf("DXCall mismatch: %s", s.DXCall)
+		}
+		if s.DECall != "N2WQ" {
+			t.Fatalf("DECall mismatch: %s", s.DECall)
+		}
+		if math.Abs(s.Frequency-7001.25) > 0.0001 {
+			t.Fatalf("Frequency mismatch: %.4f", s.Frequency)
+		}
+		if s.Comment != "Testing...1...2...3" {
+			t.Fatalf("Comment mismatch: %q", s.Comment)
+		}
+		if s.SourceType != spot.SourceManual || !s.IsHuman {
+			t.Fatalf("unexpected source flags: %s human=%t", s.SourceType, s.IsHuman)
+		}
+		if s.SpotterIP != "203.0.113.5" {
+			t.Fatalf("SpotterIP mismatch: %q", s.SpotterIP)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for spot")
+	}
+}
+
+func TestDXCommandLoggerStyleFloatLikeCallsign(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	p := NewProcessor(nil, nil, input, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("DX 5E7 14033 CW", "N2WQ", "", nil, "classic")
+	if !strings.Contains(resp, "Spot queued") {
+		t.Fatalf("expected queue response, got %q", resp)
+	}
+
+	select {
+	case s := <-input:
+		if s.DXCall != "5E7" {
+			t.Fatalf("expected DXCall 5E7, got %q", s.DXCall)
+		}
+		if math.Abs(s.Frequency-14033.0) > 0.0001 {
+			t.Fatalf("Frequency mismatch: %.4f", s.Frequency)
+		}
+		if s.Mode != "CW" {
+			t.Fatalf("expected mode CW, got %q", s.Mode)
+		}
+		if s.ModeProvenance != spot.ModeProvenanceCommentExplicit {
+			t.Fatalf("expected comment explicit mode provenance, got %q", s.ModeProvenance)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for spot")
+	}
+}
+
 func TestDXCommandValidation(t *testing.T) {
 	input := make(chan *spot.Spot, 1)
 	p := NewProcessor(nil, nil, input, nil, nil, nil)
@@ -499,6 +561,9 @@ func TestHelpTopicGoDialect(t *testing.T) {
 	if !strings.Contains(resp, "Usage: DX <freq_khz> <callsign> [comment]") {
 		t.Fatalf("expected DX usage in help, got %q", resp)
 	}
+	if !strings.Contains(resp, "DX <callsign> <freq_khz> [comment]") {
+		t.Fatalf("expected alternate DX usage in help, got %q", resp)
+	}
 
 	resp = p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go")
 	if !strings.Contains(resp, "Usage: PASS <type> <list>") || !strings.Contains(resp, "Types:") {
@@ -547,7 +612,7 @@ func TestHelpEntriesGoDialect(t *testing.T) {
 		contains []string
 	}{
 		{"HELP", []string{"HELP - Show command list", "Usage: HELP [command]"}},
-		{"DX", []string{"DX - Post a spot", "Usage: DX <freq_khz> <callsign> [comment]"}},
+		{"DX", []string{"DX - Post a spot", "Usage: DX <freq_khz> <callsign> [comment]", "DX <callsign> <freq_khz> [comment]"}},
 		{"SHOW", []string{"SHOW - See SHOW subcommands.", "SHOW DXCC"}},
 		{"SHOW DX", []string{"SHOW DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
@@ -577,7 +642,7 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		contains []string
 	}{
 		{"HELP", []string{"HELP - Show command list", "Usage: HELP [command]"}},
-		{"DX", []string{"DX - Post a spot", "Usage: DX <freq_khz> <callsign> [comment]"}},
+		{"DX", []string{"DX - Post a spot", "Usage: DX <freq_khz> <callsign> [comment]", "DX <callsign> <freq_khz> [comment]"}},
 		{"SHOW", []string{"SHOW - See SHOW subcommands.", "SHOW DXCC"}},
 		{"SHOW/DX", []string{"SHOW/DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW/DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},

@@ -208,7 +208,10 @@ func buildHelpCatalog(dialect string) helpCatalog {
 
 	dxLines := helpEntryLines(
 		"DX - Post a spot (human entry).",
-		[]string{"DX <freq_khz> <callsign> [comment]"},
+		[]string{
+			"DX <freq_khz> <callsign> [comment]",
+			"DX <callsign> <freq_khz> [comment]",
+		},
 		nil,
 		[]string{
 			"Frequency is in kHz (e.g., 7001.0).",
@@ -1069,6 +1072,74 @@ func testSpotterBaseCall(call string) (string, bool) {
 	return "", false
 }
 
+// parseDXCommandArgs resolves the DX command's frequency and DX tokens.
+// Canonical order stays preferred when the first argument is a plain kHz value.
+// Logger-style order is accepted only when arg1 looks like a real callsign and
+// arg2 is the plain kHz token.
+func parseDXCommandArgs(fields []string) (freq float64, dxRaw string, ok bool) {
+	if len(fields) < 3 {
+		return 0, "", false
+	}
+	if parsedFreq, freqOK := parseDXFrequencyToken(fields[1]); freqOK {
+		return parsedFreq, strings.TrimSpace(fields[2]), true
+	}
+	if !isPlausibleDXCallToken(fields[1]) {
+		return 0, "", false
+	}
+	parsedFreq, freqOK := parseDXFrequencyToken(fields[2])
+	if !freqOK {
+		return 0, "", false
+	}
+	return parsedFreq, strings.TrimSpace(fields[1]), true
+}
+
+// parseDXFrequencyToken accepts only plain decimal kHz values so command-order
+// routing does not confuse float-like callsigns (for example, 5E7) with a
+// frequency token.
+func parseDXFrequencyToken(token string) (float64, bool) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return 0, false
+	}
+	digitCount := 0
+	dotCount := 0
+	for i := 0; i < len(token); i++ {
+		switch ch := token[i]; {
+		case ch >= '0' && ch <= '9':
+			digitCount++
+		case ch == '.':
+			dotCount++
+			if dotCount > 1 {
+				return 0, false
+			}
+		default:
+			return 0, false
+		}
+	}
+	if digitCount == 0 {
+		return 0, false
+	}
+	freq, err := strconv.ParseFloat(token, 64)
+	if err != nil || freq <= 0 {
+		return 0, false
+	}
+	return freq, true
+}
+
+func isPlausibleDXCallToken(token string) bool {
+	normalized := spot.NormalizeCallsign(strings.TrimSpace(token))
+	return spot.IsValidNormalizedCallsign(normalized) && containsASCIILetter(normalized)
+}
+
+func containsASCIILetter(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
 // Purpose: Handle the DX command and enqueue a human spot.
 // Key aspects: Validates callsign/frequency; parses comment for mode/report.
 // Upstream: ProcessCommandForClient (DX).
@@ -1083,13 +1154,13 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 		return "DX command requires a valid callsign.\n"
 	}
 	if len(fields) < 3 {
-		return "Usage: DX <frequency> <callsign> [comment]\n"
+		return "Usage: DX <freq_khz> <callsign> [comment]\n" +
+			"       DX <callsign> <freq_khz> [comment]\n"
 	}
-	freq, err := strconv.ParseFloat(fields[1], 64)
-	if err != nil || freq <= 0 {
+	freq, dxRaw, ok := parseDXCommandArgs(fields)
+	if !ok {
 		return "Invalid frequency. Use a kHz value like 7001.0.\n"
 	}
-	dxRaw := strings.TrimSpace(fields[2])
 	dx := spot.NormalizeCallsign(dxRaw)
 	if !spot.IsValidNormalizedCallsign(dx) {
 		return "Invalid DX callsign.\n"
