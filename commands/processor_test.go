@@ -543,6 +543,34 @@ func TestHelpPathGlyphLegendOmittedWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestHelpDedupeNotesUseConfiguredWindows(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil, WithDedupeHelp(DedupeHelpConfig{
+		Configured:        true,
+		FastWindowSeconds: 121,
+		MedWindowSeconds:  305,
+		SlowWindowSeconds: 489,
+	}))
+
+	for _, topic := range []string{"SHOW DEDUPE", "SET DEDUPE"} {
+		resp := p.ProcessCommandForClient("HELP "+topic, "N2WQ", "", nil, "go")
+		for _, want := range []string{
+			"FAST - 121s window. Key: band + DE DXCC (ADIF) + DE grid2 + DX call.",
+			"MED - 305s window. Key: band + DE DXCC (ADIF) + DE grid2 + DX call.",
+			"SLOW - 489s window. Key: band + DE DXCC (ADIF) + DE CQ zone + DX call.",
+		} {
+			if !strings.Contains(resp, want) {
+				t.Fatalf("help %q missing %q in %q", topic, want, resp)
+			}
+		}
+		if strings.Contains(strings.ToLower(resp), "source class") {
+			t.Fatalf("help %q unexpectedly mentions source class: %q", topic, resp)
+		}
+		if strings.Contains(strings.ToLower(resp), "normalized dx call") {
+			t.Fatalf("help %q unexpectedly mentions normalized DX call: %q", topic, resp)
+		}
+	}
+}
+
 func TestShowDXDialectVariants(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
 	filterFn := func(s *spot.Spot) bool { return s != nil }
@@ -588,9 +616,17 @@ func TestHelpLineWidth(t *testing.T) {
 		Unlikely:     "-",
 		Insufficient: " ",
 	}))
+	pWithDedupeWindows := NewProcessor(nil, nil, nil, nil, nil, nil, WithDedupeHelp(DedupeHelpConfig{
+		Configured:        true,
+		FastWindowSeconds: 121,
+		MedWindowSeconds:  305,
+		SlowWindowSeconds: 489,
+	}))
 	helps := []string{
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "classic"),
 		pWithPathGlyphs.ProcessCommandForClient("HELP", "N2WQ", "", nil, "go"),
+		pWithDedupeWindows.ProcessCommandForClient("HELP SHOW DEDUPE", "N2WQ", "", nil, "go"),
+		pWithDedupeWindows.ProcessCommandForClient("HELP SET DEDUPE", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP DX", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go"),

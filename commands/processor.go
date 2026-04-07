@@ -38,6 +38,16 @@ type PathGlyphHelpConfig struct {
 	Insufficient string
 }
 
+// DedupeHelpConfig carries the effective secondary dedupe policy windows into
+// HELP rendering. It is a startup snapshot so HELP remains deterministic and
+// does not depend on runtime config access.
+type DedupeHelpConfig struct {
+	Configured        bool
+	FastWindowSeconds int
+	MedWindowSeconds  int
+	SlowWindowSeconds int
+}
+
 // ProcessorOption customizes Processor construction without widening the core
 // command-call surface.
 type ProcessorOption func(*Processor)
@@ -53,6 +63,7 @@ type Processor struct {
 	repGate       *reputation.Gate
 	repReport     func(reputation.DropEvent)
 	pathGlyphHelp PathGlyphHelpConfig
+	dedupeHelp    DedupeHelpConfig
 }
 
 // NewProcessor constructs a command processor bound to shared spot state.
@@ -85,6 +96,17 @@ func WithPathGlyphHelp(cfg PathGlyphHelpConfig) ProcessorOption {
 			return
 		}
 		p.pathGlyphHelp = cfg
+	}
+}
+
+// WithDedupeHelp configures HELP text for SHOW/SET DEDUPE using the effective
+// runtime window values from dedupe.yaml.
+func WithDedupeHelp(cfg DedupeHelpConfig) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.dedupeHelp = cfg
 	}
 }
 
@@ -165,7 +187,7 @@ func (p *Processor) ProcessCommandForClient(cmd string, spotter string, spotterI
 // Downstream: filter.SupportedModes, spot.SupportedBandNames.
 func (p *Processor) handleHelp(dialect string, topic string) string {
 	dialect = normalizeDialectString(dialect)
-	catalog := buildHelpCatalog(dialect)
+	catalog := buildHelpCatalog(dialect, p.dedupeHelp)
 	normalized := normalizeHelpTopic(dialect, topic)
 	if normalized != "" {
 		if entry, ok := catalog.lookup(normalized); ok {
@@ -218,7 +240,7 @@ func (c helpCatalog) lookup(topic string) (helpEntry, bool) {
 	return entry, ok
 }
 
-func buildHelpCatalog(dialect string) helpCatalog {
+func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 	catalog := helpCatalog{
 		entries: make(map[string]helpEntry),
 		aliases: make(map[string]string),
@@ -288,11 +310,7 @@ func buildHelpCatalog(dialect string) helpCatalog {
 		"SHOW DEDUPE - Show your broadcast dedupe policy.",
 		[]string{"SHOW DEDUPE"},
 		nil,
-		[]string{
-			"FAST = short window; MED = medium window; SLOW = long window.",
-			"FAST/MED use 2-character grid squares; SLOW uses CQ zones.",
-			"Shows if a policy is disabled server-side.",
-		},
+		dedupeHelpNotes(dedupeHelp, false),
 	)
 	add("SHOW DEDUPE", "SHOW DEDUPE - Show dedupe policy.", showDedupeLines)
 
@@ -300,11 +318,7 @@ func buildHelpCatalog(dialect string) helpCatalog {
 		"SET DEDUPE - Select broadcast dedupe policy.",
 		[]string{"SET DEDUPE <FAST|MED|SLOW>"},
 		nil,
-		[]string{
-			"FAST = short window; MED = medium window; SLOW = long window.",
-			"FAST/MED use 2-character grid squares; SLOW uses CQ zones.",
-			"If a policy is disabled, the nearest available is chosen.",
-		},
+		dedupeHelpNotes(dedupeHelp, true),
 	)
 	add("SET DEDUPE", "SET DEDUPE - Select dedupe policy.", setDedupeLines)
 
@@ -980,6 +994,40 @@ func pathGlyphHelpLines(cfg PathGlyphHelpConfig) []string {
 		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
 	}
 	return lines
+}
+
+func dedupeHelpNotes(cfg DedupeHelpConfig, includeFallbackNote bool) []string {
+	if !cfg.Configured {
+		notes := []string{
+			"FAST = short window; MED = medium window; SLOW = long window.",
+			"FAST/MED use 2-character grid squares; SLOW uses CQ zones.",
+		}
+		if includeFallbackNote {
+			notes = append(notes, "If a policy is disabled, the nearest available is chosen.")
+		} else {
+			notes = append(notes, "Shows if a policy is disabled server-side.")
+		}
+		return notes
+	}
+
+	notes := []string{
+		formatDedupePolicyNote("FAST", cfg.FastWindowSeconds, "DE grid2"),
+		formatDedupePolicyNote("MED", cfg.MedWindowSeconds, "DE grid2"),
+		formatDedupePolicyNote("SLOW", cfg.SlowWindowSeconds, "DE CQ zone"),
+	}
+	if includeFallbackNote {
+		notes = append(notes, "If a policy is disabled, the nearest available is chosen.")
+	} else {
+		notes = append(notes, "Shows if a policy is disabled server-side.")
+	}
+	return notes
+}
+
+func formatDedupePolicyNote(name string, windowSeconds int, locationKey string) string {
+	if windowSeconds <= 0 {
+		return fmt.Sprintf("%s - disabled server-side. Key: band + DE DXCC (ADIF) + %s + DX call.", name, locationKey)
+	}
+	return fmt.Sprintf("%s - %ds window. Key: band + DE DXCC (ADIF) + %s + DX call.", name, windowSeconds, locationKey)
 }
 
 func quoteHelpGlyph(glyph string) string {

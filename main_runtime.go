@@ -859,6 +859,12 @@ func (r *clusterRuntime) initializeServices() bool {
 			Unlikely:     r.pathCfg.GlyphSymbols.Unlikely,
 			Insufficient: r.pathCfg.GlyphSymbols.Insufficient,
 		}),
+		commands.WithDedupeHelp(commands.DedupeHelpConfig{
+			Configured:        true,
+			FastWindowSeconds: r.cfg.Dedup.SecondaryFastWindowSeconds,
+			MedWindowSeconds:  r.cfg.Dedup.SecondaryMedWindowSeconds,
+			SlowWindowSeconds: r.cfg.Dedup.SecondarySlowWindowSeconds,
+		}),
 	)
 	if !r.initializeTelnetServer() {
 		return false
