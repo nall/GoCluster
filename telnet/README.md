@@ -41,16 +41,46 @@ Path and confidence filters are operator-visible here:
 - `PASS/REJECT CONFIDENCE` works with `?`, `S`, `C`, `P`, `V`, `B`
 - `PASS/REJECT PATH` works with `HIGH`, `MEDIUM`, `LOW`, `UNLIKELY`, `INSUFFICIENT`
 
+## Dedupe Policies
+
+The telnet server exposes per-user dedupe policy control through `SHOW DEDUPE` and `SET DEDUPE`.
+
+- new users default to `MED`
+- the selected policy is persisted per callsign
+- `SHOW DEDUPE` reports the active policy and whether `FAST`, `MED`, and `SLOW` are enabled server-side
+- if a user requests a disabled policy, the server falls back to the nearest enabled one and reports that in the response
+
+The shipped policy windows are:
+
+- `FAST`: `120s`, keyed by band + DE DXCC + DE grid2 + DX call
+- `MED`: `300s`, keyed by band + DE DXCC + DE grid2 + DX call
+- `SLOW`: `480s`, keyed by band + DE DXCC + DE CQ zone + DX call
+
+This is why `SLOW` suppresses more repeats from one region than `FAST` or `MED`: CQ zone is broader than a 2-character grid square.
+
 ## Grid, Noise, And Nearby
 
 - `SET GRID` stores the user's Maidenhead grid for path reliability
 - `SET NOISE` stores the user's noise class and applies a DX-to-user path penalty
-- `PASS NEARBY ON` requires a grid and temporarily suspends location filters
+- `PASS NEARBY ON` requires a grid and keeps spots whose DX side or DE side falls in the user's nearby area
 
 `NEARBY` uses H3 cells:
 
 - coarse resolution on `160m`, `80m`, and `60m`
 - finer resolution on the other supported bands
+
+While `NEARBY` is active:
+
+- the regular location filters are suspended
+- attempts to change `DXGRID2`, `DEGRID2`, `DXCONT`, `DECONT`, `DXZONE`, `DEZONE`, `DXDXCC`, and `DEDXCC` are rejected with a warning
+- `SHOW FILTER` reports `NEARBY: ON (location filters suspended)`
+
+When `PASS NEARBY OFF` is used, the telnet layer restores the saved location-filter snapshot that existed before `NEARBY` was enabled.
+
+`NEARBY` state is persisted. On login:
+
+- the greeting warns when `NEARBY` is active
+- if the user has no usable grid or H3 mapping is unavailable, the state remains stored but inactive until it can be reactivated cleanly
 
 ## Path Display
 

@@ -67,6 +67,17 @@ Burst timing is controlled by the `call_correction` FT knobs in the shipped conf
 - per-mode quiet-gap seconds
 - per-mode hard-cap seconds
 
+In the shipped repo config these live under `call_correction` in [`../data/config/pipeline.yaml`](../data/config/pipeline.yaml):
+
+- `call_correction.p_min_unique_spotters`
+- `call_correction.v_min_unique_spotters`
+- `call_correction.ft8_quiet_gap_seconds`
+- `call_correction.ft8_hard_cap_seconds`
+- `call_correction.ft4_quiet_gap_seconds`
+- `call_correction.ft4_hard_cap_seconds`
+- `call_correction.ft2_quiet_gap_seconds`
+- `call_correction.ft2_hard_cap_seconds`
+
 With the current shipped defaults:
 
 - `P` = exactly 2 unique reporters
