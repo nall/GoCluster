@@ -162,3 +162,49 @@ func TestCustomSCPStoreRecordSpotAdmitsVOnly(t *testing.T) {
 		t.Fatalf("expected exactly one active call after V admission, got %d", got)
 	}
 }
+
+func TestCustomSCPStoreRecordSpotAdmitsFT8VOnly(t *testing.T) {
+	store, err := OpenCustomSCPStore(CustomSCPOptions{
+		Path:           filepath.Join(t.TempDir(), "scp"),
+		CoreMinScore:   1,
+		CoreMinH3Cells: 1,
+	})
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	now := time.Now().UTC()
+	makeSpot := func(spotter, confidence string) *Spot {
+		return &Spot{
+			DXCall:     "K1FT8",
+			DECall:     spotter,
+			DEGridNorm: "FN31",
+			Frequency:  14074.1,
+			Band:       "20m",
+			Mode:       "FT8",
+			HasReport:  true,
+			Report:     -10,
+			Time:       now,
+			Confidence: confidence,
+		}
+	}
+
+	store.RecordSpot(makeSpot("N0AAA", "P"))
+	if store.StaticContains("K1FT8") {
+		t.Fatalf("expected non-V FT8 confidence to be rejected from static membership")
+	}
+
+	store.RecordSpot(makeSpot("N0BBB", "V"))
+	if !store.StaticContains("K1FT8") {
+		t.Fatalf("expected V-admitted FT8 call to enter static membership")
+	}
+	if snap := store.snapshotFor("K1FT8", "20m", "FT8", now); snap.uniqueSpotters != 1 {
+		t.Fatalf("expected FT8 snapshot to track exact FT mode, got %+v", snap)
+	}
+	if snap := store.snapshotFor("K1FT8", "20m", "FT4", now); snap.uniqueSpotters != 0 {
+		t.Fatalf("expected FT4 snapshot to remain isolated from FT8 evidence, got %+v", snap)
+	}
+}

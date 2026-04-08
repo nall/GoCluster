@@ -64,7 +64,7 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	) {
 		return
 	}
-	applyKnownCallFloor(delayed, p.knownCalls, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+	applyKnownCallFloor(delayed, p.knownCalls, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg)
 	delayed.RefreshBeaconFlag()
 	delayed.EnsureNormalized()
 	if applyLicenseGate(delayed, ctyDB, p.metaCache, p.unlicensedReporter) {
@@ -185,6 +185,7 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 		plan.allowFast, plan.allowMed, plan.allowSlow = p.computeTelnetAllows(s)
 		plan.archivePeerAllowMed = plan.allowMed
 		recordRecentBandObservation(s, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+		p.recordFTRecentBandObservation(s)
 		if ctx.hasStabilizerResolverKey && p.signalResolver != nil {
 			plan.familySnapshot, plan.familySnapshotOK = p.signalResolver.Lookup(ctx.stabilizerResolverKey)
 		}
@@ -241,6 +242,7 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 	}
 	if shouldRecordRecentBandInMainLoop(p.stabilizerEnabled, !plan.telnetDeliverNow) {
 		recordRecentBandObservation(s, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+		p.recordFTRecentBandObservation(s)
 	}
 	if plan.telnetDeliverNow && !plan.allowFast && !plan.allowMed && !plan.allowSlow {
 		p.telnet.DeliverSelfSpot(s)

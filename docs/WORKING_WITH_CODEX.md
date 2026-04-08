@@ -1,0 +1,57 @@
+# Working with Codex in `gocluster`
+
+Use two layers:
+
+- Use planning conversation to settle intent, scope, risks, and edge cases.
+- Use `AGENTS.md` as the execution contract once you want implementation to start.
+
+## Start in planning by default
+
+Start with planning for anything that is not clearly a small localized fix. In this repo, that should be the default whenever the change may touch:
+
+- concurrency, goroutine lifecycle, deadlines, shutdown, backpressure, or queues
+- telnet or packet protocol behavior, parsing, or compatibility
+- hot paths, fan-out, p99, or memory bounds
+- shared interfaces, multiple packages, operator-visible behavior, or rollout decisions
+
+Recommended prompt:
+
+```text
+Plan only. Inspect the current code, identify risks and edge cases, and produce a decision-complete approach. Do not implement yet.
+```
+
+## Skip long planning only for clearly small work
+
+You can usually go straight to implementation only when the change is tightly localized and all of these are true:
+
+- no protocol or compatibility change
+- no concurrency, lifecycle, timeout, queue, or shutdown impact
+- no shared-component or cross-package contract change
+- no user-visible behavior change beyond a strictly local fix
+
+If the blast radius expands, reclassify it as Non-trivial immediately.
+
+## Switch to implementation when scope is stable
+
+Move from planning to execution only when:
+
+1. The intended behavior and architecture are stable.
+2. You are ready to approve the implementation scope.
+
+For Non-trivial work, the handoff point is the Scope Ledger. Ask Codex to present `Proposed Scope Ledger vN`, then approve it with:
+
+```text
+Approved vN
+```
+
+No code, diffs, or full validation should happen before that approval.
+
+## Practical loop
+
+1. Ask for plan-only analysis.
+2. Review the risks, edge cases, and proposed approach.
+3. Ask for `Proposed Scope Ledger vN` for the agreed change.
+4. Reply `Approved vN`.
+5. Let Codex execute under `AGENTS.md`, including validation and documentation duties.
+
+If you only want explanation or review of existing code, say that explicitly and keep the request non-mutating.

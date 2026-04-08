@@ -32,29 +32,30 @@ const (
 
 // Spot represents a DX spot in canonical form
 type Spot struct {
-	ID             uint64         // Unique spot ID (monotonic counter)
-	DXCall         string         // Station being spotted (normalized callsign, portable suffix stripped)
-	DECall         string         // Station reporting the spot (normalized callsign, portable suffix stripped)
-	Frequency      float64        // Frequency in kHz (e.g., 14074.5)
-	Band           string         // Band (e.g., "20m")
-	Mode           string         // Mode (e.g., "CW", "USB", "FT8")
-	ModeProvenance ModeProvenance // How Mode was assigned (explicit/evidence/default)
-	Report         int            // Signal report in dB (SNR for digital modes, signal strength for CW)
-	Time           time.Time      // When the spot was created
-	Comment        string         // User comment or additional info
-	SourceType     SourceType     // Where this spot came from
-	SourceNode     string         // Originating node/cluster
-	SpotterIP      string         // Spotter IP address for PC61 frames (optional)
-	TTL            uint8          // Time-to-live for loop prevention
-	IsHuman        bool           // Whether the spot originated from a human operator
-	IsTestSpotter  bool           // True when the spotter callsign is a CTY-valid TEST identifier.
-	IsBeacon       bool           // True when DX call ends with /B (beacon identifiers)
-	HasReport      bool           // Whether Report is present (distinguishes real 0 dB from "unknown")
-	DXMetadata     CallMetadata   // Metadata for the DX station
-	DEMetadata     CallMetadata   // Metadata for the spotter station
-	Confidence     string         // Consensus confidence label (e.g., "75%" or "?")
-	formatted      string
-	formatOnce     sync.Once // ensures FormatDXCluster builds expensive string only once per spot
+	ID                uint64         // Unique spot ID (monotonic counter)
+	DXCall            string         // Station being spotted (normalized callsign, portable suffix stripped)
+	DECall            string         // Station reporting the spot (normalized callsign, portable suffix stripped)
+	Frequency         float64        // Frequency in kHz (e.g., 14074.5)
+	ObservedFrequency float64        // Raw source-reported RF frequency in kHz when Frequency is canonicalized; 0 means "same as Frequency"
+	Band              string         // Band (e.g., "20m")
+	Mode              string         // Mode (e.g., "CW", "USB", "FT8")
+	ModeProvenance    ModeProvenance // How Mode was assigned (explicit/evidence/default)
+	Report            int            // Signal report in dB (SNR for digital modes, signal strength for CW)
+	Time              time.Time      // When the spot was created
+	Comment           string         // User comment or additional info
+	SourceType        SourceType     // Where this spot came from
+	SourceNode        string         // Originating node/cluster
+	SpotterIP         string         // Spotter IP address for PC61 frames (optional)
+	TTL               uint8          // Time-to-live for loop prevention
+	IsHuman           bool           // Whether the spot originated from a human operator
+	IsTestSpotter     bool           // True when the spotter callsign is a CTY-valid TEST identifier.
+	IsBeacon          bool           // True when DX call ends with /B (beacon identifiers)
+	HasReport         bool           // Whether Report is present (distinguishes real 0 dB from "unknown")
+	DXMetadata        CallMetadata   // Metadata for the DX station
+	DEMetadata        CallMetadata   // Metadata for the spotter station
+	Confidence        string         // Consensus confidence label (e.g., "75%" or "?")
+	formatted         string
+	formatOnce        sync.Once // ensures FormatDXCluster builds expensive string only once per spot
 
 	// Normalized/cache fields to avoid repeated string ops on hot paths.
 	ModeNorm        string
@@ -461,6 +462,7 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		DXCall:             s.DXCall,
 		DECall:             s.DECall,
 		Frequency:          s.Frequency,
+		ObservedFrequency:  s.ObservedFrequency,
 		Band:               s.Band,
 		Mode:               s.Mode,
 		ModeProvenance:     s.ModeProvenance,
@@ -494,6 +496,18 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		DECallNormStripped: s.DECallNormStripped,
 	}
 	return clone
+}
+
+// EffectiveObservedFrequency returns the raw source-reported RF frequency when
+// available, otherwise it falls back to the operational frequency.
+func (s *Spot) EffectiveObservedFrequency() float64 {
+	if s == nil {
+		return 0
+	}
+	if s.ObservedFrequency > 0 {
+		return s.ObservedFrequency
+	}
+	return s.Frequency
 }
 
 // InvalidateMetadataCache clears cached fields derived from DXMetadata/DEMetadata.

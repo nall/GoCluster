@@ -1685,7 +1685,7 @@ func matchesCallsignPattern(callsign, pattern string) bool {
 // Downstream: None.
 func isConfidenceExemptMode(mode string) bool {
 	switch strutil.NormalizeUpper(mode) {
-	case "FT8", "FT4", "PSK", "MSK144":
+	case "PSK", "MSK144":
 		return true
 	default:
 		return false

@@ -39,8 +39,10 @@ var (
 )
 
 const (
-	recordVersion         = 2
-	recordFixedHeaderSize = 28
+	recordVersionV2         = 2
+	recordVersion           = 3
+	recordFixedHeaderSizeV2 = 28
+	recordFixedHeaderSize   = 36
 )
 
 const (
@@ -61,6 +63,7 @@ const (
 )
 
 const (
+	recordHeaderSizeV2   = recordFixedHeaderSizeV2 + fieldCount*2
 	recordHeaderSize     = recordFixedHeaderSize + fieldCount*2
 	recentScanMultiplier = 20
 	recentScanGrowth     = 4
@@ -80,6 +83,17 @@ const (
 )
 
 var errInvalidRecord = errors.New("archive: invalid record encoding")
+
+func recordLayout(version byte) (fixedHeaderSize int, headerSize int, ok bool) {
+	switch version {
+	case recordVersionV2:
+		return recordFixedHeaderSizeV2, recordHeaderSizeV2, true
+	case recordVersion:
+		return recordFixedHeaderSize, recordHeaderSize, true
+	default:
+		return 0, 0, false
+	}
+}
 
 // Writer persists spots to Pebble asynchronously with per-mode retention.
 // It is designed to be removable: the hot path never blocks on the writer,
@@ -606,6 +620,7 @@ type archiveRecord struct {
 	dxCont         string
 	deCont         string
 	freq           float64
+	observedFreq   float64
 	report         int
 	hasReport      bool
 	isHuman        bool
@@ -696,6 +711,7 @@ func encodeRecord(s *spot.Spot) []byte {
 	binary.BigEndian.PutUint16(buf[18:], numutil.ClampUint16(s.DEMetadata.CQZone))
 	binary.BigEndian.PutUint32(buf[20:], uint32(clampInt(s.DXMetadata.ADIF)))
 	binary.BigEndian.PutUint32(buf[24:], uint32(clampInt(s.DEMetadata.ADIF)))
+	binary.BigEndian.PutUint64(buf[28:], math.Float64bits(s.EffectiveObservedFrequency()))
 
 	offset := recordFixedHeaderSize
 	for i := 0; i < fieldCount; i++ {
@@ -727,10 +743,11 @@ func encodeRecord(s *spot.Spot) []byte {
 }
 
 func decodeRecord(raw []byte) (archiveRecord, error) {
-	if len(raw) < recordHeaderSize {
+	if len(raw) < recordHeaderSizeV2 {
 		return archiveRecord{}, errInvalidRecord
 	}
-	if raw[0] != recordVersion {
+	fixedHeaderSize, headerSize, ok := recordLayout(raw[0])
+	if !ok || len(raw) < headerSize {
 		return archiveRecord{}, errInvalidRecord
 	}
 	flags := raw[1]
@@ -741,14 +758,18 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	deCQ := int(binary.BigEndian.Uint16(raw[18:]))
 	dxADIF := int(binary.BigEndian.Uint32(raw[20:]))
 	deADIF := int(binary.BigEndian.Uint32(raw[24:]))
+	observedFreq := freq
+	if raw[0] == recordVersion {
+		observedFreq = math.Float64frombits(binary.BigEndian.Uint64(raw[28:]))
+	}
 
-	offset := recordFixedHeaderSize
+	offset := fixedHeaderSize
 	lengths := [fieldCount]int{}
 	for i := 0; i < fieldCount; i++ {
 		lengths[i] = int(binary.BigEndian.Uint16(raw[offset:]))
 		offset += 2
 	}
-	dataOffset := recordHeaderSize
+	dataOffset := headerSize
 	fields := [fieldCount]string{}
 	for i := 0; i < fieldCount; i++ {
 		l := lengths[i]
@@ -782,6 +803,7 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 		dxCont:         fields[fieldDXCont],
 		deCont:         fields[fieldDECont],
 		freq:           freq,
+		observedFreq:   observedFreq,
 		report:         int(report),
 		hasReport:      flags&flagHasReport != 0,
 		isHuman:        flags&flagIsHuman != 0,
@@ -794,15 +816,16 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 }
 
 func modeIsFTRecord(raw []byte) (bool, error) {
-	if len(raw) < recordHeaderSize {
+	if len(raw) < recordHeaderSizeV2 {
 		return false, errInvalidRecord
 	}
-	if raw[0] != recordVersion {
+	fixedHeaderSize, headerSize, ok := recordLayout(raw[0])
+	if !ok || len(raw) < headerSize {
 		return false, errInvalidRecord
 	}
-	offset := recordFixedHeaderSize
+	offset := fixedHeaderSize
 	lengths := [fieldCount]int{}
-	total := recordHeaderSize
+	total := headerSize
 	for i := 0; i < fieldCount; i++ {
 		l := int(binary.BigEndian.Uint16(raw[offset:]))
 		lengths[i] = l
@@ -812,7 +835,7 @@ func modeIsFTRecord(raw []byte) (bool, error) {
 	if total != len(raw) {
 		return false, errInvalidRecord
 	}
-	dataOffset := recordHeaderSize
+	dataOffset := headerSize
 	for i := 0; i < fieldMode; i++ {
 		dataOffset += lengths[i]
 	}
@@ -852,21 +875,22 @@ func decodeSpot(ts int64, raw []byte) (*spot.Spot, error) {
 		band = spot.FreqToBand(rec.freq)
 	}
 	s := &spot.Spot{
-		DXCall:         rec.dxCall,
-		DECall:         rec.deCall,
-		DECallStripped: rec.deCallStripped,
-		Frequency:      rec.freq,
-		Mode:           rec.mode,
-		Report:         rec.report,
-		Time:           time.Unix(0, ts).UTC(),
-		Comment:        rec.comment,
-		SourceType:     spot.SourceType(rec.source),
-		SourceNode:     rec.sourceNode,
-		TTL:            rec.ttl,
-		IsHuman:        rec.isHuman,
-		HasReport:      rec.hasReport,
-		Confidence:     rec.confidence,
-		Band:           band,
+		DXCall:            rec.dxCall,
+		DECall:            rec.deCall,
+		DECallStripped:    rec.deCallStripped,
+		Frequency:         rec.freq,
+		ObservedFrequency: rec.observedFreq,
+		Mode:              rec.mode,
+		Report:            rec.report,
+		Time:              time.Unix(0, ts).UTC(),
+		Comment:           rec.comment,
+		SourceType:        spot.SourceType(rec.source),
+		SourceNode:        rec.sourceNode,
+		TTL:               rec.ttl,
+		IsHuman:           rec.isHuman,
+		HasReport:         rec.hasReport,
+		Confidence:        rec.confidence,
+		Band:              band,
 	}
 	if rec.deCallStripped != "" {
 		s.DECallNormStripped = rec.deCallStripped

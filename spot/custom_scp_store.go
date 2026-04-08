@@ -305,7 +305,7 @@ func (s *CustomSCPStore) RecordSpot(sp *Spot) {
 	if mode == "" {
 		mode = sp.Mode
 	}
-	if !IsCallCorrectionCandidate(mode) {
+	if _, ok := customSCPBucketForMode(mode); !ok {
 		return
 	}
 	call := sp.DXCallNorm
@@ -876,6 +876,12 @@ func customSCPBucketForMode(mode string) (string, bool) {
 		return "cw", true
 	case "RTTY":
 		return "rtty", true
+	case "FT2":
+		return "ft2", true
+	case "FT4":
+		return "ft4", true
+	case "FT8":
+		return "ft8", true
 	default:
 		return "", false
 	}

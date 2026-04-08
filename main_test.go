@@ -543,7 +543,7 @@ func TestApplyKnownCallFloorPromotesKnownDX(t *testing.T) {
 	s := spot.NewSpot("K1KI", "W2TT", 1831.3, "CW")
 	s.Confidence = "?"
 
-	if !applyKnownCallFloor(s, &knownPtr, nil, nil, config.CallCorrectionConfig{}) {
+	if !applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
 		t.Fatalf("expected known-call floor to mark confidence")
 	}
 	if s.Confidence != "S" {
@@ -571,7 +571,7 @@ func TestApplyKnownCallFloorKeepsNonUnknownConfidence(t *testing.T) {
 	s := spot.NewSpot("K1KI", "W2TT", 1831.3, "CW")
 	s.Confidence = "P"
 
-	if applyKnownCallFloor(s, &knownPtr, nil, nil, config.CallCorrectionConfig{}) {
+	if applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
 		t.Fatalf("did not expect known-call floor to override P")
 	}
 	if s.Confidence != "P" {
@@ -579,11 +579,11 @@ func TestApplyKnownCallFloorKeepsNonUnknownConfidence(t *testing.T) {
 	}
 }
 
-// Purpose: Ensure SCP floor ignores modes without confidence glyphs.
-// Key aspects: FT8 remains without S promotion even when known.
+// Purpose: Ensure FT modes can use the same static floor semantics as other confidence-capable modes.
+// Key aspects: FT8 promotes '?' to 'S' when the DX is statically known.
 // Upstream: go test execution.
 // Downstream: applyKnownCallFloor.
-func TestApplyKnownCallFloorSkipsUnsupportedMode(t *testing.T) {
+func TestApplyKnownCallFloorPromotesSupportedFTMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "known.txt")
 	if err := os.WriteFile(path, []byte("K1KI\n"), 0o644); err != nil {
@@ -599,11 +599,11 @@ func TestApplyKnownCallFloorSkipsUnsupportedMode(t *testing.T) {
 	s := spot.NewSpot("K1KI", "W2TT", 14074.0, "FT8")
 	s.Confidence = "?"
 
-	if applyKnownCallFloor(s, &knownPtr, nil, nil, config.CallCorrectionConfig{}) {
-		t.Fatalf("did not expect known-call floor to apply to FT8")
+	if !applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
+		t.Fatalf("expected known-call floor to apply to FT8")
 	}
-	if s.Confidence != "?" {
-		t.Fatalf("expected confidence ?, got %q", s.Confidence)
+	if s.Confidence != "S" {
+		t.Fatalf("expected confidence S, got %q", s.Confidence)
 	}
 }
 
@@ -621,7 +621,7 @@ func TestApplyKnownCallFloorPromotesRecentOnBandDX(t *testing.T) {
 	store.Record("K1REC", s.BandNorm, "CW", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "CW", "N0BBB", now.Add(-5*time.Minute))
 
-	if !applyKnownCallFloor(s, nil, store, nil, config.CallCorrectionConfig{
+	if !applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            true,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -646,7 +646,7 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 	store.Record("K1REC", s.BandNorm, "RTTY", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "RTTY", "N0BBB", now.Add(-5*time.Minute))
 
-	if applyKnownCallFloor(s, nil, store, nil, config.CallCorrectionConfig{
+	if applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            true,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -658,7 +658,7 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 
 	store.Record("K1REC", s.BandNorm, "CW", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "CW", "N0BBB", now.Add(-5*time.Minute))
-	if applyKnownCallFloor(s, nil, store, nil, config.CallCorrectionConfig{
+	if applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            false,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -666,6 +666,34 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 	}
 	if s.Confidence != "?" {
 		t.Fatalf("expected confidence ?, got %q", s.Confidence)
+	}
+}
+
+func TestApplyKnownCallFloorUsesFTRecentOverrideWhenCustomSCPEnabled(t *testing.T) {
+	store := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
+		Window:             12 * time.Hour,
+		Shards:             1,
+		MaxEntries:         128,
+		CleanupInterval:    time.Hour,
+		MaxSpottersPerCall: 8,
+	})
+	now := time.Now().UTC()
+	s := spot.NewSpot("K1REC", "W2TT", 14074.0, "FT8")
+	s.Confidence = "?"
+	store.Record("K1REC", s.BandNorm, "FT8", "N0AAA", now.Add(-10*time.Minute))
+	store.Record("K1REC", s.BandNorm, "FT8", "N0BBB", now.Add(-5*time.Minute))
+
+	if !applyKnownCallFloor(s, nil, nil, &spot.CustomSCPStore{}, store, config.CallCorrectionConfig{
+		RecentBandBonusEnabled: true,
+		CustomSCP: config.CallCorrectionCustomSCPConfig{
+			Enabled: true,
+		},
+		RecentBandRecordMinUniqueSpotters: 2,
+	}) {
+		t.Fatalf("expected FT recent-on-band override to mark confidence")
+	}
+	if s.Confidence != "S" {
+		t.Fatalf("expected confidence S, got %q", s.Confidence)
 	}
 }
 
@@ -1040,7 +1068,7 @@ func TestApplyKnownCallFloorPromotesViaSlashFamilyRecentSupport(t *testing.T) {
 
 	s := spot.NewSpot("W1AW", "W2TT", 7010.0, "CW")
 	s.Confidence = "?"
-	if !applyKnownCallFloor(s, nil, store, nil, cfg) {
+	if !applyKnownCallFloor(s, nil, store, nil, nil, cfg) {
 		t.Fatalf("expected recent-on-band floor to use slash family support")
 	}
 	if s.Confidence != "S" {

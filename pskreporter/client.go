@@ -25,13 +25,15 @@ import (
 // normalizedPSK carries normalized tokens to avoid repeated string operations per message.
 // All string fields are uppercased and trimmed.
 type normalizedPSK struct {
-	modeUpper   string // canonical mode (e.g., PSK)
-	displayMode string // original token (e.g., PSK31)
-	dxCall      string
-	deCall      string
-	dxGrid      string
-	deGrid      string
-	freqKHz     float64
+	modeUpper       string // canonical mode (e.g., PSK)
+	displayMode     string // original token (e.g., PSK31)
+	dxCall          string
+	deCall          string
+	dxGrid          string
+	deGrid          string
+	freqKHz         float64
+	observedFreqKHz float64
+	ftCanonicalized bool
 }
 
 // pskModeInfo carries canonical mode data for allowlist checks and conversion.
@@ -61,6 +63,7 @@ type Client struct {
 	skewStore           *skew.Store
 	appendSSID          bool
 	spotterCache        *spot.CallCache
+	ftDialRegistry      *spot.FTDialRegistry
 
 	maxPayloadBytes         int
 	mqttInboundWorkers      int
@@ -160,7 +163,7 @@ func ConfigureCallCache(size int, ttl time.Duration) {
 // Key aspects: Initializes channels, caches, and worker settings.
 // Upstream: main.go startup.
 // Downstream: Client.Connect, worker pool.
-func NewClient(broker string, port int, topics []string, allowedModes []string, pathOnlyModes []string, name string, workers int, mqttInboundWorkers int, mqttInboundQueueDepth int, mqttQoS12EnqueueTimeout time.Duration, skewStore *skew.Store, appendSSID bool, spotBuffer int, maxPayloadBytes int) *Client {
+func NewClient(broker string, port int, topics []string, allowedModes []string, pathOnlyModes []string, name string, workers int, mqttInboundWorkers int, mqttInboundQueueDepth int, mqttQoS12EnqueueTimeout time.Duration, skewStore *skew.Store, ftDialRegistry *spot.FTDialRegistry, appendSSID bool, spotBuffer int, maxPayloadBytes int) *Client {
 	if spotBuffer <= 0 {
 		spotBuffer = defaultSpotBuffer
 	}
@@ -206,6 +209,7 @@ func NewClient(broker string, port int, topics []string, allowedModes []string, 
 		mqttInboundQueueDepth:   mqttInboundQueueDepth,
 		mqttQoS12EnqueueTimeout: mqttQoS12EnqueueTimeout,
 		skewStore:               skewStore,
+		ftDialRegistry:          ftDialRegistry,
 		appendSSID:              appendSSID,
 		spotterCache:            spot.NewCallCache(callCacheSize, callCacheTTL),
 		maxPayloadBytes:         maxPayloadBytes,
@@ -694,6 +698,9 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	// Set source type and node
 	s.SourceType = spot.SourcePSKReporter
 	s.SourceNode = "PSKREPORTER"
+	if norm.ftCanonicalized && norm.observedFreqKHz > 0 {
+		s.ObservedFrequency = norm.observedFreqKHz
+	}
 
 	s.DXMetadata.Grid = norm.dxGrid
 	s.DEMetadata.Grid = norm.deGrid
@@ -732,18 +739,26 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *norma
 	if freqKHz <= 0 {
 		return nil
 	}
+	observedFreqKHz := freqKHz
+	ftCanonicalized := false
+	if canonicalFreqKHz, ok := c.ftDialRegistry.Canonicalize(modeUpper, freqKHz); ok {
+		freqKHz = canonicalFreqKHz
+		ftCanonicalized = canonicalFreqKHz != observedFreqKHz
+	}
 	dxCall := spot.NormalizeCallsign(msg.SenderCall)
 	deCall := c.decorateSpotterCall(msg.ReceiverCall)
 	dxGrid := strutil.NormalizeUpper(msg.SenderLocator)
 	deGrid := strutil.NormalizeUpper(msg.ReceiverLocator)
 	return &normalizedPSK{
-		modeUpper:   modeUpper,
-		displayMode: displayMode,
-		dxCall:      dxCall,
-		deCall:      deCall,
-		dxGrid:      dxGrid,
-		deGrid:      deGrid,
-		freqKHz:     freqKHz,
+		modeUpper:       modeUpper,
+		displayMode:     displayMode,
+		dxCall:          dxCall,
+		deCall:          deCall,
+		dxGrid:          dxGrid,
+		deGrid:          deGrid,
+		freqKHz:         freqKHz,
+		observedFreqKHz: observedFreqKHz,
+		ftCanonicalized: ftCanonicalized,
 	}
 }
 

@@ -667,6 +667,37 @@ func formatTemporalSummary(tracker *stats.Tracker) string {
 	)
 }
 
+func formatFTBurstSummary(tracker *stats.Tracker) string {
+	if tracker == nil {
+		return "FT Burst: n/a"
+	}
+	parts := []string{
+		fmt.Sprintf("active %s", humanize.Comma(tracker.FTBurstActive())),
+		fmt.Sprintf("released %s", humanize.Comma(int64(tracker.FTBurstReleased()))),
+		fmt.Sprintf("overflow %s", humanize.Comma(int64(tracker.FTBurstOverflowRelease()))),
+	}
+	spanStats := tracker.FTBurstSpanStats()
+	if len(spanStats) == 0 {
+		parts = append(parts, "avg n/a")
+		return "FT Burst: " + strings.Join(parts, " | ")
+	}
+	order := []string{"FT8", "FT4", "FT2"}
+	spanParts := make([]string, 0, len(order))
+	for _, mode := range order {
+		stat, ok := spanStats[mode]
+		if !ok || stat.Samples == 0 {
+			continue
+		}
+		spanParts = append(spanParts, fmt.Sprintf("%s %s", mode, formatDurationShort(stat.AverageSpan)))
+	}
+	if len(spanParts) == 0 {
+		parts = append(parts, "avg n/a")
+	} else {
+		parts = append(parts, "avg "+strings.Join(spanParts, ", "))
+	}
+	return "FT Burst: " + strings.Join(parts, " | ")
+}
+
 func formatTopCounterSummary(counts map[string]uint64, limit int) string {
 	if len(counts) == 0 {
 		return "none"
@@ -2361,17 +2392,38 @@ func frequencyAverageTolerance(policy config.SpotPolicy) float64 {
 	return toleranceHz / 1000.0
 }
 
-// Purpose: Decide whether a mode should carry confidence glyphs.
-// Key aspects: Treats USB/LSB as voice modes; digital modes remain exempt.
+// Purpose: Decide whether a mode participates in resolver-based confidence rails.
+// Key aspects: Treats USB/LSB as voice modes; FT modes stay outside resolver mutation.
 // Upstream: processOutputSpots confidence seeding and fallback.
 // Downstream: strings.ToUpper/TrimSpace.
-func modeSupportsConfidenceGlyph(mode string) bool {
+func modeSupportsResolverConfidenceGlyph(mode string) bool {
 	switch strutil.NormalizeUpper(mode) {
 	case "CW", "RTTY", "USB", "LSB":
 		return true
 	default:
 		return false
 	}
+}
+
+// Purpose: Report whether a mode uses the FT corroboration rail.
+// Key aspects: Keeps FT confidence tagging separate from resolver call mutation.
+// Upstream: FT hold/floor assignment.
+// Downstream: strings.ToUpper/TrimSpace.
+func modeSupportsFTConfidenceGlyph(mode string) bool {
+	switch strutil.NormalizeUpper(mode) {
+	case "FT2", "FT4", "FT8":
+		return true
+	default:
+		return false
+	}
+}
+
+// Purpose: Decide whether a mode can carry any confidence glyph.
+// Key aspects: Resolver-capable modes and FT corroboration modes both qualify.
+// Upstream: confidence floor helpers and filter contracts.
+// Downstream: modeSupportsResolverConfidenceGlyph, modeSupportsFTConfidenceGlyph.
+func modeSupportsConfidenceGlyph(mode string) bool {
+	return modeSupportsResolverConfidenceGlyph(mode) || modeSupportsFTConfidenceGlyph(mode)
 }
 
 func stabilizerImmediateCountEligible(s *spot.Spot) bool {
@@ -2437,15 +2489,16 @@ func recordRecentBandObservation(s *spot.Spot, store spot.RecentSupportStore, cu
 }
 
 // Purpose: Apply confidence floor only when confidence is still unknown.
-// Key aspects: If confidence is '?', upgrade to 'S' when DX call is in
-// known-calls (SCP) or admitted by recent-on-band evidence.
-// Upstream: processOutputSpots after correction/confidence assignment.
+// Key aspects: If confidence is '?', upgrade to 'S' when DX call is in static
+// known-calls/custom-SCP membership or admitted by recent-on-band evidence.
+// Upstream: processOutputSpots after confidence assignment.
 // Downstream: KnownCallsigns.Contains, RecentBandStore.HasRecentSupport, and modeSupportsConfidenceGlyph.
 func applyKnownCallFloor(
 	s *spot.Spot,
 	knownCalls *atomic.Pointer[spot.KnownCallsigns],
 	recentBandStore spot.RecentSupportStore,
 	customSCPStore *spot.CustomSCPStore,
+	ftRecentBandStore spot.RecentSupportStore,
 	corrCfg config.CallCorrectionConfig,
 ) bool {
 	if s == nil || s.IsBeacon {
@@ -2479,7 +2532,15 @@ func applyKnownCallFloor(
 	}
 
 	recentHit := false
-	if customSCPStore != nil && corrCfg.CustomSCP.Enabled {
+	if modeSupportsFTConfidenceGlyph(mode) {
+		if ftRecentBandStore != nil && corrCfg.RecentBandBonusEnabled {
+			band := s.BandNorm
+			if band == "" || band == "???" {
+				band = spot.FreqToBand(s.Frequency)
+			}
+			recentHit = hasRecentSupportForCallFamily(ftRecentBandStore, call, band, mode, corrCfg.RecentBandRecordMinUniqueSpotters, time.Now().UTC())
+		}
+	} else if customSCPStore != nil && corrCfg.CustomSCP.Enabled {
 		band := s.BandNorm
 		if band == "" || band == "???" {
 			band = spot.FreqToBand(s.Frequency)
@@ -4399,6 +4460,7 @@ func buildOverviewLines(
 		fmt.Sprintf("[yellow]Stabilizer Glyph[-]: %s", strings.TrimPrefix(formatStabilizerGlyphSummary(tracker), "Stabilizer Glyph: ")),
 		"",
 		fmt.Sprintf("[yellow]Temporal[-]: %s", strings.TrimPrefix(formatTemporalSummary(tracker), "Temporal: ")),
+		fmt.Sprintf("[yellow]FT Burst[-]: %s", strings.TrimPrefix(formatFTBurstSummary(tracker), "FT Burst: ")),
 		"CACHES & DATA FRESHNESS",
 	)
 	lines = append(lines, cacheBars...)

@@ -202,6 +202,33 @@ func TestLoadCallCorrectionStabilizerDefaults(t *testing.T) {
 	if cfg.CallCorrection.FamilyPolicy.TelnetSuppression.FrequencyToleranceFallbackHz != cfg.CallCorrection.FrequencyToleranceHz {
 		t.Fatalf("expected telnet family suppression fallback tolerance %.1f, got %.1f", cfg.CallCorrection.FrequencyToleranceHz, cfg.CallCorrection.FamilyPolicy.TelnetSuppression.FrequencyToleranceFallbackHz)
 	}
+	if cfg.CallCorrection.PMinUniqueSpotters != DefaultCallCorrectionFTPMinUniqueSpotters {
+		t.Fatalf("expected FT P threshold default %d, got %d", DefaultCallCorrectionFTPMinUniqueSpotters, cfg.CallCorrection.PMinUniqueSpotters)
+	}
+	if cfg.CallCorrection.VMinUniqueSpotters != DefaultCallCorrectionFTVMinUniqueSpotters {
+		t.Fatalf("expected FT V threshold default %d, got %d", DefaultCallCorrectionFTVMinUniqueSpotters, cfg.CallCorrection.VMinUniqueSpotters)
+	}
+	if cfg.CallCorrection.FT8QuietGapSeconds != DefaultCallCorrectionFT8QuietGapSeconds || cfg.CallCorrection.FT8HardCapSeconds != DefaultCallCorrectionFT8HardCapSeconds {
+		t.Fatalf("expected FT8 timing defaults %d/%d, got %d/%d",
+			DefaultCallCorrectionFT8QuietGapSeconds,
+			DefaultCallCorrectionFT8HardCapSeconds,
+			cfg.CallCorrection.FT8QuietGapSeconds,
+			cfg.CallCorrection.FT8HardCapSeconds)
+	}
+	if cfg.CallCorrection.FT4QuietGapSeconds != DefaultCallCorrectionFT4QuietGapSeconds || cfg.CallCorrection.FT4HardCapSeconds != DefaultCallCorrectionFT4HardCapSeconds {
+		t.Fatalf("expected FT4 timing defaults %d/%d, got %d/%d",
+			DefaultCallCorrectionFT4QuietGapSeconds,
+			DefaultCallCorrectionFT4HardCapSeconds,
+			cfg.CallCorrection.FT4QuietGapSeconds,
+			cfg.CallCorrection.FT4HardCapSeconds)
+	}
+	if cfg.CallCorrection.FT2QuietGapSeconds != DefaultCallCorrectionFT2QuietGapSeconds || cfg.CallCorrection.FT2HardCapSeconds != DefaultCallCorrectionFT2HardCapSeconds {
+		t.Fatalf("expected FT2 timing defaults %d/%d, got %d/%d",
+			DefaultCallCorrectionFT2QuietGapSeconds,
+			DefaultCallCorrectionFT2HardCapSeconds,
+			cfg.CallCorrection.FT2QuietGapSeconds,
+			cfg.CallCorrection.FT2HardCapSeconds)
+	}
 }
 
 func TestLoadRejectsInvalidCallCorrectionStabilizerTimeoutAction(t *testing.T) {
@@ -221,6 +248,104 @@ func TestLoadRejectsInvalidCallCorrectionStabilizerTimeoutAction(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "stabilizer_timeout_action") {
 		t.Fatalf("expected stabilizer timeout action error, got %v", err)
+	}
+}
+
+func TestLoadCallCorrectionFTCorroborationOverrides(t *testing.T) {
+	dir := t.TempDir()
+	pipeline := `call_correction:
+  enabled: true
+  p_min_unique_spotters: 3
+  v_min_unique_spotters: 5
+  ft8_quiet_gap_seconds: 7
+  ft8_hard_cap_seconds: 14
+  ft4_quiet_gap_seconds: 4
+  ft4_hard_cap_seconds: 9
+  ft2_quiet_gap_seconds: 2
+  ft2_hard_cap_seconds: 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "pipeline.yaml"), []byte(pipeline), 0o644); err != nil {
+		t.Fatalf("write pipeline.yaml: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.CallCorrection.PMinUniqueSpotters != 3 || cfg.CallCorrection.VMinUniqueSpotters != 5 {
+		t.Fatalf("expected FT thresholds 3/5, got %d/%d", cfg.CallCorrection.PMinUniqueSpotters, cfg.CallCorrection.VMinUniqueSpotters)
+	}
+	if cfg.CallCorrection.FT8QuietGapSeconds != 7 || cfg.CallCorrection.FT8HardCapSeconds != 14 {
+		t.Fatalf("expected FT8 timing 7/14, got %d/%d", cfg.CallCorrection.FT8QuietGapSeconds, cfg.CallCorrection.FT8HardCapSeconds)
+	}
+	if cfg.CallCorrection.FT4QuietGapSeconds != 4 || cfg.CallCorrection.FT4HardCapSeconds != 9 {
+		t.Fatalf("expected FT4 timing 4/9, got %d/%d", cfg.CallCorrection.FT4QuietGapSeconds, cfg.CallCorrection.FT4HardCapSeconds)
+	}
+	if cfg.CallCorrection.FT2QuietGapSeconds != 2 || cfg.CallCorrection.FT2HardCapSeconds != 5 {
+		t.Fatalf("expected FT2 timing 2/5, got %d/%d", cfg.CallCorrection.FT2QuietGapSeconds, cfg.CallCorrection.FT2HardCapSeconds)
+	}
+}
+
+func TestLoadRejectsInvalidCallCorrectionFTCorroborationConfig(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		fieldHint string
+	}{
+		{
+			name: "p threshold too low",
+			body: `call_correction:
+  p_min_unique_spotters: 1
+`,
+			fieldHint: "p_min_unique_spotters",
+		},
+		{
+			name: "v threshold not above p",
+			body: `call_correction:
+  p_min_unique_spotters: 3
+  v_min_unique_spotters: 3
+`,
+			fieldHint: "v_min_unique_spotters",
+		},
+		{
+			name: "ft8 hard cap below quiet gap",
+			body: `call_correction:
+  ft8_quiet_gap_seconds: 7
+  ft8_hard_cap_seconds: 6
+`,
+			fieldHint: "ft8_hard_cap_seconds",
+		},
+		{
+			name: "ft4 quiet gap non-positive",
+			body: `call_correction:
+  ft4_quiet_gap_seconds: 0
+`,
+			fieldHint: "ft4_quiet_gap_seconds",
+		},
+		{
+			name: "ft2 hard cap below quiet gap",
+			body: `call_correction:
+  ft2_quiet_gap_seconds: 5
+  ft2_hard_cap_seconds: 4
+`,
+			fieldHint: "ft2_hard_cap_seconds",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "pipeline.yaml"), []byte(tc.body), 0o644); err != nil {
+				t.Fatalf("write pipeline.yaml: %v", err)
+			}
+			_, err := Load(dir)
+			if err == nil {
+				t.Fatal("expected Load() error")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.fieldHint)) {
+				t.Fatalf("expected error containing %q, got %v", tc.fieldHint, err)
+			}
+		})
 	}
 }
 

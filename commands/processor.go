@@ -944,8 +944,8 @@ func filterHelpLines(dialect string) []string {
 	for _, note := range []string{
 		"? - One reporter only; no prior/static support promoted it to S.",
 		"S - One reporter only, but the call has static or recent on-band support.",
-		"P - Multiple spotters support the displayed call at 50% or less.",
-		"V - Multiple spotters support the displayed call at over 50%.",
+		"P - Resolver modes: lower-confidence multi-spotter support. FT modes: corroboration burst support at or above the configured P threshold but below the configured V threshold.",
+		"V - Resolver modes: higher-confidence multi-spotter support. FT modes: corroboration burst support at or above the configured V threshold.",
 		"C - The call was corrected.",
 		"B - A correction was attempted, but base-call or CTY validation failed, so the original call was kept.",
 	} {

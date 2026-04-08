@@ -689,6 +689,17 @@ type CallCacheConfig struct {
 	TTLSeconds int `yaml:"ttl_seconds"` // >0 expires cached entries after this many seconds
 }
 
+const (
+	DefaultCallCorrectionFTPMinUniqueSpotters = 2
+	DefaultCallCorrectionFTVMinUniqueSpotters = 3
+	DefaultCallCorrectionFT8QuietGapSeconds   = 6
+	DefaultCallCorrectionFT8HardCapSeconds    = 12
+	DefaultCallCorrectionFT4QuietGapSeconds   = 5
+	DefaultCallCorrectionFT4HardCapSeconds    = 10
+	DefaultCallCorrectionFT2QuietGapSeconds   = 3
+	DefaultCallCorrectionFT2HardCapSeconds    = 6
+)
+
 // CallCorrectionConfig controls resolver-primary DX call correction behavior.
 type CallCorrectionConfig struct {
 	Enabled bool `yaml:"enabled"`
@@ -758,6 +769,17 @@ type CallCorrectionConfig struct {
 	RecentBandBonusEnabled            bool `yaml:"recent_band_bonus_enabled"`
 	RecentBandWindowSeconds           int  `yaml:"recent_band_window_seconds"`
 	RecentBandRecordMinUniqueSpotters int  `yaml:"recent_band_record_min_unique_spotters"`
+	// FT corroboration uses separate bounded burst clustering in the main output
+	// pipeline. These knobs control only FT ?/S/P/V assignment and do not enable
+	// resolver mutation for FT modes.
+	PMinUniqueSpotters int `yaml:"p_min_unique_spotters"`
+	VMinUniqueSpotters int `yaml:"v_min_unique_spotters"`
+	FT8QuietGapSeconds int `yaml:"ft8_quiet_gap_seconds"`
+	FT8HardCapSeconds  int `yaml:"ft8_hard_cap_seconds"`
+	FT4QuietGapSeconds int `yaml:"ft4_quiet_gap_seconds"`
+	FT4HardCapSeconds  int `yaml:"ft4_hard_cap_seconds"`
+	FT2QuietGapSeconds int `yaml:"ft2_quiet_gap_seconds"`
+	FT2HardCapSeconds  int `yaml:"ft2_hard_cap_seconds"`
 	// CustomSCP controls the replacement runtime-learned SCP evidence database.
 	CustomSCP CallCorrectionCustomSCPConfig `yaml:"custom_scp"`
 	// Optional telnet stabilizer: delay spots that have not been heard recently
@@ -1214,6 +1236,14 @@ type loadRawPresence struct {
 	hasResolverRecentPlus1AllowTruncation           bool
 	hasBayesBonusRequireCandidateValidated          bool
 	hasBayesBonusRequireSubjectUnvalidatedDistance2 bool
+	hasFTPMinUniqueSpotters                         bool
+	hasFTVMinUniqueSpotters                         bool
+	hasFT8QuietGapSeconds                           bool
+	hasFT8HardCapSeconds                            bool
+	hasFT4QuietGapSeconds                           bool
+	hasFT4HardCapSeconds                            bool
+	hasFT2QuietGapSeconds                           bool
+	hasFT2HardCapSeconds                            bool
 	hasUIColor                                      bool
 	hasUIClearScreen                                bool
 	hasLoggingDropDedupeWindow                      bool
@@ -1255,14 +1285,22 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 		hasResolverRecentPlus1AllowTruncation:           yamlKeyPresent(raw, "call_correction", "resolver_recent_plus1_allow_truncation_family"),
 		hasBayesBonusRequireCandidateValidated:          yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_candidate_validated"),
 		hasBayesBonusRequireSubjectUnvalidatedDistance2: yamlKeyPresent(raw, "call_correction", "bayes_bonus", "require_subject_unvalidated_distance2"),
-		hasUIColor:                              yamlKeyPresent(raw, "ui", "color"),
-		hasUIClearScreen:                        yamlKeyPresent(raw, "ui", "clear_screen"),
-		hasLoggingDropDedupeWindow:              yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
-		hasReputationIPInfoPebbleLoadIPv4:       yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4"),
-		hasReputationIPInfoDeleteCSVAfterImport: yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import"),
-		hasReputationIPInfoKeepGzip:             yamlKeyPresent(raw, "reputation", "ipinfo_keep_gzip"),
-		hasReputationIPInfoPebbleCleanup:        yamlKeyPresent(raw, "reputation", "ipinfo_pebble_cleanup"),
-		hasReputationIPInfoPebbleCompact:        yamlKeyPresent(raw, "reputation", "ipinfo_pebble_compact"),
+		hasFTPMinUniqueSpotters:                         yamlKeyPresent(raw, "call_correction", "p_min_unique_spotters"),
+		hasFTVMinUniqueSpotters:                         yamlKeyPresent(raw, "call_correction", "v_min_unique_spotters"),
+		hasFT8QuietGapSeconds:                           yamlKeyPresent(raw, "call_correction", "ft8_quiet_gap_seconds"),
+		hasFT8HardCapSeconds:                            yamlKeyPresent(raw, "call_correction", "ft8_hard_cap_seconds"),
+		hasFT4QuietGapSeconds:                           yamlKeyPresent(raw, "call_correction", "ft4_quiet_gap_seconds"),
+		hasFT4HardCapSeconds:                            yamlKeyPresent(raw, "call_correction", "ft4_hard_cap_seconds"),
+		hasFT2QuietGapSeconds:                           yamlKeyPresent(raw, "call_correction", "ft2_quiet_gap_seconds"),
+		hasFT2HardCapSeconds:                            yamlKeyPresent(raw, "call_correction", "ft2_hard_cap_seconds"),
+		hasUIColor:                                      yamlKeyPresent(raw, "ui", "color"),
+		hasUIClearScreen:                                yamlKeyPresent(raw, "ui", "clear_screen"),
+		hasLoggingDropDedupeWindow:                      yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
+		hasReputationIPInfoPebbleLoadIPv4:               yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4"),
+		hasReputationIPInfoDeleteCSVAfterImport:         yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import"),
+		hasReputationIPInfoKeepGzip:                     yamlKeyPresent(raw, "reputation", "ipinfo_keep_gzip"),
+		hasReputationIPInfoPebbleCleanup:                yamlKeyPresent(raw, "reputation", "ipinfo_pebble_cleanup"),
+		hasReputationIPInfoPebbleCompact:                yamlKeyPresent(raw, "reputation", "ipinfo_pebble_compact"),
 	}
 }
 
@@ -1531,6 +1569,9 @@ func normalizeArchiveAndStatsConfig(cfg *Config, presence loadRawPresence) error
 
 func normalizeCallCorrectionConfig(cfg *Config, presence loadRawPresence) error {
 	normalizeCallCorrectionCoreConfig(cfg)
+	if err := normalizeCallCorrectionFTCorroborationConfig(cfg, presence); err != nil {
+		return err
+	}
 	normalizeCallCorrectionResolverConfig(cfg, presence)
 	normalizeCallCorrectionBayesDefaultsConfig(cfg, presence)
 	if err := normalizeCallCorrectionTemporalConfig(cfg); err != nil {
@@ -1694,6 +1735,58 @@ func normalizeCallCorrectionCoreConfig(cfg *Config) {
 	if cfg.CallCorrection.StabilizerMaxPending <= 0 {
 		cfg.CallCorrection.StabilizerMaxPending = 20000
 	}
+}
+
+func normalizeCallCorrectionFTCorroborationConfig(cfg *Config, presence loadRawPresence) error {
+	if !presence.hasFTPMinUniqueSpotters {
+		cfg.CallCorrection.PMinUniqueSpotters = DefaultCallCorrectionFTPMinUniqueSpotters
+	}
+	if !presence.hasFTVMinUniqueSpotters {
+		cfg.CallCorrection.VMinUniqueSpotters = DefaultCallCorrectionFTVMinUniqueSpotters
+	}
+	if !presence.hasFT8QuietGapSeconds {
+		cfg.CallCorrection.FT8QuietGapSeconds = DefaultCallCorrectionFT8QuietGapSeconds
+	}
+	if !presence.hasFT8HardCapSeconds {
+		cfg.CallCorrection.FT8HardCapSeconds = DefaultCallCorrectionFT8HardCapSeconds
+	}
+	if !presence.hasFT4QuietGapSeconds {
+		cfg.CallCorrection.FT4QuietGapSeconds = DefaultCallCorrectionFT4QuietGapSeconds
+	}
+	if !presence.hasFT4HardCapSeconds {
+		cfg.CallCorrection.FT4HardCapSeconds = DefaultCallCorrectionFT4HardCapSeconds
+	}
+	if !presence.hasFT2QuietGapSeconds {
+		cfg.CallCorrection.FT2QuietGapSeconds = DefaultCallCorrectionFT2QuietGapSeconds
+	}
+	if !presence.hasFT2HardCapSeconds {
+		cfg.CallCorrection.FT2HardCapSeconds = DefaultCallCorrectionFT2HardCapSeconds
+	}
+	if cfg.CallCorrection.PMinUniqueSpotters < 2 {
+		return fmt.Errorf("invalid call_correction.p_min_unique_spotters %d (expected >= 2)", cfg.CallCorrection.PMinUniqueSpotters)
+	}
+	if cfg.CallCorrection.VMinUniqueSpotters <= cfg.CallCorrection.PMinUniqueSpotters {
+		return fmt.Errorf("invalid call_correction.v_min_unique_spotters %d (expected > p_min_unique_spotters=%d)", cfg.CallCorrection.VMinUniqueSpotters, cfg.CallCorrection.PMinUniqueSpotters)
+	}
+	if cfg.CallCorrection.FT8QuietGapSeconds <= 0 {
+		return fmt.Errorf("invalid call_correction.ft8_quiet_gap_seconds %d (expected > 0)", cfg.CallCorrection.FT8QuietGapSeconds)
+	}
+	if cfg.CallCorrection.FT8HardCapSeconds < cfg.CallCorrection.FT8QuietGapSeconds {
+		return fmt.Errorf("invalid call_correction.ft8_hard_cap_seconds %d (expected >= ft8_quiet_gap_seconds=%d)", cfg.CallCorrection.FT8HardCapSeconds, cfg.CallCorrection.FT8QuietGapSeconds)
+	}
+	if cfg.CallCorrection.FT4QuietGapSeconds <= 0 {
+		return fmt.Errorf("invalid call_correction.ft4_quiet_gap_seconds %d (expected > 0)", cfg.CallCorrection.FT4QuietGapSeconds)
+	}
+	if cfg.CallCorrection.FT4HardCapSeconds < cfg.CallCorrection.FT4QuietGapSeconds {
+		return fmt.Errorf("invalid call_correction.ft4_hard_cap_seconds %d (expected >= ft4_quiet_gap_seconds=%d)", cfg.CallCorrection.FT4HardCapSeconds, cfg.CallCorrection.FT4QuietGapSeconds)
+	}
+	if cfg.CallCorrection.FT2QuietGapSeconds <= 0 {
+		return fmt.Errorf("invalid call_correction.ft2_quiet_gap_seconds %d (expected > 0)", cfg.CallCorrection.FT2QuietGapSeconds)
+	}
+	if cfg.CallCorrection.FT2HardCapSeconds < cfg.CallCorrection.FT2QuietGapSeconds {
+		return fmt.Errorf("invalid call_correction.ft2_hard_cap_seconds %d (expected >= ft2_quiet_gap_seconds=%d)", cfg.CallCorrection.FT2HardCapSeconds, cfg.CallCorrection.FT2QuietGapSeconds)
+	}
+	return nil
 }
 
 func normalizeCallCorrectionResolverConfig(cfg *Config, presence loadRawPresence) {
@@ -3131,6 +3224,15 @@ func (c *Config) Print() {
 		c.CallCorrection.TemporalDecoder.MaxPending,
 		c.CallCorrection.TemporalDecoder.MaxActiveKeys,
 		c.CallCorrection.TemporalDecoder.MaxEventsPerKey)
+	fmt.Printf("Call correction FT corroboration: p_unique=%d v_unique=%d ft8=%ds/%ds ft4=%ds/%ds ft2=%ds/%ds\n",
+		c.CallCorrection.PMinUniqueSpotters,
+		c.CallCorrection.VMinUniqueSpotters,
+		c.CallCorrection.FT8QuietGapSeconds,
+		c.CallCorrection.FT8HardCapSeconds,
+		c.CallCorrection.FT4QuietGapSeconds,
+		c.CallCorrection.FT4HardCapSeconds,
+		c.CallCorrection.FT2QuietGapSeconds,
+		c.CallCorrection.FT2HardCapSeconds)
 
 	harmonicStatus := "disabled"
 	if c.Harmonics.Enabled {

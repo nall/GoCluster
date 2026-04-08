@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"dxcluster/spot"
 )
 
 func intPtr(v int) *int {
@@ -33,7 +35,7 @@ func TestDecorateSpotterCall(t *testing.T) {
 }
 
 func TestConvertToSpotOmitsCommentAndCarriesGrids(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
 
 	msg := &PSKRMessage{
 		SequenceNumber:  1,
@@ -66,6 +68,72 @@ func TestConvertToSpotOmitsCommentAndCarriesGrids(t *testing.T) {
 	}
 }
 
+func TestConvertToSpotCanonicalizesFTFrequencyAndPreservesObserved(t *testing.T) {
+	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
+		{FrequencyKHz: 14074, Mode: "FT8"},
+	})
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+
+	msg := &PSKRMessage{
+		SequenceNumber:  1,
+		Frequency:       14076110,
+		Mode:            "FT8",
+		Report:          intPtr(10),
+		Timestamp:       time.Now().Add(-time.Minute).Unix(),
+		SenderCall:      "K1ABC",
+		ReceiverCall:    "N0CALL",
+		SenderLocator:   "fn42",
+		ReceiverLocator: "em10",
+	}
+
+	modeInfo, ok := parseModeInfo(msg.Mode)
+	if !ok {
+		t.Fatalf("expected valid mode info for %q", msg.Mode)
+	}
+	got := client.convertToSpot(msg, modeInfo)
+	if got == nil {
+		t.Fatal("expected spot")
+	}
+	if got.Frequency != 14074.0 {
+		t.Fatalf("expected canonical FT8 dial 14074.0, got %.2f", got.Frequency)
+	}
+	if got.ObservedFrequency != 14076.11 {
+		t.Fatalf("expected observed FT8 frequency 14076.11, got %.2f", got.ObservedFrequency)
+	}
+}
+
+func TestConvertToSpotFTFrequencyFailsOpenWithoutMatchingDial(t *testing.T) {
+	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
+		{FrequencyKHz: 14074, Mode: "FT8"},
+	})
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+
+	msg := &PSKRMessage{
+		SequenceNumber: 1,
+		Frequency:      14079000,
+		Mode:           "FT8",
+		Report:         intPtr(10),
+		Timestamp:      time.Now().Add(-time.Minute).Unix(),
+		SenderCall:     "K1ABC",
+		ReceiverCall:   "N0CALL",
+	}
+
+	modeInfo, ok := parseModeInfo(msg.Mode)
+	if !ok {
+		t.Fatalf("expected valid mode info for %q", msg.Mode)
+	}
+	got := client.convertToSpot(msg, modeInfo)
+	if got == nil {
+		t.Fatal("expected spot")
+	}
+	if got.Frequency != 14079.0 {
+		t.Fatalf("expected unmapped FT8 frequency to remain raw, got %.2f", got.Frequency)
+	}
+	if got.ObservedFrequency != 0 {
+		t.Fatalf("expected no separate observed frequency when canonicalization fails open, got %.2f", got.ObservedFrequency)
+	}
+}
+
 type testMessage struct {
 	payload []byte
 }
@@ -81,7 +149,7 @@ func (m testMessage) Payload() []byte { return m.payload }
 func (m testMessage) Ack()            {}
 
 func TestMessageHandlerDropsOversizePayload(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, false, 16, 4)
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 4)
 	client.processingMu.Lock()
 	client.processing = make(chan []byte, 1)
 	client.processingMu.Unlock()
@@ -97,7 +165,7 @@ func TestMessageHandlerDropsOversizePayload(t *testing.T) {
 
 func TestHandlePayloadFiltersModes(t *testing.T) {
 	// Allow only FT8.
-	client := NewClient("localhost", 1883, nil, []string{"FT8"}, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, []string{"FT8"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	allowed := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -131,7 +199,7 @@ func TestHandlePayloadFiltersModes(t *testing.T) {
 }
 
 func TestHandlePayloadDropsZeroSNR(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -151,7 +219,7 @@ func TestHandlePayloadDropsZeroSNR(t *testing.T) {
 }
 
 func TestHandlePayloadDropsMissingReport(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -170,7 +238,7 @@ func TestHandlePayloadDropsMissingReport(t *testing.T) {
 }
 
 func TestHandlePayloadAllowsPSKVariantsWithCanonicalAllowlist(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"PSK"}, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, []string{"PSK"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	psk31 := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "PSK31",
@@ -193,7 +261,7 @@ func TestHandlePayloadAllowsPSKVariantsWithCanonicalAllowlist(t *testing.T) {
 }
 
 func TestHandlePayloadAllowsFT2WhenConfigured(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"FT2"}, nil, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, []string{"FT2"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14080000,
 		Mode:         "FT2",
@@ -216,7 +284,7 @@ func TestHandlePayloadAllowsFT2WhenConfigured(t *testing.T) {
 }
 
 func TestHandlePayloadRoutesPathOnlyMode(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"FT8"}, []string{"WSPR"}, "", 1, 0, 0, 0, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, []string{"FT8"}, []string{"WSPR"}, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:       14097000,
 		Mode:            "WSPR",
@@ -244,5 +312,34 @@ func TestHandlePayloadRoutesPathOnlyMode(t *testing.T) {
 	case <-client.spotChan:
 		t.Fatalf("expected path-only WSPR to bypass spot channel")
 	default:
+	}
+}
+
+func BenchmarkConvertToSpotFTCanonicalized(b *testing.B) {
+	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
+		{FrequencyKHz: 14074, Mode: "FT8"},
+	})
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+	msg := &PSKRMessage{
+		SequenceNumber:  1,
+		Frequency:       14076110,
+		Mode:            "FT8",
+		Report:          intPtr(10),
+		Timestamp:       time.Now().Add(-time.Minute).Unix(),
+		SenderCall:      "K1ABC",
+		SenderLocator:   "fn42",
+		ReceiverCall:    "N0CALL",
+		ReceiverLocator: "em10",
+	}
+	modeInfo, ok := parseModeInfo(msg.Mode)
+	if !ok {
+		b.Fatalf("expected valid mode info for %q", msg.Mode)
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if got := client.convertToSpot(msg, modeInfo); got == nil {
+			b.Fatal("expected spot")
+		}
 	}
 }

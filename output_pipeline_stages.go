@@ -57,6 +57,12 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 		ctx.dirty = true
 		return true
 	}
+	if modeSupportsFTConfidenceGlyph(ctx.modeUpper) {
+		// FT confidence is handled by the dedicated corroboration rail. Do not
+		// let resolver/temporal fallback paths stamp a placeholder glyph first,
+		// or the FT stage will skip the spot entirely.
+		return true
+	}
 	if p.telnet == nil || s.IsBeacon {
 		return true
 	}
@@ -273,11 +279,11 @@ func (p *outputPipeline) applyPostResolverAdjustments(ctx *outputSpotContext) bo
 		}
 	}
 	if !s.IsBeacon {
-		if modeSupportsConfidenceGlyph(ctx.modeUpper) && strings.TrimSpace(s.Confidence) == "" {
+		if modeSupportsResolverConfidenceGlyph(ctx.modeUpper) && strings.TrimSpace(s.Confidence) == "" {
 			s.Confidence = "?"
 			ctx.dirty = true
 		}
-		if applyKnownCallFloor(s, p.knownCalls, p.recentBandStore, p.customSCPStore, p.correctionCfg) {
+		if applyKnownCallFloor(s, p.knownCalls, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg) {
 			ctx.dirty = true
 		}
 	}

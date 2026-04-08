@@ -626,6 +626,26 @@ func TestFT2MatchesExplicitModeFilter(t *testing.T) {
 	}
 }
 
+func TestFT8ConfidenceFilterNoLongerExempt(t *testing.T) {
+	f := NewFilter()
+	f.SetMode("FT8", true)
+	f.AllConfidence = false
+	f.Confidence = map[string]bool{"S": true}
+
+	ft8 := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	ft8.Confidence = "?"
+	ft8.EnsureNormalized()
+
+	if f.Matches(ft8) {
+		t.Fatalf("expected FT8 confidence filter to reject unsupported glyph")
+	}
+
+	ft8.Confidence = "S"
+	if !f.Matches(ft8) {
+		t.Fatalf("expected FT8 confidence filter to accept matching glyph")
+	}
+}
+
 func TestDefaultFilterIncludesUnknownModeSpots(t *testing.T) {
 	f := NewFilter()
 	blank := &spot.Spot{Band: "20m"}

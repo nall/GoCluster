@@ -20,8 +20,8 @@ import (
 )
 
 // outputPipeline owns the single consumer of deduplicated spots plus the
-// temporal timer state. The only extra goroutine is the pre-existing telnet
-// stabilizer release loop.
+// temporal and FT corroboration timer state. The only extra goroutine is the
+// pre-existing telnet stabilizer release loop.
 type outputPipeline struct {
 	outputChan              <-chan *spot.Spot
 	secondaryFast           *dedup.SecondaryDeduper
@@ -69,6 +69,10 @@ type outputPipeline struct {
 	temporal                *runtimeTemporalController
 	temporalTimer           *time.Timer
 	temporalTimerCh         <-chan time.Time
+	ftConfidence            *ftConfidenceController
+	ftRecentBandStore       *spot.RecentBandStore
+	ftTimer                 *time.Timer
+	ftTimerCh               <-chan time.Time
 }
 
 type outputSpotContext struct {
@@ -164,6 +168,8 @@ func newOutputPipeline(
 		allowedBands:            allowedBands,
 		secondaryActive:         secondaryFast != nil || secondaryMed != nil || secondarySlow != nil,
 		temporal:                newRuntimeTemporalController(correctionCfg),
+		ftConfidence:            newFTConfidenceController(correctionCfg, tracker),
+		ftRecentBandStore:       newFTRecentBandStore(correctionCfg),
 	}
 	pipeline.stabilizerEnabled = telnet != nil && correctionCfg.Enabled && correctionCfg.StabilizerEnabled && recentBandStore != nil
 	if pipeline.stabilizerEnabled {
@@ -197,21 +203,27 @@ func (p *outputPipeline) run() {
 		p.startStabilizerReleaseLoop()
 	}
 	defer p.stopTemporalTimer()
+	defer p.stopFTTimer()
 
 	for {
 		now := time.Now().UTC()
 		p.releaseDueTemporal(now, false)
 		p.scheduleTemporalTimer(now)
+		p.releaseDueFT(now, false)
+		p.scheduleFTTimer(now)
 
 		select {
 		case s, ok := <-p.outputChan:
 			if !ok {
 				p.releaseDueTemporal(time.Now().UTC().Add(24*time.Hour), true)
+				p.releaseDueFT(time.Now().UTC().Add(24*time.Hour), true)
 				return
 			}
 			p.processSpot(s, nil)
 		case <-p.temporalTimerCh:
 			// Timer-driven wakeup for lag/max-wait release when ingest is idle.
+		case <-p.ftTimerCh:
+			// Timer-driven wakeup for bounded FT corroboration release when ingest is idle.
 		}
 	}
 }
@@ -234,6 +246,9 @@ func (p *outputPipeline) processSpotBody(s *spot.Spot, temporalRelease *runtimeT
 		return
 	}
 	if !p.applyPostResolverAdjustments(ctx) {
+		return
+	}
+	if !p.applyFTConfidenceStage(ctx, time.Now().UTC()) {
 		return
 	}
 	if !p.finalizeSpotForMetrics(ctx) {

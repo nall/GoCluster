@@ -812,7 +812,7 @@ func selectArchivePeerSecondaryPolicy(cfg *config.Config, fastWindow, medWindow,
 	}
 }
 
-func newModeAssigner(cfg config.ModeInferenceConfig) *spot.ModeAssigner {
+func modeSeedsFromConfig(cfg config.ModeInferenceConfig) []spot.ModeSeed {
 	modeSeeds := make([]spot.ModeSeed, 0, len(cfg.DigitalSeeds))
 	for _, seed := range cfg.DigitalSeeds {
 		modeSeeds = append(modeSeeds, spot.ModeSeed{
@@ -820,6 +820,11 @@ func newModeAssigner(cfg config.ModeInferenceConfig) *spot.ModeAssigner {
 			Mode:         seed.Mode,
 		})
 	}
+	return modeSeeds
+}
+
+func newModeAssigner(cfg config.ModeInferenceConfig) *spot.ModeAssigner {
+	modeSeeds := modeSeedsFromConfig(cfg)
 	assigner := spot.NewModeAssigner(spot.ModeInferenceSettings{
 		DXFreqCacheTTL:        time.Duration(cfg.DXFreqCacheTTLSeconds) * time.Second,
 		DXFreqCacheSize:       cfg.DXFreqCacheSize,
@@ -1148,6 +1153,7 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 	}
 	r.pskrTopics = r.cfg.PSKReporter.SubscriptionTopics()
 	mqttQoS12Timeout := time.Duration(r.cfg.PSKReporter.MQTTQoS12EnqueueTimeoutMS) * time.Millisecond
+	ftDialRegistry := spot.NewFTDialRegistry(modeSeedsFromConfig(r.cfg.ModeInference))
 	r.pskrClient = pskreporter.NewClient(
 		r.cfg.PSKReporter.Broker,
 		r.cfg.PSKReporter.Port,
@@ -1160,6 +1166,7 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 		r.cfg.PSKReporter.MQTTInboundQueueDepth,
 		mqttQoS12Timeout,
 		r.skewStore,
+		ftDialRegistry,
 		r.cfg.PSKReporter.AppendSpotterSSID,
 		r.cfg.PSKReporter.SpotChannelSize,
 		r.cfg.PSKReporter.MaxPayloadBytes,

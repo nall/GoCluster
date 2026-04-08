@@ -6,7 +6,8 @@
 ################################################################################
 # CALL CORRECTION
 # Purpose: Resolver-primary callsign correction for CW/RTTY/USB/LSB.
-# Note: FT8/FT4 are intentionally excluded from this correction engine.
+# Note: FT2/FT4/FT8 are intentionally excluded from resolver mutation, but
+#       their bounded corroboration knobs live in this section.
 ################################################################################
 call_correction:
   # ---------------------------------------------------------------------------
@@ -130,6 +131,21 @@ call_correction:
   recent_band_bonus_enabled: true           # Enable recent-on-band validation cache (same call+band+mode)
   recent_band_window_seconds: 43200         # Look-back window for recent-on-band admission (12h)
   recent_band_record_min_unique_spotters: 3 # Distinct spotters needed to admit call into recent-on-band
+
+  # ---------------------------------------------------------------------------
+  # 6) FT corroboration (FT2/FT4/FT8 only)
+  # Purpose: Tune bounded burst timing and count-only P/V thresholds for FT.
+  #          These knobs affect FT ?/S/P/V tagging even when resolver
+  #          correction is disabled for non-FT modes.
+  # ---------------------------------------------------------------------------
+  p_min_unique_spotters: 2             # Unique reporters required before FT bursts promote from ? to P
+  v_min_unique_spotters: 3             # Unique reporters required before FT bursts promote from P to V
+  ft8_quiet_gap_seconds: 6             # Extend FT8 burst while corroborators keep arriving inside this gap
+  ft8_hard_cap_seconds: 12             # Force-release FT8 burst no later than this many seconds after first arrival
+  ft4_quiet_gap_seconds: 5             # FT4 quiet-gap extension window
+  ft4_hard_cap_seconds: 10             # FT4 hard cap from first arrival
+  ft2_quiet_gap_seconds: 3             # FT2 quiet-gap extension window
+  ft2_hard_cap_seconds: 6              # FT2 hard cap from first arrival
 
   # Custom SCP replacement database (runtime-learned; replaces MASTER.SCP
   # membership for S-floor when enabled).
