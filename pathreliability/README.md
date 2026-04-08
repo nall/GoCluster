@@ -1,0 +1,152 @@
+# Path Reliability
+
+This directory owns path-reliability scoring, H3 grid mapping, decaying bucket storage, and the final class/glyph mapping used by telnet path display and PATH filters.
+
+## Operator Summary
+
+The main landing page [`../README.md`](../README.md) explains path reliability in operator language. This file records the implementation details behind that explanation.
+
+## Data Sources
+
+The predictor accepts only these ingest modes:
+
+- `FT8`
+- `FT4`
+- `CW`
+- `RTTY`
+- `PSK`
+- `WSPR`
+
+`USB` and `LSB` are display-only. They can be classified with their own thresholds, but `BucketForIngest(...)` does not ingest them into path buckets.
+
+Path-only PSKReporter modes, such as `WSPR`, can update the predictor without entering the normal dedup, archive, telnet, or peer paths.
+
+## Grid To H3 Mapping
+
+The implementation converts a Maidenhead grid to the center of the represented area:
+
+- 4-character grid: center of the `2 x 1` degree square
+- 6-character grid: center of the finer subsquare
+
+That point is mapped into:
+
+- H3 resolution 2 for fine cells
+- H3 resolution 1 for coarse cells
+
+The runtime uses stable `uint16` proxy IDs built from the precomputed H3 tables in [`../data/h3`](../data/h3). If the grid is invalid or the mapping tables are unavailable, the cell becomes invalid and prediction can fall back to insufficient.
+
+## FT8-Equivalent Conversion
+
+Every accepted report is normalized to an FT8-equivalent dB value before entering the store.
+
+The shipped config in [`../data/config/path_reliability.yaml`](../data/config/path_reliability.yaml) currently sets:
+
+- `FT4: 0`
+- `CW: -7`
+- `RTTY: -7`
+- `PSK: -19`
+- `WSPR: -26`
+
+After that conversion, the value is clamped to the shipped `clamp_min` and `clamp_max`, then converted from dB into linear power for storage.
+
+## Bucket Storage
+
+The predictor stores directional buckets keyed by:
+
+- receiver cell
+- sender cell
+- band
+- fine or coarse resolution
+
+Each bucket stores:
+
+- accumulated power
+- accumulated weight
+- last update time
+
+Updates apply exponential decay using the band's half-life before adding the new sample.
+
+The shipped config currently uses:
+
+- half-lives ranging from `600s` on `160m` and `80m` down to `240s` on `12m`, `10m`, and `6m`
+- `stale_after_half_life_multiplier: 3`
+- `stale_after_seconds: 1800` as the fallback purge window
+
+## Sample Selection And Merge
+
+Prediction uses two directions:
+
+- receive sample: DX to user
+- transmit sample: user to DX
+
+For each direction, `SelectSample(...)` chooses between fine and coarse evidence:
+
+- if fine is below `min_fine_weight`, coarse wins
+- if fine is above `fine_only_weight`, fine wins outright
+- otherwise, fine and coarse are blended by weight
+
+The shipped config currently uses:
+
+- `min_effective_weight: 0.6`
+- `min_fine_weight: 5`
+- `fine_only_weight: 20`
+- `reverse_hint_discount: 0.5`
+- `merge_receive_weight: 0.6`
+- `merge_transmit_weight: 0.4`
+
+If only one direction exists, the predictor still uses it, but discounts the effective weight with `reverse_hint_discount`.
+
+Noise is applied only to the DX-to-user side in the power domain. The shipped penalties are:
+
+- `QUIET: 0`
+- `RURAL: 4`
+- `SUBURBAN: 12`
+- `URBAN: 17`
+- `INDUSTRIAL: 20`
+
+## Class Mapping
+
+Prediction returns either:
+
+- `HIGH`
+- `MEDIUM`
+- `LOW`
+- `UNLIKELY`
+- `INSUFFICIENT`
+
+`INSUFFICIENT` is returned when there is no usable sample or the merged effective weight stays below `min_effective_weight`.
+
+The shipped glyph symbols are:
+
+- `>` for `HIGH`
+- `=` for `MEDIUM`
+- `<` for `LOW`
+- `-` for `UNLIKELY`
+- space for `INSUFFICIENT`
+
+The shipped threshold table is:
+
+| Mode | High | Medium | Low | Unlikely |
+| --- | ---: | ---: | ---: | ---: |
+| FT8 | -13 | -17 | -21 | -21 |
+| FT4 | -5 | -10 | -14 | -17 |
+| CW | 0 | -5 | -9 | -12 |
+| RTTY | 12 | 4 | 0 | -3 |
+| PSK | 5 | 0 | -4 | -7 |
+| USB | 22 | 17 | 13 | 10 |
+| LSB | 22 | 17 | 13 | 10 |
+
+## Shipped Config Versus Code Defaults
+
+The package also defines built-in defaults in [`config.go`](config.go). Those defaults are safety fallbacks, not always the same as the repo's shipped `data/config/path_reliability.yaml`.
+
+When documenting current operator behavior:
+
+- use the shipped config for "what this repo does out of the box"
+- use the code defaults only when explicitly discussing fallback behavior
+
+## Solar Overrides
+
+The predictor itself returns the normal class and glyph. Optional `R` and `G` solar-weather overrides are applied later by the telnet layer.
+
+For user-facing behavior, see [`../README.md`](../README.md) and [`../telnet/README.md`](../telnet/README.md).
