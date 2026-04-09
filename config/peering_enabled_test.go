@@ -8,6 +8,7 @@ import (
 
 func TestPeeringPeerEnabledDefaultsFalseWhenOmitted(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   peers:
@@ -32,6 +33,7 @@ func TestPeeringPeerEnabledDefaultsFalseWhenOmitted(t *testing.T) {
 
 func TestPeeringPeerEnabledHonorsExplicitFalse(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   peers:
@@ -57,6 +59,7 @@ func TestPeeringPeerEnabledHonorsExplicitFalse(t *testing.T) {
 
 func TestPeeringPeerEnabledHonorsExplicitTrue(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   peers:

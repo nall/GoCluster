@@ -9,6 +9,7 @@ import (
 
 func TestLoadCallCorrectionStabilizerDefaults(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   stabilizer_enabled: true
@@ -233,6 +234,7 @@ func TestLoadCallCorrectionStabilizerDefaults(t *testing.T) {
 
 func TestLoadRejectsInvalidCallCorrectionStabilizerTimeoutAction(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   stabilizer_enabled: true
@@ -253,6 +255,7 @@ func TestLoadRejectsInvalidCallCorrectionStabilizerTimeoutAction(t *testing.T) {
 
 func TestLoadCallCorrectionFTCorroborationOverrides(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   p_min_unique_spotters: 3
@@ -335,6 +338,7 @@ func TestLoadRejectsInvalidCallCorrectionFTCorroborationConfig(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
+			writeRequiredFloodControlFile(t, dir)
 			if err := os.WriteFile(filepath.Join(dir, "pipeline.yaml"), []byte(tc.body), 0o644); err != nil {
 				t.Fatalf("write pipeline.yaml: %v", err)
 			}
@@ -351,6 +355,7 @@ func TestLoadRejectsInvalidCallCorrectionFTCorroborationConfig(t *testing.T) {
 
 func TestLoadCallCorrectionFamilyPolicyOverrides(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   stabilizer_max_checks: 4
@@ -658,6 +663,7 @@ func TestLoadCallCorrectionFamilyPolicyOverrides(t *testing.T) {
 
 func TestLoadCallCorrectionStabilizerDelayKnobSanitization(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   stabilizer_enabled: true
@@ -823,6 +829,7 @@ func TestLoadCallCorrectionStabilizerDelayKnobSanitization(t *testing.T) {
 
 func TestLoadRejectsInvalidTemporalDecoderScope(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   temporal_decoder:
@@ -843,6 +850,7 @@ func TestLoadRejectsInvalidTemporalDecoderScope(t *testing.T) {
 
 func TestLoadRejectsInvalidTemporalDecoderOverflowAction(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	pipeline := `call_correction:
   enabled: true
   temporal_decoder:

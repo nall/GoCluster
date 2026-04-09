@@ -8,6 +8,7 @@ import (
 
 func TestLoadAppliesTelnetPreloginDefaults(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   max_prelogin_sessions: 0
   prelogin_timeout_seconds: 0
@@ -105,6 +106,7 @@ func TestLoadAppliesTelnetPreloginDefaults(t *testing.T) {
 
 func TestLoadClampsPreloginConcurrencyToGlobalCap(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   max_prelogin_sessions: 2
   prelogin_concurrency_per_ip: 10
@@ -123,6 +125,7 @@ func TestLoadClampsPreloginConcurrencyToGlobalCap(t *testing.T) {
 
 func TestLoadClampsAdmissionSampleRateLowerBound(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   admission_log_sample_rate: -1
 `

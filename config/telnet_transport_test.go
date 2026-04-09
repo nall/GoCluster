@@ -8,6 +8,7 @@ import (
 
 func TestLoadRejectsUnknownTelnetTransport(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   transport: "unsupported"
 `

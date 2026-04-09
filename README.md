@@ -85,6 +85,7 @@ Supported bands:
 - Ingests spots from RBN CW/RTTY, RBN digital, PSKReporter, local `DX` commands, and optional peer feeds.
 - Normalizes callsigns, frequencies, modes, and reports before shared validation and enrichment.
 - Adds CTY metadata and optional FCC license checks where that policy applies.
+- Applies shared-ingest flood policy before primary dedupe using the shipped `floodcontrol.yaml` rails.
 - Deduplicates and fans out spots to telnet clients with per-user filters.
 - Optionally derives path-reliability glyphs from recent reports between your grid and the DX grid.
 
@@ -115,6 +116,8 @@ You can point the server at another config directory with `DXC_CONFIG_PATH`.
 ## Dedupe Policies
 
 The cluster already removes upstream duplicates before spots reach users. `SET DEDUPE` controls the second, operator-facing dedupe stage that decides how aggressively repeated live spots are hidden in your telnet feed.
+
+Separately, shared-ingest flood control is configured in [`data/config/floodcontrol.yaml`](data/config/floodcontrol.yaml). That stage runs before primary dedupe, is not per-user, and can `observe`, `suppress`, or `drop` by actor rail. The shipped file starts in `observe` mode on every rail, but the file itself is required at startup.
 
 Each user can choose a policy for their own session:
 

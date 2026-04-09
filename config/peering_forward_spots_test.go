@@ -8,6 +8,7 @@ import (
 
 func TestPeeringForwardSpotsDefaultsFalseWhenOmitted(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   peers:
@@ -30,6 +31,7 @@ func TestPeeringForwardSpotsDefaultsFalseWhenOmitted(t *testing.T) {
 
 func TestPeeringForwardSpotsHonorsExplicitFalse(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   forward_spots: false
@@ -53,6 +55,7 @@ func TestPeeringForwardSpotsHonorsExplicitFalse(t *testing.T) {
 
 func TestPeeringForwardSpotsHonorsExplicitTrue(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
   forward_spots: true

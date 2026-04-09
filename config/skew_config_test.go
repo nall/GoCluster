@@ -12,6 +12,7 @@ import (
 // Downstream: Load.
 func TestSkewMinAbsSkewDefault(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	path := filepath.Join(dir, "data.yaml")
 	cfgText := "skew:\n  enabled: true\n"
 	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
@@ -33,6 +34,7 @@ func TestSkewMinAbsSkewDefault(t *testing.T) {
 // Downstream: Load.
 func TestSkewMinAbsSkewOverride(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	path := filepath.Join(dir, "data.yaml")
 	cfgText := "skew:\n  enabled: true\n  min_abs_skew: 1.25\n"
 	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {

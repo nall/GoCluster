@@ -5,6 +5,7 @@ Configuration is split by concern so you only edit the relevant file:
 - `app.yaml` - server identity, stats interval, console UI, and logging options (including dropped-call dedupe window).
 - `ingest.yaml` - RBN/PSKReporter/human ingest plus the shared call cache.
 - `dedupe.yaml` - primary/secondary dedupe policy windows.
+- `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.
 - `pipeline.yaml` - call correction, harmonics, spot policy.
 - `data.yaml` - CTY/known_calls/FCC/skew sources, grid DB tuning, and H3 table path.
 - `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
@@ -17,6 +18,7 @@ Configuration is split by concern so you only edit the relevant file:
 Loader behavior:
 - The server defaults to this directory (`data/config`). Override with `DXC_CONFIG_PATH` to point at another directory.
 - All `.yaml`/`.yml` files here are merged in lexical order; when two files set the same key, the later file wins. Keep top-level keys unique to avoid surprises.
+- `floodcontrol.yaml` is required. Startup fails fast if the file is missing or the `flood_control` block is incomplete.
 
 Telnet message tokens (usable in `runtime.yaml`):
 - Pre-login `welcome_message`, `login_prompt`, `login_empty_message`, `login_invalid_message`: `<CALL>`, `<CLUSTER>`, `<DATE>`, `<TIME>`, `<DATETIME>`, `<UPTIME>`, `<USER_COUNT>`, `<LAST_LOGIN>`, `<LAST_IP>`, `<DIALECT>`, `<DIALECT_SOURCE>`, `<DIALECT_DEFAULT>`, `<DEDUPE>`, `<GRID>`, `<NOISE>`.

@@ -579,6 +579,19 @@ func formatStabilizerSummary(tracker *stats.Tracker) string {
 	)
 }
 
+func formatFloodSummary(tracker *stats.Tracker) string {
+	if tracker == nil {
+		return "Flood: n/a"
+	}
+	return fmt.Sprintf(
+		"Flood: %s (O) / %s (S) / %s (D) / %s (X)",
+		humanize.Comma(int64(tracker.FloodObserved())),
+		humanize.Comma(int64(tracker.FloodSuppressed())),
+		humanize.Comma(int64(tracker.FloodDropped())),
+		humanize.Comma(int64(tracker.FloodOverflow())),
+	)
+}
+
 func formatStabilizerGlyphSummary(tracker *stats.Tracker) string {
 	if tracker == nil {
 		return "Stabilizer Glyph: n/a"
@@ -4452,6 +4465,7 @@ func buildOverviewLines(
 			humanize.Comma(int64(totalHarmonics)),
 			humanize.Comma(int64(reputationTotal)),
 		),
+		fmt.Sprintf("[yellow]Flood[-]: %s", strings.TrimPrefix(formatFloodSummary(tracker), "Flood: ")),
 		"",
 		fmt.Sprintf("[yellow]Resolver[-]: %s", strings.TrimPrefix(resolverLine, "Resolver: ")),
 		fmt.Sprintf("[yellow]Resolver Pressure[-]: %s", strings.TrimPrefix(resolverPressureLine, "Resolver Pressure: ")),

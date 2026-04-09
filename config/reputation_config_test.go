@@ -8,6 +8,7 @@ import (
 
 func TestReputationIPInfoBooleansDefaultTrueWhenOmitted(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `reputation:
   enabled: true
 `
@@ -38,6 +39,7 @@ func TestReputationIPInfoBooleansDefaultTrueWhenOmitted(t *testing.T) {
 
 func TestReputationIPInfoBooleansHonorExplicitFalse(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `reputation:
   enabled: true
   ipinfo_pebble_load_ipv4: false

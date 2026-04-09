@@ -122,6 +122,7 @@ type Config struct {
 	PSKReporter         PSKReporterConfig    `yaml:"pskreporter"`
 	Archive             ArchiveConfig        `yaml:"archive"`
 	Dedup               DedupConfig          `yaml:"dedup"`
+	FloodControl        FloodControlConfig   `yaml:"flood_control"`
 	Filter              FilterConfig         `yaml:"filter"`
 	Stats               StatsConfig          `yaml:"stats"`
 	CallCorrection      CallCorrectionConfig `yaml:"call_correction"`
@@ -1325,6 +1326,9 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := requireConfigFile(files, "floodcontrol.yaml"); err != nil {
+		return nil, err
+	}
 	raw := merged
 	data, err := yaml.Marshal(merged)
 	if err != nil {
@@ -1377,6 +1381,9 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	normalizeDedupAndBufferConfig(&cfg, presence)
+	if err := normalizeFloodControlConfig(&cfg, raw); err != nil {
+		return nil, err
+	}
 	if err := normalizeSkewConfig(&cfg); err != nil {
 		return nil, err
 	}
@@ -2918,6 +2925,19 @@ func mergeYAMLMaps(dst, src map[string]any) map[string]any {
 	return dst
 }
 
+func requireConfigFile(files []string, requiredBase string) error {
+	requiredBase = strings.TrimSpace(requiredBase)
+	if requiredBase == "" {
+		return nil
+	}
+	for _, file := range files {
+		if strings.EqualFold(filepath.Base(file), requiredBase) {
+			return nil
+		}
+	}
+	return fmt.Errorf("required config file %q not found in config directory", requiredBase)
+}
+
 // Print prints a human-readable configuration summary.
 // Key aspects: Focuses on operationally relevant fields.
 // Upstream: main.go startup logging.
@@ -3092,6 +3112,11 @@ func (c *Config) Print() {
 		c.Dedup.SecondaryMedPreferStrong,
 		secondarySlow,
 		c.Dedup.SecondarySlowPreferStrong)
+	fmt.Printf("Flood control: enabled=%t partition=%s log_interval=%ds rails=%s\n",
+		c.FloodControl.Enabled,
+		c.FloodControl.PartitionMode,
+		c.FloodControl.LogIntervalSeconds,
+		c.FloodControl.Rails.summary())
 	if len(c.Filter.DefaultModes) > 0 {
 		fmt.Printf("Default modes: %s\n", strings.Join(c.Filter.DefaultModes, ", "))
 	}

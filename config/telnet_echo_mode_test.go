@@ -8,6 +8,7 @@ import (
 
 func TestLoadRejectsUnknownTelnetEchoMode(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   echo_mode: "invalid"
 `

@@ -8,6 +8,7 @@ import (
 
 func TestPropReportRefreshDefault(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfg := `prop_report:
   enabled: true
 `
@@ -25,6 +26,7 @@ func TestPropReportRefreshDefault(t *testing.T) {
 
 func TestPropReportRefreshInvalid(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfg := `prop_report:
   enabled: true
   refresh_utc: "25:99"

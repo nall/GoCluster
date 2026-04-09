@@ -36,6 +36,12 @@ type Tracker struct {
 	unlicensedDrops      atomic.Uint64
 	reputationDrops      atomic.Uint64
 	reputationReasons    sync.Map // string -> *atomic.Uint64
+	floodObserved        atomic.Uint64
+	floodSuppressed      atomic.Uint64
+	floodDropped         atomic.Uint64
+	floodOverflow        atomic.Uint64
+	floodReasonActions   sync.Map // "action|reason" -> *atomic.Uint64
+	floodOverflowReason  sync.Map // string -> *atomic.Uint64
 	corrDecisionTotal    atomic.Uint64
 	corrDecisionApplied  atomic.Uint64
 	corrDecisionRejected atomic.Uint64
@@ -250,6 +256,14 @@ func (t *Tracker) Reset() {
 		t.corrAppliedReasons.Delete(key)
 		return true
 	})
+	t.floodReasonActions.Range(func(key, _ any) bool {
+		t.floodReasonActions.Delete(key)
+		return true
+	})
+	t.floodOverflowReason.Range(func(key, _ any) bool {
+		t.floodOverflowReason.Delete(key)
+		return true
+	})
 	t.start.Store(time.Now().UTC().UnixNano())
 }
 
@@ -438,6 +452,42 @@ func (t *Tracker) IncrementHarmonicSuppressions() {
 // Downstream: atomic counter.
 func (t *Tracker) IncrementUnlicensedDrops() {
 	t.unlicensedDrops.Add(1)
+}
+
+// ObserveFloodDecision records a threshold-triggered flood policy action.
+func (t *Tracker) ObserveFloodDecision(action, reason string) {
+	if t == nil {
+		return
+	}
+	action = strings.ToLower(strings.TrimSpace(action))
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		reason = "unknown"
+	}
+	switch action {
+	case "observe":
+		t.floodObserved.Add(1)
+	case "suppress":
+		t.floodSuppressed.Add(1)
+	case "drop":
+		t.floodDropped.Add(1)
+	default:
+		return
+	}
+	incrementCounter(&t.floodReasonActions, action+"|"+reason)
+}
+
+// ObserveFloodOverflow records one fail-open state-cap overflow by reason.
+func (t *Tracker) ObserveFloodOverflow(reason string) {
+	if t == nil {
+		return
+	}
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		reason = "unknown"
+	}
+	t.floodOverflow.Add(1)
+	incrementCounter(&t.floodOverflowReason, reason)
 }
 
 // CallCorrections returns total call correction count.
@@ -892,6 +942,54 @@ func (t *Tracker) ReputationDrops() uint64 {
 // Downstream: atomic loads.
 func (t *Tracker) ReputationDropReasons() map[string]uint64 {
 	return snapshotCounterMap(&t.reputationReasons)
+}
+
+// FloodObserved returns total threshold-triggered observe decisions.
+func (t *Tracker) FloodObserved() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.floodObserved.Load()
+}
+
+// FloodSuppressed returns total shared-ingest suppress decisions.
+func (t *Tracker) FloodSuppressed() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.floodSuppressed.Load()
+}
+
+// FloodDropped returns total shared-ingest drop decisions.
+func (t *Tracker) FloodDropped() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.floodDropped.Load()
+}
+
+// FloodOverflow returns total fail-open actor-state overflows.
+func (t *Tracker) FloodOverflow() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.floodOverflow.Load()
+}
+
+// FloodDecisionReasons returns threshold-triggered counts by action|reason.
+func (t *Tracker) FloodDecisionReasons() map[string]uint64 {
+	if t == nil {
+		return map[string]uint64{}
+	}
+	return snapshotCounterMap(&t.floodReasonActions)
+}
+
+// FloodOverflowReasons returns fail-open overflow counts by reason.
+func (t *Tracker) FloodOverflowReasons() map[string]uint64 {
+	if t == nil {
+		return map[string]uint64{}
+	}
+	return snapshotCounterMap(&t.floodOverflowReason)
 }
 
 // Purpose: Format a sync.Map of counters into a "label: key=value" string.

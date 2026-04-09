@@ -19,6 +19,7 @@ import (
 	"dxcluster/cty"
 	"dxcluster/dedup"
 	"dxcluster/filter"
+	"dxcluster/floodcontrol"
 	"dxcluster/gridstore"
 	"dxcluster/pathreliability"
 	"dxcluster/peer"
@@ -108,6 +109,7 @@ type clusterRuntime struct {
 	harmonicDetector *spot.HarmonicDetector
 
 	deduplicator    *dedup.Deduplicator
+	floodController *floodcontrol.Controller
 	ingestValidator *ingestValidator
 	ingestInput     chan<- *spot.Spot
 
@@ -731,6 +733,14 @@ func (r *clusterRuntime) initializePipelineCore() {
 	}
 
 	dedupInput := r.deduplicator.GetInputChannel()
+	if r.cfg.FloodControl.Enabled {
+		r.floodController = floodcontrol.New(r.cfg.FloodControl, dedupInput, r.statsTracker, r.dropReporter)
+		r.floodController.Start()
+		dedupInput = r.floodController.Input()
+		log.Printf("Flood control active with partition=%s log_interval=%ds", r.cfg.FloodControl.PartitionMode, r.cfg.FloodControl.LogIntervalSeconds)
+	} else {
+		log.Println("Flood control disabled")
+	}
 	r.ingestValidator = newIngestValidator(r.ctyLookup, r.metaCache, r.ctyUpdater, r.gridUpdater, dedupInput, r.unlicensedReporter, r.dropReporter, r.cfg.CTY.Enabled)
 	r.ingestValidator.Start()
 	r.ingestInput = r.ingestValidator.Input()
@@ -1290,6 +1300,9 @@ func (r *clusterRuntime) shutdown() {
 	}
 	if r.signalResolver != nil {
 		r.signalResolver.Stop()
+	}
+	if r.floodController != nil {
+		r.floodController.Stop()
 	}
 	if r.deduplicator != nil {
 		r.deduplicator.Stop()

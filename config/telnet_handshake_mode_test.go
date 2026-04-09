@@ -8,6 +8,7 @@ import (
 
 func TestLoadDefaultsTelnetSkipHandshakeToMinimal(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := "telnet:\n  port: 8300\n"
 	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write runtime.yaml: %v", err)
@@ -35,6 +36,7 @@ func TestLoadAcceptsStringTelnetSkipHandshakeModes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
+			writeRequiredFloodControlFile(t, dir)
 			config := "telnet:\n  port: 8300\n  skip_handshake: \"" + tc.raw + "\"\n"
 			if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
 				t.Fatalf("write runtime.yaml: %v", err)
@@ -63,6 +65,7 @@ func TestLoadAcceptsLegacyBooleanTelnetSkipHandshake(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
+			writeRequiredFloodControlFile(t, dir)
 			config := "telnet:\n  port: 8300\n  skip_handshake: " + tc.raw + "\n"
 			if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
 				t.Fatalf("write runtime.yaml: %v", err)
@@ -80,6 +83,7 @@ func TestLoadAcceptsLegacyBooleanTelnetSkipHandshake(t *testing.T) {
 
 func TestLoadRejectsUnknownTelnetSkipHandshakeMode(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := "telnet:\n  port: 8300\n  skip_handshake: \"weird\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write runtime.yaml: %v", err)

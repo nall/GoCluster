@@ -9,6 +9,7 @@ import (
 
 func TestLoadRejectsShortTelnetOutputLineLength(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   output_line_length: 64
 `

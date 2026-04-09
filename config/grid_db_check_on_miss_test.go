@@ -8,6 +8,7 @@ import (
 
 func TestGridDBCheckOnMissDefaultsTrue(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	path := filepath.Join(dir, "grid.yaml")
 	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -27,6 +28,7 @@ func TestGridDBCheckOnMissDefaultsTrue(t *testing.T) {
 
 func TestGridDBCheckOnMissAllowsFalse(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	path := filepath.Join(dir, "grid.yaml")
 	if err := os.WriteFile(path, []byte("grid_db_check_on_miss: false\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

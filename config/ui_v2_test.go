@@ -8,6 +8,7 @@ import (
 
 func TestLoadUIV2Defaults(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `ui:
   mode: tview-v2
 `
@@ -43,6 +44,7 @@ func TestLoadUIV2Defaults(t *testing.T) {
 
 func TestLoadUIV2InvalidPage(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `ui:
   mode: tview-v2
   v2:
@@ -58,6 +60,7 @@ func TestLoadUIV2InvalidPage(t *testing.T) {
 
 func TestLoadUIV2DuplicatePages(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `ui:
   mode: tview-v2
   v2:
@@ -73,6 +76,7 @@ func TestLoadUIV2DuplicatePages(t *testing.T) {
 
 func TestLoadUIV2EventsPageAllowed(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `ui:
   mode: tview-v2
   v2:

@@ -8,6 +8,7 @@ import (
 
 func TestDedupSecondaryPreferStrongDefaultsFromPrimaryWhenOmitted(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dedup:
   prefer_stronger_snr: true
 `
@@ -32,6 +33,7 @@ func TestDedupSecondaryPreferStrongDefaultsFromPrimaryWhenOmitted(t *testing.T) 
 
 func TestDedupLegacySecondaryKeysRemainIgnored(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dedup:
   secondary_window_seconds: 999
   secondary_prefer_stronger_snr: true

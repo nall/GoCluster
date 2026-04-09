@@ -8,6 +8,7 @@ import (
 
 func TestLoadDirectoryMergesFiles(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 
 	app := `server:
   name: "Alpha"
@@ -60,6 +61,7 @@ dedup:
 
 func TestLoadRejectsSingleFilePath(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	path := filepath.Join(dir, "runtime.yaml")
 	if err := os.WriteFile(path, []byte("telnet:\n  port: 9300\n"), 0o644); err != nil {
 		t.Fatalf("write runtime.yaml: %v", err)

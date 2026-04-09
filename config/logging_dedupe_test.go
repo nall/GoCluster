@@ -8,6 +8,7 @@ import (
 
 func TestLoggingDropDedupeWindowDefault(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   enabled: true
 `
@@ -26,6 +27,7 @@ func TestLoggingDropDedupeWindowDefault(t *testing.T) {
 
 func TestLoggingDropDedupeWindowAllowsZero(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   drop_dedupe_window_seconds: 0
 `
@@ -44,6 +46,7 @@ func TestLoggingDropDedupeWindowAllowsZero(t *testing.T) {
 
 func TestLoggingDropDedupeWindowRejectsNegative(t *testing.T) {
 	dir := t.TempDir()
+	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   drop_dedupe_window_seconds: -1
 `
