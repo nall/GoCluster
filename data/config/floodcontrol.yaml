@@ -3,7 +3,7 @@ flood_control:
   # Master switch for the shared-ingest flood controller.
   enabled: true
   # How often the controller emits periodic summary logs for observed decisions.
-  log_interval_seconds: 30
+  log_interval_seconds: 300
   # Counter partitioning strategy. `exact_source_type` keeps MANUAL/RBN/PEER
   # activity isolated so one feed class cannot consume another class's budget.
   partition_mode: exact_source_type
@@ -21,17 +21,17 @@ flood_control:
       # Hard cap on distinct actor keys tracked inside one SourceType partition.
       # When the partition is full, the controller fails open for new actors and
       # records an overflow metric instead of growing memory without bound.
-      max_entries_per_partition: 10000
+      max_entries_per_partition: 20000
       # Maximum events allowed per SourceType inside `window_seconds`.
       # A value of 0 disables this rail for that SourceType.
       thresholds_per_source_type:
         MANUAL: 8
         UPSTREAM: 8
         PEER: 8
-        RBN: 60
-        FT8: 60
-        FT4: 60
-        PSKREPORTER: 60
+        RBN: 500
+        FT8: 700
+        FT4: 700
+        PSKREPORTER: 3000
 
     source_node:
       # Flood rail keyed by the upstream cluster/node identity.
@@ -74,7 +74,7 @@ flood_control:
       enabled: true
       action: observe
       window_seconds: 60
-      max_entries_per_partition: 10000
+      max_entries_per_partition: 50000
       # Which threshold profile below is active for this rail.
       active_mode: conservative
       # Threshold profiles for the DXCALL rail. Lower values make the rail more
@@ -85,25 +85,25 @@ flood_control:
           MANUAL: 25
           UPSTREAM: 25
           PEER: 25
-          RBN: 80
-          FT8: 80
-          FT4: 80
-          PSKREPORTER: 80
+          RBN: 1200
+          FT8: 1500
+          FT4: 1500
+          PSKREPORTER: 8000
         moderate:
           # Moderate profile: middle ground between visibility and suppression.
           MANUAL: 15
           UPSTREAM: 15
           PEER: 15
-          RBN: 40
-          FT8: 40
-          FT4: 40
-          PSKREPORTER: 40
+          RBN: 800
+          FT8: 1000
+          FT4: 1000
+          PSKREPORTER: 5000
         aggressive:
           # Aggressive profile: lowest allowance, fastest hot-target suppression.
           MANUAL: 10
           UPSTREAM: 10
           PEER: 10
-          RBN: 25
-          FT8: 25
-          FT4: 25
-          PSKREPORTER: 25
+          RBN: 500
+          FT8: 700
+          FT4: 700
+          PSKREPORTER: 3000
