@@ -48,7 +48,6 @@ All other dependencies are local snapshots and must already exist when enabled:
 - `cty.file`
 - `fcc_uls.allowlist_path`
 - `fcc_uls.db_path`
-- `known_calls.file`
 - optional confusion model and spotter-reliability files
 
 ## Output artifacts

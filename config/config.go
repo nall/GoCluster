@@ -145,7 +145,6 @@ type Config struct {
 	Buffer              BufferConfig         `yaml:"buffer"`
 	Skew                SkewConfig           `yaml:"skew"`
 	FCCULS              FCCULSConfig         `yaml:"fcc_uls"`
-	KnownCalls          KnownCallsConfig     `yaml:"known_calls"`
 	Peering             PeeringConfig        `yaml:"peering"`
 	Reputation          ReputationConfig     `yaml:"reputation"`
 	GridDBPath          string               `yaml:"grid_db"`
@@ -903,6 +902,8 @@ type CallCorrectionCustomSCPConfig struct {
 	Path string `yaml:"path"`
 	// HistoryHorizonDays bounds observation retention.
 	HistoryHorizonDays int `yaml:"history_horizon_days"`
+	// StaticHorizonDays bounds static-membership retention.
+	StaticHorizonDays int `yaml:"static_horizon_days"`
 
 	// >0 enables CW/RTTY SNR admission gates; <=0 disables the gate for that mode.
 	MinSNRDBCW   int `yaml:"min_snr_db_cw"`
@@ -1243,14 +1244,6 @@ type SkewConfig struct {
 	File       string  `yaml:"file"`
 	MinAbsSkew float64 `yaml:"min_abs_skew"`
 	RefreshUTC string  `yaml:"refresh_utc"`
-}
-
-// KnownCallsConfig controls downloading of the known callsign list.
-type KnownCallsConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	URL        string `yaml:"url"`
-	File       string `yaml:"file"`
-	RefreshUTC string `yaml:"refresh_utc"`
 }
 
 // FCCULSConfig controls downloading of the FCC ULS database archive.
@@ -1731,7 +1724,10 @@ func normalizeCallCorrectionCoreConfig(cfg *Config) {
 		cfg.CallCorrection.CustomSCP.Path = filepath.Join("data", "scp")
 	}
 	if cfg.CallCorrection.CustomSCP.HistoryHorizonDays <= 0 {
-		cfg.CallCorrection.CustomSCP.HistoryHorizonDays = 395
+		cfg.CallCorrection.CustomSCP.HistoryHorizonDays = 60
+	}
+	if cfg.CallCorrection.CustomSCP.StaticHorizonDays <= 0 {
+		cfg.CallCorrection.CustomSCP.StaticHorizonDays = 395
 	}
 	if cfg.CallCorrection.CustomSCP.ResolverMinScore <= 0 {
 		cfg.CallCorrection.CustomSCP.ResolverMinScore = 5
@@ -2656,7 +2652,6 @@ func normalizeSignalPolicyConfig(cfg *Config) {
 
 func normalizeReferenceDataConfig(cfg *Config, presence loadRawPresence) error {
 	normalizeCTYConfig(cfg, presence)
-	normalizeKnownCallsConfig(cfg)
 	if err := normalizeFCCULSConfig(cfg); err != nil {
 		return err
 	}
@@ -2676,15 +2671,6 @@ func normalizeCTYConfig(cfg *Config, presence loadRawPresence) {
 	}
 	if !presence.ctyEnabledSet {
 		cfg.CTY.Enabled = true
-	}
-}
-
-func normalizeKnownCallsConfig(cfg *Config) {
-	if strings.TrimSpace(cfg.KnownCalls.File) == "" {
-		cfg.KnownCalls.File = "data/scp/MASTER.SCP"
-	}
-	if cfg.KnownCalls.RefreshUTC == "" {
-		cfg.KnownCalls.RefreshUTC = "01:00"
 	}
 }
 
@@ -3394,9 +3380,6 @@ func (c *Config) Print() {
 	}
 	if c.CTY.Enabled && c.CTY.URL != "" {
 		fmt.Printf("CTY refresh: %s UTC (source=%s)\n", c.CTY.RefreshUTC, c.CTY.URL)
-	}
-	if c.KnownCalls.Enabled && c.KnownCalls.URL != "" {
-		fmt.Printf("Known calls refresh: %s UTC (source=%s)\n", c.KnownCalls.RefreshUTC, c.KnownCalls.URL)
 	}
 	if c.FCCULS.Enabled && c.FCCULS.URL != "" {
 		fmt.Printf("FCC ULS: refresh %s UTC (source=%s archive=%s db=%s allowlist=%s cache_ttl=%ds)\n",

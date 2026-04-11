@@ -80,14 +80,3 @@ func loadConfusionModel(cfg config.CallCorrectionConfig) (*spot.ConfusionModel, 
 	}
 	return loaded, nil
 }
-
-func loadKnownCallset(path string) (*spot.KnownCallsigns, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil, nil
-	}
-	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("known_calls.file missing/unreadable %s: %w", path, err)
-	}
-	return spot.LoadKnownCallsigns(path)
-}

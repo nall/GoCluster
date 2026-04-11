@@ -40,7 +40,6 @@ type outputPipeline struct {
 	metaCache               *callMetaCache
 	harmonicDetector        *spot.HarmonicDetector
 	harmonicCfg             config.HarmonicConfig
-	knownCalls              *atomic.Pointer[spot.KnownCallsigns]
 	freqAvg                 *spot.FrequencyAverager
 	spotPolicy              config.SpotPolicy
 	dash                    ui.Surface
@@ -103,7 +102,6 @@ func newOutputPipeline(
 	metaCache *callMetaCache,
 	harmonicDetector *spot.HarmonicDetector,
 	harmonicCfg config.HarmonicConfig,
-	knownCalls *atomic.Pointer[spot.KnownCallsigns],
 	freqAvg *spot.FrequencyAverager,
 	spotPolicy config.SpotPolicy,
 	dash ui.Surface,
@@ -144,7 +142,6 @@ func newOutputPipeline(
 		metaCache:               metaCache,
 		harmonicDetector:        harmonicDetector,
 		harmonicCfg:             harmonicCfg,
-		knownCalls:              knownCalls,
 		freqAvg:                 freqAvg,
 		spotPolicy:              spotPolicy,
 		dash:                    dash,

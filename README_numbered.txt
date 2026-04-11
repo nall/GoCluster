@@ -329,26 +329,9 @@
   329: 
   330: To match 10 Hz resolution end-to-end, corrected frequencies are rounded to the nearest 0.01 kHz (half-up) before continuing through the pipeline.
   331: 
-  332: ## Known Calls Cache
+  332: ## CTY Database Refresh
   333: 
-  334: 1. Populate the `known_calls` block in `data/config/data.yaml`:
-  335: 
-  336: ```yaml
-  337:  known_calls:
-  338:   enabled: true
-  339:   url: "https://www.supercheckpartial.com/MASTER.SCP"
-  340:   file: "data/scp/MASTER.SCP"
-  341:   refresh_utc: "01:15"
-  342: ```
-  343: 
-  344: 2. On startup the server checks `known_calls.file`. If it is missing and `known_calls.url` is set, the file is downloaded immediately before any spots are processed. A `.status.json` sidecar is written next to the file so subsequent refreshes can use conditional GETs and avoid unnecessary reloads.
-  345: 3. When `known_calls.enabled` is true, the built-in scheduler refreshes the file every day at `known_calls.refresh_utc` (default `01:00` UTC). The unified downloader only reloads the in-memory cache on content changes (CTY/SCP reloads clear the unified call metadata cache), so no restart is needed.
-  346: 
-  347: You can disable the scheduler by setting `known_calls.enabled: false`. In that mode the server will still load whatever file already exists (and will fetch it once at startup if an URL is provided), but it will not refresh it automatically.
-  348: 
-  349: ## CTY Database Refresh
-  350: 
-  351: 1. Configure the `cty` block in `data/config/data.yaml`:
+  334: 1. Configure the `cty` block in `data/config/data.yaml`:
   352: 
   353: ```yaml
   354: cty:
@@ -382,14 +365,14 @@
   382: 
   383: ## Grid Persistence and Caching
   384: 
-  385: - Grids, known-call flags, and CTY metadata (ADIF/CQ/ITU/continent/country) are stored in Pebble at `grid_db` (default `data/grids/pebble`, a directory). Each batch is committed with `Sync` for durability; the in-memory cache continues serving while backfills rebuild on new spots.
+  385: - Grids and CTY metadata (ADIF/CQ/ITU/continent/country) are stored in Pebble at `grid_db` (default `data/grids/pebble`, a directory). Each batch is committed with `Sync` for durability; the in-memory cache continues serving while backfills rebuild on new spots.
   386: - Gridstore checkpoints are created hourly under `grid_db/checkpoint` and retained for 24 hours. On startup, corruption triggers an automatic restore from the newest verified checkpoint; the cluster continues running while the restore rebuilds the Pebble directory. A daily integrity scan runs at 05:00 UTC and logs the result.
   387: - When a call lacks a stored grid, the CTY prefix latitude/longitude is used to derive a 4-character Maidenhead grid and persist it as "derived"; derived grids never overwrite non-derived entries. Telnet output renders derived grids in lowercase while internal storage and computations remain uppercase.
   388: - Writes are batched by `grid_flush_seconds` (default `60s`); a final flush runs during shutdown.
-  389: - The unified call metadata cache is a bounded LRU of size `grid_cache_size` (default `100000`). It caches grid/CTY/known lookups and only applies the TTL (`grid_cache_ttl_seconds`) to grid entries; CTY/SCP refreshes clear the cache. Cache misses fall back to Pebble via the async backfill path when `grid_db_check_on_miss` is true; RBN grid misses also attempt a tight-timeout sync lookup to seed the cache before secondary dedupe/path reliability.
+  389: - The unified call metadata cache is a bounded LRU of size `grid_cache_size` (default `100000`). It caches grid/CTY lookups and only applies the TTL (`grid_cache_ttl_seconds`) to grid entries; CTY refreshes clear the cache. Cache misses fall back to Pebble via the async backfill path when `grid_db_check_on_miss` is true; RBN grid misses also attempt a tight-timeout sync lookup to seed the cache before secondary dedupe/path reliability.
   390: - Pebble tuning knobs (defaults tuned for read-heavy durability): `grid_block_cache_mb=64`, `grid_bloom_filter_bits=10`, `grid_memtable_size_mb=32`, `grid_l0_compaction_threshold=4`, `grid_l0_stop_writes_threshold=16`, `grid_write_queue_depth=64`.
   391: - The stats line `Grids: <TOTAL|UPDATED> / <hit%> / <lookups/min> | Drop aX sY` reports gridstore totals (or updates since start if the DB is unavailable), cache hit rate, lookup rate per minute, and async/sync lookup queue drops.
-  392: - If you set `grid_ttl_days > 0`, the store purges rows whose `updated_at` timestamp is older than that many days right after each SCP refresh. Continuous SCP membership or live grid updates keep records fresh automatically.
+  392: - If you set `grid_ttl_days > 0`, the store purges rows whose `updated_at` timestamp is older than that many days during the configured maintenance pass. Live grid updates keep records fresh automatically.
   393: - `grid_preflight_timeout_ms` is ignored for the Pebble prototype (retained for config compatibility).
   394: 
   395: ## Runtime Logs and Corrections
@@ -490,7 +473,7 @@
   490: │  ├─ ingest.yaml          # RBN/PSKReporter/human ingest + call cache
   491: │  ├─ dedupe.yaml          # Primary/secondary dedupe policy windows
   492: │  ├─ pipeline.yaml        # Call correction, harmonics, spot policy
-  493: │  ├─ data.yaml            # CTY/known_calls/FCC/skew + grid DB tuning
+  493: │  ├─ data.yaml            # CTY/FCC/skew + grid DB tuning
   494: │  ├─ runtime.yaml         # Telnet server settings, buffer/filter defaults
   495: │  └─ mode_allocations.yaml # Mode inference for RBN/human ingest
   496: ├─ config/                 # YAML loader + defaults (merges config directory)
@@ -502,12 +485,12 @@
   502: ```
   503: ## Code Walkthrough
   504: 
-  505: - `main.go` glues together ingest clients (RBN/PSKReporter), protections (dedup, call correction, harmonics, frequency averaging), persistence (grid store), telnet server, dashboard, schedulers (FCC ULS, known calls, skew), and graceful shutdown. Helpers are commented so you can follow the pipeline without prior cluster context.
+  505: - `main.go` glues together ingest clients (RBN/PSKReporter), protections (dedup, call correction, harmonics, frequency averaging), persistence (grid store), telnet server, dashboard, schedulers (FCC ULS, skew), and graceful shutdown. Helpers are commented so you can follow the pipeline without prior cluster context.
   506: - `internal/correctionflow/` is the authoritative shared call-correction core (runtime parameter resolution, settings mapping, confidence mapping, resolver selection/gates, stabilizer delay policy, temporal decoder policy, apply/suppress rails). `main.go` calls this package directly; `cmd/rbn_replay` uses the same policy path and keeps replay-only wrappers in `cmd/rbn_replay/pipeline.go` for harness wiring.
   507: - `telnet/server.go` documents the connection lifecycle, broadcast sharding, filter commands, and how per-client filters interact with the shared ring buffer.
   508: - `buffer/` explains the lock-free ring buffer used by SHOW/DX and broadcasts; it stores atomic spot pointers and IDs to avoid partial reads.
   509: - `config/` describes the YAML schema, default normalization, and `Print` diagnostics. The “Configuration Loader Defaults” section mirrors these behaviors.
-  510: - `cty/` covers longest-prefix CTY lookups and cache metrics. `spot/` holds the canonical spot struct, formatting, hashing, validation, callsign utilities, harmonics/frequency averaging/correction helpers, and known-calls cache.
+  510: - `cty/` covers longest-prefix CTY lookups and cache metrics. `spot/` holds the canonical spot struct, formatting, hashing, validation, callsign utilities, harmonics/frequency averaging/correction helpers, and custom-SCP support.
   511: - `dedup/`, `filter/`, `gridstore/`, `skew/`, and `uls/` each have package-level docs and function comments outlining how they feed or persist data without blocking ingest.
   512: - `rbn/` and `pskreporter/` detail how each source is parsed, normalized, skew-corrected, and routed into the ingest CTY/ULS gate before deduplication.
   513: - `commands/` and `cmd/*` binaries include focused comments explaining the helper CLIs for SHOW/DX, CTY lookup, and skew prefetching.
@@ -521,15 +504,14 @@
   521: 3. Optionally enable/tune `harmonics` to drop harmonic CW/USB/LSB/RTTY spots (master `enabled`, recency window, maximum harmonic multiple, frequency tolerance, and minimum report delta).
   522: 4. Set `spot_policy.max_age_seconds` to drop stale spots before they're processed further. For CW/RTTY frequency smoothing, tune `spot_policy.frequency_averaging_seconds` (window), `spot_policy.frequency_averaging_tolerance_hz` (allowed deviation), and `spot_policy.frequency_averaging_min_reports` (minimum corroborating reports).
   523: 5. (Optional) Enable `skew.enabled` after generating `skew.file` via `go run ./cmd/rbnskewfetch` (or let the server fetch it at the next 00:30 UTC window). The server applies each skimmer's multiplicative correction before normalization so SSIDs stay unique.
-  524: 6. Legacy-only: if you keep static known-calls feed behavior, set `known_calls.file` plus `known_calls.url` (leave `enabled: true` to keep it refreshed). When `call_correction.custom_scp.enabled=true`, confidence-floor static membership comes from the custom SCP database instead.
-  525: 7. Grids/known calls/CTY metadata are persisted in Pebble (`grid_db`, default `data/grids/pebble`). Tune `grid_flush_seconds` for batch cadence, `grid_cache_size` for the unified call metadata LRU, `grid_cache_ttl_seconds` for grid TTL inside the cache, `grid_block_cache_mb`/`grid_bloom_filter_bits`/`grid_memtable_size_mb`/`grid_l0_stop_writes_threshold` for Pebble read/write tuning, and `grid_write_queue_depth`/`grid_ttl_days` for buffering and retention.
-  526: 8. Adjust `stats.display_interval_seconds` in `data/config/app.yaml` to control how frequently runtime statistics print to the console (defaults to 30 seconds).
-  527: 9. Install dependencies and run:
+  524: 6. Grids and CTY metadata are persisted in Pebble (`grid_db`, default `data/grids/pebble`). Tune `grid_flush_seconds` for batch cadence, `grid_cache_size` for the unified call metadata LRU, `grid_cache_ttl_seconds` for grid TTL inside the cache, `grid_block_cache_mb`/`grid_bloom_filter_bits`/`grid_memtable_size_mb`/`grid_l0_stop_writes_threshold` for Pebble read/write tuning, and `grid_write_queue_depth`/`grid_ttl_days` for buffering and retention.
+  525: 7. Adjust `stats.display_interval_seconds` in `data/config/app.yaml` to control how frequently runtime statistics print to the console (defaults to 30 seconds).
+  526: 8. Install dependencies and run:
   528: 	 ```pwsh
   529: 	 go mod tidy
   530: 	 go run .
   531: 	 ```
-  532: 10. Connect via `telnet localhost 9300` (or your configured `telnet.port`), enter your callsign, and the server will immediately stream real-time spots.
+  531: 9. Connect via `telnet localhost 9300` (or your configured `telnet.port`), enter your callsign, and the server will immediately stream real-time spots.
   533: 
   534: ## Path Reliability (telnet)
   535: 
@@ -561,11 +543,11 @@
   561: `config.Load` accepts a directory (merging all YAML files); the server defaults to `data/config`. It normalizes missing fields and refuses to start when time strings are invalid. Key fallbacks:
   562: 
   563: - Stats tickers default to `30s` when unset. Telnet queues fall back to `broadcast_queue_size=2048`, `worker_queue_size=128`, `client_buffer_size=128`, and friendly greeting/duplicate-login messages are injected if blank.
-  564: - Call correction uses conservative resolver-primary baselines unless overridden: `min_consensus_reports=4`, `family_policy.slash_precedence_min_reports=2`, `family_policy.truncation.max_length_delta=1`, `family_policy.truncation.min_shorter_length=3`, `family_policy.truncation.relax_advantage.min_advantage=0`, `min_advantage=1`, `min_confidence_percent=70`, `recency_seconds=45`, `max_edit_distance=2`, `frequency_tolerance_hz=500`, `voice_frequency_tolerance_hz=2000`, `invalid_action=broadcast`, `resolver_recent_plus1_enabled=true`, `resolver_recent_plus1_min_unique_winner=3`, `resolver_recent_plus1_require_subject_weaker=true`, `resolver_recent_plus1_max_distance=1`, and `resolver_neighborhood_max_distance=1`. Bayesian gate defaults are conservative and disabled by default: `bayes_bonus.enabled=false`, `weight_distance1_milli=350`, `weight_distance2_milli=200`, `weighted_smoothing_milli=1000`, `recent_smoothing=2`, `obs_log_cap_milli=350`, `prior_log_min_milli=-200`, `prior_log_max_milli=600`, `report_threshold_distance1_milli=450`, `report_threshold_distance2_milli=650`, `advantage_threshold_distance1_milli=700`, `advantage_threshold_distance2_milli=950`, `advantage_min_weighted_delta_distance1_milli=200`, `advantage_min_weighted_delta_distance2_milli=300`, `advantage_extra_confidence_distance1=3`, `advantage_extra_confidence_distance2=5`, `require_candidate_validated=true`, and `require_subject_unvalidated_distance2=true`. Temporal defaults are `temporal_decoder.scope=uncertain_only`, `lag_seconds=2`, `max_wait_seconds=6`, `beam_size=8`, `max_obs_candidates=8`, `stay_bonus=120`, `switch_penalty=160`, `family_switch_penalty=60`, `edit1_switch_penalty=90`, `min_score=0`, `min_margin_score=80`, `overflow_action=fallback_resolver`, `max_pending=25000`, `max_active_keys=6000`, `max_events_per_key=32`. If `resolver_neighborhood_enabled=true`, `resolver_neighborhood_bucket_radius` is clamped to `[1..2]` (otherwise `[0..2]`) and `resolver_neighborhood_max_distance<=0` is normalized to `1`. Empty distance models default to `plain`; negative distance-3 extras and reliability/confusion weights are clamped to zero. When `custom_scp.enabled=true`, defaults include `history_horizon_days=395`, `min_snr_db_cw=4`, `min_snr_db_rtty=3`, `resolver_min_score=5`, `stabilizer_min_score=5`, `s_floor_min_score=3`, and bounded storage defaults (`max_keys=500000`, `max_spotters_per_key=64`).
+  564: - Call correction uses conservative resolver-primary baselines unless overridden: `min_consensus_reports=4`, `family_policy.slash_precedence_min_reports=2`, `family_policy.truncation.max_length_delta=1`, `family_policy.truncation.min_shorter_length=3`, `family_policy.truncation.relax_advantage.min_advantage=0`, `min_advantage=1`, `min_confidence_percent=70`, `recency_seconds=45`, `max_edit_distance=2`, `frequency_tolerance_hz=500`, `voice_frequency_tolerance_hz=2000`, `invalid_action=broadcast`, `resolver_recent_plus1_enabled=true`, `resolver_recent_plus1_min_unique_winner=3`, `resolver_recent_plus1_require_subject_weaker=true`, `resolver_recent_plus1_max_distance=1`, and `resolver_neighborhood_max_distance=1`. Bayesian gate defaults are conservative and disabled by default: `bayes_bonus.enabled=false`, `weight_distance1_milli=350`, `weight_distance2_milli=200`, `weighted_smoothing_milli=1000`, `recent_smoothing=2`, `obs_log_cap_milli=350`, `prior_log_min_milli=-200`, `prior_log_max_milli=600`, `report_threshold_distance1_milli=450`, `report_threshold_distance2_milli=650`, `advantage_threshold_distance1_milli=700`, `advantage_threshold_distance2_milli=950`, `advantage_min_weighted_delta_distance1_milli=200`, `advantage_min_weighted_delta_distance2_milli=300`, `advantage_extra_confidence_distance1=3`, `advantage_extra_confidence_distance2=5`, `require_candidate_validated=true`, and `require_subject_unvalidated_distance2=true`. Temporal defaults are `temporal_decoder.scope=uncertain_only`, `lag_seconds=2`, `max_wait_seconds=6`, `beam_size=8`, `max_obs_candidates=8`, `stay_bonus=120`, `switch_penalty=160`, `family_switch_penalty=60`, `edit1_switch_penalty=90`, `min_score=0`, `min_margin_score=80`, `overflow_action=fallback_resolver`, `max_pending=25000`, `max_active_keys=6000`, `max_events_per_key=32`. If `resolver_neighborhood_enabled=true`, `resolver_neighborhood_bucket_radius` is clamped to `[1..2]` (otherwise `[0..2]`) and `resolver_neighborhood_max_distance<=0` is normalized to `1`. Empty distance models default to `plain`; negative distance-3 extras and reliability/confusion weights are clamped to zero. When `custom_scp.enabled=true`, defaults include `history_horizon_days=60`, `static_horizon_days=395`, `min_snr_db_cw=4`, `min_snr_db_rtty=3`, `resolver_min_score=5`, `stabilizer_min_score=5`, `s_floor_min_score=3`, and bounded storage defaults (`max_keys=500000`, `max_spotters_per_key=64`).
   565: - Harmonic suppression clamps to sane minimums (`recency_seconds=120`, `max_harmonic_multiple=4`, `frequency_tolerance_hz=20`, `min_report_delta=6`, `min_report_delta_step>=0`).
   566: - Spot policy defaults prevent runaway averaging: `max_age_seconds=120`, `frequency_averaging_seconds=45`, `frequency_averaging_tolerance_hz=300`, `frequency_averaging_min_reports=4`.
   567: - Archive defaults keep writes lightweight: `queue_size=10000`, `batch_size=500`, `batch_interval_ms=200`, `cleanup_interval_seconds=3600`, `synchronous=off`, `auto_delete_corrupt_db=false` (`busy_timeout_ms`/`preflight_timeout_ms` are ignored for Pebble).
-  568: - Known calls default to `data/scp/MASTER.SCP` and refresh at `01:00` UTC if unspecified. CTY falls back to `data/cty/cty.plist`.
+  568: - CTY falls back to `data/cty/cty.plist`.
   569: - FCC ULS fetches use the official URL/paths (`archive_path=data/fcc/l_amat.zip`, `db_path=data/fcc/fcc_uls.db`, `temp_dir` inherits from `db_path`), and refresh times must parse as `HH:MM` or loading fails fast.
   570: - Grid store defaults: `grid_db=data/grids/pebble`, `grid_flush_seconds=60`, `grid_cache_size=100000`, `grid_cache_ttl_seconds=0`, `grid_block_cache_mb=64`, `grid_bloom_filter_bits=10`, `grid_memtable_size_mb=32`, `grid_l0_compaction_threshold=4`, `grid_l0_stop_writes_threshold=16`, `grid_write_queue_depth=64`, with TTL/retention floors of zero to avoid negative durations.
   571: - Dedup windows are coerced to zero-or-greater; `output_buffer_size` defaults to `1000` so bursts do not immediately drop spots.

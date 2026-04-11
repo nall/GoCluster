@@ -20,20 +20,21 @@ import (
 )
 
 const (
-	customSCPDefaultHorizonDays      = 395
-	customSCPDefaultMaxKeys          = 500000
-	customSCPDefaultMaxSpotters      = 64
-	customSCPDefaultCleanupInterval  = 10 * time.Minute
-	customSCPDefaultCacheSizeBytes   = int64(64 << 20)
-	customSCPDefaultBloomBits        = 10
-	customSCPDefaultMemTableSize     = uint64(32 << 20)
-	customSCPDefaultL0Compaction     = 4
-	customSCPDefaultL0StopWrites     = 16
-	customSCPDefaultCoreMinScore     = 5
-	customSCPDefaultCoreMinH3Cells   = 2
-	customSCPDefaultFloorMinScore    = 3
-	customSCPDefaultFloorExactCells  = 2
-	customSCPDefaultFloorFamilyCells = 3
+	customSCPDefaultHorizonDays       = 60
+	customSCPDefaultStaticHorizonDays = 395
+	customSCPDefaultMaxKeys           = 500000
+	customSCPDefaultMaxSpotters       = 64
+	customSCPDefaultCleanupInterval   = 10 * time.Minute
+	customSCPDefaultCacheSizeBytes    = int64(64 << 20)
+	customSCPDefaultBloomBits         = 10
+	customSCPDefaultMemTableSize      = uint64(32 << 20)
+	customSCPDefaultL0Compaction      = 4
+	customSCPDefaultL0StopWrites      = 16
+	customSCPDefaultCoreMinScore      = 5
+	customSCPDefaultCoreMinH3Cells    = 2
+	customSCPDefaultFloorMinScore     = 3
+	customSCPDefaultFloorExactCells   = 2
+	customSCPDefaultFloorFamilyCells  = 3
 
 	customSCPMetaPrefix = "m|"
 	customSCPObsPrefix  = "o|"
@@ -80,6 +81,7 @@ type CustomSCPOptions struct {
 	Path string
 
 	HorizonDays       int
+	StaticHorizonDays int
 	MaxKeys           int
 	MaxSpottersPerKey int
 	CleanupInterval   time.Duration
@@ -127,8 +129,8 @@ type customSCPDiagnostics struct {
 	staleStaticPruned          uint64
 }
 
-// CustomSCPStore is the replacement store for static known-call membership and
-// long-horizon recent evidence rails.
+// CustomSCPStore holds runtime-learned static membership and recent-evidence
+// rails for the correction/confidence path.
 type CustomSCPStore struct {
 	mu sync.RWMutex
 
@@ -393,7 +395,7 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 	if seenUnix <= 0 {
 		seenUnix = time.Now().UTC().Unix()
 	}
-	cutoff := time.Now().UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.observationHorizonCutoffUnix(time.Now().UTC())
 	if seenUnix < cutoff {
 		return
 	}
@@ -458,7 +460,7 @@ func (s *CustomSCPStore) StaticContains(call string) bool {
 	if !ok {
 		return false
 	}
-	return seen >= s.horizonCutoffUnix(time.Now().UTC())
+	return seen >= s.staticHorizonCutoffUnix(time.Now().UTC())
 }
 
 // StatsSnapshot reports current custom-SCP cardinalities and bounded cleanup
@@ -543,7 +545,7 @@ func (s *CustomSCPStore) ActiveCallCount(now time.Time) int {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := s.horizonCutoffUnix(now.UTC())
+	cutoff := s.observationHorizonCutoffUnix(now.UTC())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	calls := make(map[string]struct{})
@@ -566,7 +568,7 @@ func (s *CustomSCPStore) ActiveCallCountsByBand(now time.Time) map[string]int {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := s.horizonCutoffUnix(now.UTC())
+	cutoff := s.observationHorizonCutoffUnix(now.UTC())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	byBand := make(map[string]map[string]struct{})
@@ -603,7 +605,7 @@ func (s *CustomSCPStore) snapshotFor(call, band, mode string, now time.Time) cus
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := s.horizonCutoffUnix(now.UTC())
+	cutoff := s.observationHorizonCutoffUnix(now.UTC())
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -642,13 +644,14 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := s.horizonCutoffUnix(now.UTC())
+	observationCutoff := s.observationHorizonCutoffUnix(now.UTC())
+	staticCutoff := s.staticHorizonCutoffUnix(now.UTC())
 
 	staleStaticCalls := make([]string, 0)
 	overflowDeletes := make([]customSCPDeleteRequest, 0)
 	s.mu.Lock()
 	for key, entry := range s.entries {
-		removed := s.pruneEntryLocked(entry, cutoff)
+		removed := s.pruneEntryLocked(entry, observationCutoff)
 		if len(removed) > 0 {
 			s.diag.staleObservationsPruned += uint64(len(removed))
 			overflowDeletes = append(overflowDeletes, customSCPDeleteRequest{key: key, spotters: removed})
@@ -665,7 +668,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 		}
 	}
 	for call, seen := range s.static {
-		if seen < cutoff {
+		if seen < staticCutoff {
 			delete(s.static, call)
 			s.diag.staleStaticPruned++
 			staleStaticCalls = append(staleStaticCalls, call)
@@ -705,7 +708,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 					continue
 				}
 				seen := int64(binary.BigEndian.Uint64(value))
-				if seen < cutoff {
+				if seen < staticCutoff {
 					_ = batch.Delete(iter.Key(), nil)
 					pending++
 				}
@@ -716,7 +719,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 					pending++
 				} else {
 					seen := int64(binary.BigEndian.Uint64(value[:8]))
-					if seen < cutoff {
+					if seen < observationCutoff {
 						_ = batch.Delete(iter.Key(), nil)
 						pending++
 					}
@@ -745,7 +748,8 @@ func (s *CustomSCPStore) loadFromDB() error {
 		return fmt.Errorf("custom_scp: load iterator: %w", err)
 	}
 	defer iter.Close()
-	cutoff := s.horizonCutoffUnix(time.Now().UTC())
+	observationCutoff := s.observationHorizonCutoffUnix(time.Now().UTC())
+	staticCutoff := s.staticHorizonCutoffUnix(time.Now().UTC())
 	batch := s.db.NewBatch()
 	defer batch.Close()
 	pendingDeletes := 0
@@ -767,7 +771,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 			if call == "" {
 				continue
 			}
-			if seen < cutoff {
+			if seen < staticCutoff {
 				_ = batch.Delete(iter.Key(), nil)
 				s.diag.staleStaticPruned++
 				pendingDeletes++
@@ -782,7 +786,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 				continue
 			}
 			seen := int64(binary.BigEndian.Uint64(v[:8]))
-			if seen < cutoff {
+			if seen < observationCutoff {
 				_ = batch.Delete(iter.Key(), nil)
 				s.diag.staleObservationsPruned++
 				pendingDeletes++
@@ -928,8 +932,12 @@ type customSCPDeleteRequest struct {
 	spotters []string
 }
 
-func (s *CustomSCPStore) horizonCutoffUnix(now time.Time) int64 {
+func (s *CustomSCPStore) observationHorizonCutoffUnix(now time.Time) int64 {
 	return now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+}
+
+func (s *CustomSCPStore) staticHorizonCutoffUnix(now time.Time) int64 {
+	return now.UTC().Add(-time.Duration(s.opts.StaticHorizonDays) * 24 * time.Hour).Unix()
 }
 
 func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
@@ -1032,6 +1040,9 @@ func sanitizeCustomSCPOptions(opts CustomSCPOptions) CustomSCPOptions {
 	}
 	if opts.HorizonDays <= 0 {
 		opts.HorizonDays = customSCPDefaultHorizonDays
+	}
+	if opts.StaticHorizonDays <= 0 {
+		opts.StaticHorizonDays = customSCPDefaultStaticHorizonDays
 	}
 	if opts.MaxKeys <= 0 {
 		opts.MaxKeys = customSCPDefaultMaxKeys

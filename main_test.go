@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -523,91 +522,79 @@ func TestRestoreGridStoreFromPathCancelLeavesDBIntact(t *testing.T) {
 	}
 }
 
-// Purpose: Ensure SCP-known calls promote '?' confidence to 'S' after correction.
-// Key aspects: Applies the known-call floor only when confidence is '?'.
-// Upstream: go test execution.
-// Downstream: applyKnownCallFloor and spot.LoadKnownCallsigns.
-func TestApplyKnownCallFloorPromotesKnownDX(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "known.txt")
-	if err := os.WriteFile(path, []byte("K1KI\n"), 0o644); err != nil {
-		t.Fatalf("write known calls: %v", err)
-	}
-	known, err := spot.LoadKnownCallsigns(path)
+func openTestCustomSCPStore(t *testing.T) *spot.CustomSCPStore {
+	t.Helper()
+	store, err := spot.OpenCustomSCPStore(spot.CustomSCPOptions{
+		Path:           filepath.Join(t.TempDir(), "custom_scp"),
+		CoreMinScore:   1,
+		CoreMinH3Cells: 1,
+	})
 	if err != nil {
-		t.Fatalf("load known calls: %v", err)
+		t.Fatalf("open custom_scp: %v", err)
 	}
-	var knownPtr atomic.Pointer[spot.KnownCallsigns]
-	knownPtr.Store(known)
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
+func recordCustomSCPStatic(store *spot.CustomSCPStore, call string, freq float64, mode string) {
+	s := spot.NewSpot(call, "N0AAA", freq, mode)
+	s.Confidence = "V"
+	s.Time = time.Now().UTC()
+	store.RecordSpot(s)
+}
+
+func TestApplySupportFloorPromotesCustomSCPStaticMembership(t *testing.T) {
+	store := openTestCustomSCPStore(t)
+	recordCustomSCPStatic(store, "K1KI", 1831.3, "CW")
 
 	s := spot.NewSpot("K1KI", "W2TT", 1831.3, "CW")
 	s.Confidence = "?"
 
-	if !applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
-		t.Fatalf("expected known-call floor to mark confidence")
+	if !applySupportFloor(s, nil, store, nil, config.CallCorrectionConfig{
+		CustomSCP: config.CallCorrectionCustomSCPConfig{Enabled: true},
+	}) {
+		t.Fatalf("expected custom_scp static floor to mark confidence")
 	}
 	if s.Confidence != "S" {
 		t.Fatalf("expected confidence S, got %q", s.Confidence)
 	}
 }
 
-// Purpose: Ensure SCP floor does not override explicit P/V/C confidence.
-// Key aspects: Keeps existing confidence when it is not '?'.
-// Upstream: go test execution.
-// Downstream: applyKnownCallFloor.
-func TestApplyKnownCallFloorKeepsNonUnknownConfidence(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "known.txt")
-	if err := os.WriteFile(path, []byte("K1KI\n"), 0o644); err != nil {
-		t.Fatalf("write known calls: %v", err)
-	}
-	known, err := spot.LoadKnownCallsigns(path)
-	if err != nil {
-		t.Fatalf("load known calls: %v", err)
-	}
-	var knownPtr atomic.Pointer[spot.KnownCallsigns]
-	knownPtr.Store(known)
+func TestApplySupportFloorKeepsNonUnknownConfidence(t *testing.T) {
+	store := openTestCustomSCPStore(t)
+	recordCustomSCPStatic(store, "K1KI", 1831.3, "CW")
 
 	s := spot.NewSpot("K1KI", "W2TT", 1831.3, "CW")
 	s.Confidence = "P"
 
-	if applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
-		t.Fatalf("did not expect known-call floor to override P")
+	if applySupportFloor(s, nil, store, nil, config.CallCorrectionConfig{
+		CustomSCP: config.CallCorrectionCustomSCPConfig{Enabled: true},
+	}) {
+		t.Fatalf("did not expect floor to override P")
 	}
 	if s.Confidence != "P" {
 		t.Fatalf("expected confidence P, got %q", s.Confidence)
 	}
 }
 
-// Purpose: Ensure FT modes can use the same static floor semantics as other confidence-capable modes.
-// Key aspects: FT8 promotes '?' to 'S' when the DX is statically known.
-// Upstream: go test execution.
-// Downstream: applyKnownCallFloor.
-func TestApplyKnownCallFloorPromotesSupportedFTMode(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "known.txt")
-	if err := os.WriteFile(path, []byte("K1KI\n"), 0o644); err != nil {
-		t.Fatalf("write known calls: %v", err)
-	}
-	known, err := spot.LoadKnownCallsigns(path)
-	if err != nil {
-		t.Fatalf("load known calls: %v", err)
-	}
-	var knownPtr atomic.Pointer[spot.KnownCallsigns]
-	knownPtr.Store(known)
+func TestApplySupportFloorPromotesSupportedFTModeViaCustomSCPStatic(t *testing.T) {
+	store := openTestCustomSCPStore(t)
+	recordCustomSCPStatic(store, "K1KI", 14074.0, "FT8")
 
 	s := spot.NewSpot("K1KI", "W2TT", 14074.0, "FT8")
 	s.Confidence = "?"
 
-	if !applyKnownCallFloor(s, &knownPtr, nil, nil, nil, config.CallCorrectionConfig{}) {
-		t.Fatalf("expected known-call floor to apply to FT8")
+	if !applySupportFloor(s, nil, store, nil, config.CallCorrectionConfig{
+		CustomSCP: config.CallCorrectionCustomSCPConfig{Enabled: true},
+	}) {
+		t.Fatalf("expected static custom_scp floor to apply to FT8")
 	}
 	if s.Confidence != "S" {
 		t.Fatalf("expected confidence S, got %q", s.Confidence)
 	}
 }
 
-func TestApplyKnownCallFloorPromotesRecentOnBandDX(t *testing.T) {
+func TestApplySupportFloorPromotesRecentOnBandDX(t *testing.T) {
 	store := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
 		Window:             12 * time.Hour,
 		Shards:             1,
@@ -621,7 +608,7 @@ func TestApplyKnownCallFloorPromotesRecentOnBandDX(t *testing.T) {
 	store.Record("K1REC", s.BandNorm, "CW", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "CW", "N0BBB", now.Add(-5*time.Minute))
 
-	if !applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
+	if !applySupportFloor(s, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            true,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -632,7 +619,7 @@ func TestApplyKnownCallFloorPromotesRecentOnBandDX(t *testing.T) {
 	}
 }
 
-func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
+func TestApplySupportFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 	store := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
 		Window:             12 * time.Hour,
 		Shards:             1,
@@ -646,7 +633,7 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 	store.Record("K1REC", s.BandNorm, "RTTY", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "RTTY", "N0BBB", now.Add(-5*time.Minute))
 
-	if applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
+	if applySupportFloor(s, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            true,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -658,7 +645,7 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 
 	store.Record("K1REC", s.BandNorm, "CW", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "CW", "N0BBB", now.Add(-5*time.Minute))
-	if applyKnownCallFloor(s, nil, store, nil, nil, config.CallCorrectionConfig{
+	if applySupportFloor(s, store, nil, nil, config.CallCorrectionConfig{
 		RecentBandBonusEnabled:            false,
 		RecentBandRecordMinUniqueSpotters: 2,
 	}) {
@@ -669,7 +656,7 @@ func TestApplyKnownCallFloorRecentOnBandHonorsModeAndFlag(t *testing.T) {
 	}
 }
 
-func TestApplyKnownCallFloorUsesFTRecentOverrideWhenCustomSCPEnabled(t *testing.T) {
+func TestApplySupportFloorUsesFTRecentOverrideWhenCustomSCPEnabled(t *testing.T) {
 	store := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
 		Window:             12 * time.Hour,
 		Shards:             1,
@@ -683,7 +670,7 @@ func TestApplyKnownCallFloorUsesFTRecentOverrideWhenCustomSCPEnabled(t *testing.
 	store.Record("K1REC", s.BandNorm, "FT8", "N0AAA", now.Add(-10*time.Minute))
 	store.Record("K1REC", s.BandNorm, "FT8", "N0BBB", now.Add(-5*time.Minute))
 
-	if !applyKnownCallFloor(s, nil, nil, &spot.CustomSCPStore{}, store, config.CallCorrectionConfig{
+	if !applySupportFloor(s, nil, &spot.CustomSCPStore{}, store, config.CallCorrectionConfig{
 		RecentBandBonusEnabled: true,
 		CustomSCP: config.CallCorrectionCustomSCPConfig{
 			Enabled: true,
@@ -1051,7 +1038,7 @@ func TestLocalSelfSpotResolverStageForcesVAndAdmitsCustomSCP(t *testing.T) {
 	}
 }
 
-func TestApplyKnownCallFloorPromotesViaSlashFamilyRecentSupport(t *testing.T) {
+func TestApplySupportFloorPromotesViaSlashFamilyRecentSupport(t *testing.T) {
 	store := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
 		Window:             12 * time.Hour,
 		Shards:             1,
@@ -1068,7 +1055,7 @@ func TestApplyKnownCallFloorPromotesViaSlashFamilyRecentSupport(t *testing.T) {
 
 	s := spot.NewSpot("W1AW", "W2TT", 7010.0, "CW")
 	s.Confidence = "?"
-	if !applyKnownCallFloor(s, nil, store, nil, nil, cfg) {
+	if !applySupportFloor(s, store, nil, nil, cfg) {
 		t.Fatalf("expected recent-on-band floor to use slash family support")
 	}
 	if s.Confidence != "S" {
@@ -1346,7 +1333,6 @@ func TestMaybeApplyResolverCorrectionAppliesWinner(t *testing.T) {
 			nil,
 			nil,
 			nil,
-			nil,
 		)
 		if s.DXCallNorm == "K1ABC" {
 			break
@@ -1424,7 +1410,6 @@ func TestMaybeApplyResolverCorrectionNoApplyUsesEmittedCallConfidence(t *testing
 		nil,
 		nil,
 		tracker,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -1534,7 +1519,6 @@ func TestMaybeApplyResolverCorrectionUsesAdaptiveMinReports(t *testing.T) {
 		tracker,
 		nil,
 		nil,
-		nil,
 		adaptive,
 		nil,
 		nil,
@@ -1623,7 +1607,6 @@ func TestMaybeApplyResolverCorrectionUsesNeighborhoodWinner(t *testing.T) {
 		nil,
 		nil,
 		tracker,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -1724,7 +1707,6 @@ func TestMaybeApplyResolverCorrectionRejectsNeighborhoodConflict(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	if suppress {
 		t.Fatalf("did not expect suppress")
@@ -1753,7 +1735,6 @@ func TestMaybeApplyResolverCorrectionRecordsNoSnapshotReason(t *testing.T) {
 		nil,
 		nil,
 		tracker,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -1826,7 +1807,6 @@ func TestMaybeApplyResolverCorrectionHonorsMaxEditDistance(t *testing.T) {
 			MaxEditDistance: 1,
 			InvalidAction:   "broadcast",
 		},
-		nil,
 		nil,
 		nil,
 		nil,
@@ -1917,7 +1897,6 @@ func TestMaybeApplyResolverCorrectionHonorsDistance3ExtraRails(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	if suppress {
 		t.Fatalf("did not expect suppress")
@@ -1928,15 +1907,16 @@ func TestMaybeApplyResolverCorrectionHonorsDistance3ExtraRails(t *testing.T) {
 }
 
 func TestMaybeApplyResolverCorrectionAppliesTruncationLengthBonusParity(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "known.txt")
-	if err := os.WriteFile(path, []byte("VE3NNT\n"), 0o644); err != nil {
-		t.Fatalf("write known calls file: %v", err)
-	}
-	known, err := spot.LoadKnownCallsigns(path)
-	if err != nil {
-		t.Fatalf("load known calls: %v", err)
-	}
+	recentStore := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
+		Window:             12 * time.Hour,
+		Shards:             1,
+		MaxEntries:         128,
+		CleanupInterval:    time.Hour,
+		MaxSpottersPerCall: 8,
+	})
+	now := time.Now().UTC()
+	recentStore.Record("VE3NNT", "40m", "CW", "N0AAA", now.Add(-10*time.Minute))
+	recentStore.Record("VE3NNT", "40m", "CW", "N0BBB", now.Add(-5*time.Minute))
 
 	settings := spot.CorrectionSettings{
 		MinConsensusReports:  3,
@@ -1957,7 +1937,8 @@ func TestMaybeApplyResolverCorrectionAppliesTruncationLengthBonusParity(t *testi
 		TruncationLengthBonusMax:                       1,
 		TruncationLengthBonusRequireCandidateValidated: true,
 		TruncationLengthBonusRequireSubjectUnvalidated: true,
-		KnownCallset: known,
+		RecentBandStore:                                recentStore,
+		RecentBandRecordMinUniqueSpotters:              2,
 	}
 	if relation, ok := spot.DetectCorrectionFamilyWithPolicy("VE3NN", "VE3NNT", settings.FamilyPolicy); !ok || relation.Kind != spot.CorrectionFamilyTruncation {
 		t.Fatalf("expected truncation family relation, got ok=%t relation=%+v", ok, relation)
@@ -1965,7 +1946,7 @@ func TestMaybeApplyResolverCorrectionAppliesTruncationLengthBonusParity(t *testi
 		t.Fatalf("expected VE3NNT to be more specific, got relation=%+v", relation)
 	}
 
-	result := spot.EvaluateResolverPrimaryGates("VE3NN", "VE3NNT", "40m", "CW", 1, 2, 66, 1000, 2000, settings, time.Now().UTC(), spot.ResolverPrimaryGateOptions{})
+	result := spot.EvaluateResolverPrimaryGates("VE3NN", "VE3NNT", "40m", "CW", 1, 2, 66, 1000, 2000, settings, now, spot.ResolverPrimaryGateOptions{})
 	if !result.Allow {
 		t.Fatalf("expected truncation length bonus parity to admit VE3NNT, reason=%q result=%+v", result.Reason, result)
 	}
@@ -2373,7 +2354,6 @@ func TestMaybeApplyResolverCorrectionUsesRecentPlus1AppliedReason(t *testing.T) 
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	if suppress {
 		t.Fatalf("did not expect suppress")
@@ -2465,7 +2445,6 @@ func TestMaybeApplyResolverCorrectionRejectsRecentPlus1WhenSubjectNotWeaker(t *t
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	if suppress {
 		t.Fatalf("did not expect suppress")
@@ -2507,7 +2486,7 @@ func recentBandSupportCountForSpot(store *spot.RecentBandStore, s *spot.Spot, no
 	return store.RecentSupportCount(call, band, mode, now)
 }
 
-func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
+func TestBuildOverviewLinesIncludesRecentSupportByBand(t *testing.T) {
 	now := time.Now().UTC()
 	recentBandStore := spot.NewRecentBandStoreWithOptions(spot.RecentBandOptions{
 		Window:             12 * time.Hour,
@@ -2527,10 +2506,8 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		recentBandStore,
 		nil,
-		"",
 		nil,
 		nil,
 		nil,
@@ -2572,13 +2549,13 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 
 	found := false
 	for _, line := range lines {
-		if strings.Contains(line, "[yellow]Known calls[-]: 2") {
+		if strings.Contains(line, "[yellow]Recent support[-]: 2") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected known-calls line with count 2 in overview lines, got %v", lines)
+		t.Fatalf("expected recent-support line with count 2 in overview lines, got %v", lines)
 	}
 	perBandFound := false
 	blankBeforeKnown := false
@@ -2588,7 +2565,7 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 		}
 	}
 	for i, line := range lines {
-		if !strings.Contains(line, "[yellow]Known calls[-]: 2") {
+		if !strings.Contains(line, "[yellow]Recent support[-]: 2") {
 			continue
 		}
 		if i > 0 && strings.TrimSpace(lines[i-1]) == "" {
@@ -2597,10 +2574,10 @@ func TestBuildOverviewLinesIncludesKnownCallsByBand(t *testing.T) {
 		break
 	}
 	if !perBandFound {
-		t.Fatalf("expected per-band known-calls counts in overview lines, got %v", lines)
+		t.Fatalf("expected per-band recent-support counts in overview lines, got %v", lines)
 	}
 	if !blankBeforeKnown {
-		t.Fatalf("expected blank spacer line before known-calls section, got %v", lines)
+		t.Fatalf("expected blank spacer line before recent-support section, got %v", lines)
 	}
 	for _, line := range lines {
 		if strings.Contains(line, "Evidence policy") {
@@ -2730,14 +2707,12 @@ func TestBuildCorrectionSettingsMapsConfigFields(t *testing.T) {
 	}
 	window := 75 * time.Second
 	recentBandStore := spot.NewRecentBandStore(12 * time.Hour)
-	knownCallset := &spot.KnownCallsigns{}
 	got := buildCorrectionSettings(
 		cfg,
 		5,
 		window,
 		900,
 		recentBandStore,
-		knownCallset,
 	)
 
 	if got.MinConsensusReports != 5 {
@@ -2821,9 +2796,6 @@ func TestBuildCorrectionSettingsMapsConfigFields(t *testing.T) {
 		got.BayesBonusPolicy.RequireCandidateValidated != cfg.BayesBonus.RequireCandidateValidated ||
 		got.BayesBonusPolicy.RequireSubjectUnvalidatedDistance2 != cfg.BayesBonus.RequireSubjectUnvalidatedDistance2 {
 		t.Fatalf("expected bayes bonus mapping to be preserved")
-	}
-	if got.KnownCallset != knownCallset {
-		t.Fatalf("expected known callset pointer to be preserved")
 	}
 	if got.RecentBandStore != recentBandStore {
 		t.Fatalf("expected recent-band store pointer to be preserved")

@@ -13,7 +13,7 @@ import (
 
 const callMetaCacheShardCount = 16
 
-// callMetaCache stores per-call grid/CTY/known metadata with a bounded LRU.
+// callMetaCache stores per-call grid and CTY metadata with a bounded LRU.
 // Grid lookups normalize to a base identity (uppercase, trimmed, hyphen suffix stripped)
 // to avoid duplicate entries across source variants.
 type callMetaCache struct {
@@ -39,9 +39,6 @@ type callMetaEntry struct {
 	gridValid     bool
 	gridDerived   bool
 	gridUpdatedAt time.Time
-
-	isKnown      bool
-	knownChecked bool
 
 	cty        *cty.PrefixInfo
 	ctyValid   bool
@@ -83,9 +80,9 @@ func newCallMetaCache(capacity int, gridTTL time.Duration) *callMetaCache {
 	}
 }
 
-// Clear clears all cached entries (used on CTY/SCP reload).
+// Clear clears all cached entries (used on CTY reload).
 // Key aspects: Resets shard maps under lock.
-// Upstream: CTY/SCP refresh handlers.
+// Upstream: CTY refresh handlers.
 // Downstream: shard state reset.
 func (c *callMetaCache) Clear() {
 	if c == nil {
@@ -287,7 +284,7 @@ func (c *callMetaCache) UpdateGrid(call, grid string, derived bool) bool {
 }
 
 // ApplyRecord applies a persisted record into the cache.
-// Key aspects: Prefer newer grid timestamps; keep CTY/known metadata when present.
+// Key aspects: Prefer newer grid timestamps; keep CTY metadata when present.
 // Upstream: grid lookup backfill.
 // Downstream: per-shard LRU mutation.
 func (c *callMetaCache) ApplyRecord(rec gridstore.Record) {
@@ -317,8 +314,6 @@ func (c *callMetaCache) ApplyRecord(rec gridstore.Record) {
 			}
 		}
 	}
-	entry.isKnown = rec.IsKnown
-	entry.knownChecked = true
 	if rec.CTYValid {
 		entry.ctyChecked = true
 		entry.ctyValid = true
@@ -330,22 +325,6 @@ func (c *callMetaCache) ApplyRecord(rec gridstore.Record) {
 			Continent: rec.CTYContinent,
 		}
 	}
-}
-
-// SetKnown marks known-call status in cache when available.
-// Key aspects: Stores both hits and misses to avoid repeated checks.
-// Upstream: known calls lookup hooks.
-// Downstream: per-shard LRU mutation.
-func (c *callMetaCache) SetKnown(call string, known bool) {
-	if c == nil || call == "" {
-		return
-	}
-	shard := c.shardFor(call)
-	shard.mu.Lock()
-	entry := shard.getOrCreate(call)
-	entry.isKnown = known
-	entry.knownChecked = true
-	shard.mu.Unlock()
 }
 
 func (c *callMetaCache) shardFor(key string) *callMetaCacheShard {

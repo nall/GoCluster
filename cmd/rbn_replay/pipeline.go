@@ -162,7 +162,6 @@ func maybeApplyResolverCorrectionReplay(
 	tracker *stats.Tracker,
 	adaptive *spot.AdaptiveMinReports,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 	now time.Time,
 ) replayResolverApplyOutcome {
 	return maybeApplyResolverCorrectionReplayWithSelectionOverride(
@@ -175,7 +174,6 @@ func maybeApplyResolverCorrectionReplay(
 		tracker,
 		adaptive,
 		recentBandStore,
-		knownCallset,
 		now,
 		nil,
 	)
@@ -191,7 +189,6 @@ func maybeApplyResolverCorrectionReplayWithSelectionOverride(
 	tracker *stats.Tracker,
 	adaptive *spot.AdaptiveMinReports,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 	now time.Time,
 	selectionOverride *correctionflow.ResolverPrimarySelection,
 ) replayResolverApplyOutcome {
@@ -273,7 +270,6 @@ func maybeApplyResolverCorrectionReplayWithSelectionOverride(
 		outcome.Selection,
 		cfg,
 		recentBandStore,
-		knownCallset,
 		adaptive,
 		now,
 	)
@@ -335,7 +331,6 @@ func evaluateResolverPrimaryGateReplay(
 	selection correctionflow.ResolverPrimarySelection,
 	cfg config.CallCorrectionConfig,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 	adaptive *spot.AdaptiveMinReports,
 	now time.Time,
 ) (spot.ResolverPrimaryGateResult, bool) {
@@ -380,7 +375,6 @@ func evaluateResolverPrimaryGateReplay(
 		Window:          runtime.Window,
 		FreqToleranceHz: runtime.FreqToleranceHz,
 		RecentBandStore: recentBandStore,
-		KnownCallset:    knownCallset,
 	})
 
 	gateOptions := spot.ResolverPrimaryGateOptions{}

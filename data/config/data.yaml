@@ -6,13 +6,6 @@ cty:
   file: "data/cty/cty.plist"           # Path to the CTY prefix database (cty.plist)
   refresh_utc: "00:10"                 # Daily download time in HH:MM UTC
 
-# Known calls list
-known_calls:
-  enabled: true
-  url: "https://www.supercheckpartial.com/MASTER.SCP"
-  file: "data/scp/MASTER.SCP"
-  refresh_utc: "00:20"                    # Daily download time in HH:MM UTC
-
 # FCC ULS archive
 fcc_uls:
   enabled: true
@@ -24,7 +17,7 @@ fcc_uls:
   allowlist_path: "data/fcc/allowlist.txt"                          # Regex allowlist file (one pattern per line)
   cache_ttl_seconds: 21600                                          # Cache TTL for FCC ULS lookups
 
-# Combined database for known calls + grids (Pebble directory)
+# Grid/call metadata database (Pebble directory)
 grid_db: "data/grids/pebble"
 # H3 table directory for path reliability (res1.bin/res2.bin).
 h3_table_path: "data/h3"

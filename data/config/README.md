@@ -7,7 +7,7 @@ Configuration is split by concern so you only edit the relevant file:
 - `dedupe.yaml` - primary/secondary dedupe policy windows.
 - `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.
 - `pipeline.yaml` - call correction, harmonics, spot policy.
-- `data.yaml` - CTY/known_calls/FCC/skew sources, grid DB tuning, and H3 table path.
+- `data.yaml` - CTY/FCC/skew sources, grid DB tuning, and H3 table path.
 - `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
 - `runtime.yaml` - telnet server settings, buffer capacity, and filter defaults.
 - `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.

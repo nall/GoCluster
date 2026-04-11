@@ -169,9 +169,9 @@ call_correction:
    - Current: 0.1 kHz separation, 0.5 runner-up ratio
    - May be preventing corrections when multiple stations are close in frequency
 
-4. **Add "known good calls" quality database**
-   - Already configured in data/config/data.yaml (known_calls)
-   - Use to boost confidence for corrections toward known calls
+4. **Leverage custom-SCP static membership**
+   - Already configured under call_correction.custom_scp
+   - Use to boost confidence for corrections toward static-member calls
 
 5. **Monitor these error patterns:**
    - Partial call corrections (R4FT → R4FD instead of R4FDH)

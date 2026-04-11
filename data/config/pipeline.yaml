@@ -147,12 +147,13 @@ call_correction:
   ft2_quiet_gap_seconds: 3             # FT2 quiet-gap extension window
   ft2_hard_cap_seconds: 6              # FT2 hard cap from first arrival
 
-  # Custom SCP replacement database (runtime-learned; replaces MASTER.SCP
-  # membership for S-floor when enabled).
+  # Custom SCP runtime database for S-floor static membership and correction
+  # support.
   custom_scp:
     enabled: true
     path: "data/scp"
-    history_horizon_days: 395
+    history_horizon_days: 60
+    static_horizon_days: 395
     min_snr_db_cw: 4
     min_snr_db_rtty: 3
     resolver_min_score: 5

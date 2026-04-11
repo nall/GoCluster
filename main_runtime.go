@@ -88,11 +88,6 @@ type clusterRuntime struct {
 	recentBandStore spot.RecentSupportStore
 	customSCPStore  *spot.CustomSCPStore
 
-	useKnownCalls  bool
-	knownCalls     atomic.Pointer[spot.KnownCallsigns]
-	knownCallsPath string
-	knownCallsURL  string
-
 	gridStoreHandle   *gridStoreHandle
 	gridDBCheckOnMiss bool
 	gridDBCheckSource string
@@ -379,7 +374,7 @@ func (r *clusterRuntime) initializeReferenceData() bool {
 	if !r.initializeSignalResolverAndRecentStore() {
 		return false
 	}
-	if !r.initializeKnownCallsAndGridStore() {
+	if !r.initializeGridStore() {
 		return false
 	}
 	r.initializeSkewStore()
@@ -550,6 +545,7 @@ func (r *clusterRuntime) initializeSignalResolverAndRecentStore() bool {
 		customOpts := spot.CustomSCPOptions{
 			Path:                   r.cfg.CallCorrection.CustomSCP.Path,
 			HorizonDays:            r.cfg.CallCorrection.CustomSCP.HistoryHorizonDays,
+			StaticHorizonDays:      r.cfg.CallCorrection.CustomSCP.StaticHorizonDays,
 			MaxKeys:                r.cfg.CallCorrection.CustomSCP.MaxKeys,
 			MaxSpottersPerKey:      r.cfg.CallCorrection.CustomSCP.MaxSpottersPerKey,
 			CleanupInterval:        time.Duration(r.cfg.CallCorrection.CustomSCP.CleanupIntervalSeconds) * time.Second,
@@ -586,64 +582,6 @@ func (r *clusterRuntime) initializeSignalResolverAndRecentStore() bool {
 	return true
 }
 
-func (r *clusterRuntime) initializeKnownCallsAndGridStore() bool {
-	r.prepareKnownCalls()
-	if !r.initializeGridStore() {
-		return false
-	}
-
-	if r.useKnownCalls && r.cfg.KnownCalls.Enabled && r.knownCallsURL != "" && r.knownCallsPath != "" {
-		if r.knownCalls.Load() != nil {
-			startKnownCallScheduler(r.ctx, r.cfg.KnownCalls, &r.knownCalls, r.gridStoreHandle, r.metaCache)
-		} else {
-			log.Printf("Warning: known calls scheduler disabled (no initial data); ensure %s is reachable", r.cfg.KnownCalls.URL)
-		}
-	} else if r.useKnownCalls && r.cfg.KnownCalls.Enabled {
-		log.Printf("Warning: known calls download enabled but url or file missing")
-	}
-	return true
-}
-
-func (r *clusterRuntime) prepareKnownCalls() {
-	r.useKnownCalls = !r.cfg.CallCorrection.CustomSCP.Enabled
-	r.knownCallsPath = strings.TrimSpace(r.cfg.KnownCalls.File)
-	r.knownCallsURL = strings.TrimSpace(r.cfg.KnownCalls.URL)
-	if !r.useKnownCalls {
-		r.knownCallsPath = ""
-	}
-	if !r.useKnownCalls || r.knownCallsPath == "" {
-		return
-	}
-
-	if _, err := os.Stat(r.knownCallsPath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			if r.knownCallsURL != "" {
-				if fresh, updated, refreshErr := refreshKnownCallsigns(r.ctx, r.cfg.KnownCalls); refreshErr != nil {
-					log.Printf("Warning: known calls download failed: %v", refreshErr)
-				} else if updated && fresh != nil {
-					r.knownCalls.Store(fresh)
-					log.Printf("Downloaded %d known callsigns from %s", fresh.Count(), r.knownCallsURL)
-				} else {
-					log.Printf("Known calls file already up to date (%s)", r.knownCallsPath)
-				}
-			} else {
-				log.Printf("Warning: known calls file %s missing and no download URL configured", r.knownCallsPath)
-			}
-		} else {
-			log.Printf("Warning: unable to access known calls file %s: %v", r.knownCallsPath, err)
-		}
-	}
-	if r.knownCalls.Load() != nil {
-		return
-	}
-	if loaded, err := spot.LoadKnownCallsigns(r.knownCallsPath); err != nil {
-		log.Printf("Warning: failed to load known callsigns: %v", err)
-	} else {
-		r.knownCalls.Store(loaded)
-		log.Printf("Loaded %d known callsigns from %s", loaded.Count(), r.knownCallsPath)
-	}
-}
-
 func (r *clusterRuntime) initializeGridStore() bool {
 	gridOpts := gridstore.Options{
 		CacheSizeBytes:        int64(r.cfg.GridBlockCacheMB) << 20,
@@ -657,18 +595,13 @@ func (r *clusterRuntime) initializeGridStore() bool {
 	if err != nil {
 		if pebble.IsCorruptionError(err) {
 			log.Printf("Gridstore: corruption detected on open (%v); starting checkpoint restore", err)
-			startGridStoreRecovery(r.ctx, r.gridStoreHandle, r.cfg.GridDBPath, gridOpts, &r.knownCalls, r.metaCache)
+			startGridStoreRecovery(r.ctx, r.gridStoreHandle, r.cfg.GridDBPath, gridOpts, r.metaCache)
 		} else {
 			log.Printf("Failed to open grid database: %v", err)
 			return false
 		}
 	} else {
 		r.gridStoreHandle.Set(gridStore)
-		if known := r.knownCalls.Load(); known != nil {
-			if err := seedKnownCalls(gridStore, known); err != nil {
-				log.Printf("Warning: failed to seed known calls into grid database: %v", err)
-			}
-		}
 	}
 
 	r.gridDBCheckOnMiss, r.gridDBCheckSource = gridDBCheckOnMissEnabled(r.cfg)
@@ -1042,7 +975,6 @@ func (r *clusterRuntime) startOutputPipeline() {
 		r.metaCache,
 		r.harmonicDetector,
 		r.cfg.Harmonics,
-		&r.knownCalls,
 		r.freqAverager,
 		r.cfg.SpotPolicy,
 		r.surface,
@@ -1220,10 +1152,8 @@ func (r *clusterRuntime) startMonitors() {
 		r.ctyLookup,
 		r.metaCache,
 		r.ctyState,
-		&r.knownCalls,
 		r.recentBandStore,
 		r.signalResolver,
-		r.knownCallsPath,
 		r.telnetServer,
 		r.surface,
 		r.gridUpdateState,

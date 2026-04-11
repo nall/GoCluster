@@ -364,7 +364,7 @@ func printResults(stats *stabilityStats) {
 	fmt.Printf("NOTE: This analysis is based on decision log data only.\n")
 	fmt.Printf("For more accurate validation, cross-reference with:\n")
 	fmt.Printf("  • Raw spot database (check if winner appears uncorrected)\n")
-	fmt.Printf("  • FCC ULS / MASTER.SCP databases (known callsign validation)\n")
+	fmt.Printf("  • FCC ULS / custom-SCP static membership (callsign validation context)\n")
 	fmt.Printf("  • CTY database (geographic consistency checks)\n")
 	fmt.Printf("\n")
 }

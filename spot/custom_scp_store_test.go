@@ -215,6 +215,7 @@ func TestCustomSCPStoreLoadPrunesLegacyOversizedKey(t *testing.T) {
 	opts := CustomSCPOptions{
 		Path:                   path,
 		HorizonDays:            30,
+		StaticHorizonDays:      30,
 		MaxSpottersPerKey:      2,
 		CoreMinScore:           1,
 		CoreMinH3Cells:         1,
@@ -287,6 +288,7 @@ func TestCustomSCPStoreCleanupPrunesOverflowAndStaleStatic(t *testing.T) {
 	opts := CustomSCPOptions{
 		Path:                   filepath.Join(t.TempDir(), "scp"),
 		HorizonDays:            30,
+		StaticHorizonDays:      30,
 		MaxSpottersPerKey:      2,
 		CoreMinScore:           1,
 		CoreMinH3Cells:         1,
@@ -360,6 +362,7 @@ func TestCustomSCPStoreLoadDeletesStaleStaticMembership(t *testing.T) {
 	opts := CustomSCPOptions{
 		Path:                   path,
 		HorizonDays:            30,
+		StaticHorizonDays:      30,
 		MaxSpottersPerKey:      2,
 		CoreMinScore:           1,
 		CoreMinH3Cells:         1,
@@ -394,6 +397,62 @@ func TestCustomSCPStoreLoadDeletesStaleStaticMembership(t *testing.T) {
 	}
 	if stats := reopened.StatsSnapshot(); stats.StaleStaticPruned == 0 {
 		t.Fatalf("expected stale static prune count on load, got %+v", stats)
+	}
+}
+
+func TestCustomSCPStoreStaticMembershipOutlivesObservationHorizon(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "scp")
+	opts := CustomSCPOptions{
+		Path:                   path,
+		HorizonDays:            60,
+		StaticHorizonDays:      395,
+		MaxSpottersPerKey:      2,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	}
+
+	store, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+
+	call := "K1YEAR"
+	key := customSCPKey{call: call, band: "20m", bucket: "cw"}
+	now := time.Now().UTC()
+	staticSeen := now.Add(-120 * 24 * time.Hour).Unix()
+	obsSeen := now.Add(-61 * 24 * time.Hour).Unix()
+
+	store.mu.Lock()
+	store.static[call] = staticSeen
+	store.mu.Unlock()
+	store.persistStaticLocked(call, staticSeen)
+	setRawObservation(t, store, key, "N0OLD", obsSeen, 101)
+	if err := store.Close(); err != nil {
+		t.Fatalf("close custom store: %v", err)
+	}
+
+	reopened, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("reopen custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = reopened.Close()
+	})
+
+	if !reopened.StaticContains(call) {
+		t.Fatalf("expected static membership to survive beyond observation horizon")
+	}
+	if got := reopened.RecentSupportCount(call, "20m", "CW", now); got != 0 {
+		t.Fatalf("expected observation support to age out after 60-day horizon, got %d", got)
+	}
+	if got := countObservationRecords(t, reopened, key); got != 0 {
+		t.Fatalf("expected stale observation record to be deleted on load, got %d", got)
+	}
+	if got := countStaticRecord(t, reopened, call); got != 1 {
+		t.Fatalf("expected static membership record to remain, got %d", got)
 	}
 }
 

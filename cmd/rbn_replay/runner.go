@@ -49,7 +49,6 @@ type replayRunner struct {
 	adaptiveMinReports *spot.AdaptiveMinReports
 	recentBandStore    spot.RecentSupportStore
 	cleanupRecentBand  func()
-	knownCallset       *spot.KnownCallsigns
 	temporalDecoder    *correctionflow.TemporalDecoder
 	tracker            *stats.Tracker
 	resolver           *spot.SignalResolver
@@ -269,14 +268,6 @@ func (r *replayRunner) buildReplayRuntime() error {
 		return err
 	}
 
-	useKnownCalls := !cfg.CallCorrection.CustomSCP.Enabled
-	if useKnownCalls {
-		knownCallset, err := loadKnownCallset(cfg.KnownCalls.File)
-		if err != nil {
-			return err
-		}
-		r.knownCallset = knownCallset
-	}
 	if cfg.CallCorrection.Enabled && cfg.CallCorrection.TemporalDecoder.Enabled {
 		r.temporalDecoder = correctionflow.NewTemporalDecoder(cfg.CallCorrection)
 	}
@@ -492,7 +483,6 @@ func (r *replayRunner) processCSVRow(row rbnHistoryRow, ok bool) error {
 		r.tracker,
 		r.adaptiveMinReports,
 		r.recentBandStore,
-		r.knownCallset,
 		now,
 	)
 	r.processOutcome(spotEntry, outcome, now)
@@ -675,7 +665,6 @@ func (r *replayRunner) drainTemporal(now time.Time, force bool) {
 				r.tracker,
 				r.adaptiveMinReports,
 				r.recentBandStore,
-				r.knownCallset,
 				now,
 				&selection,
 			)
@@ -701,7 +690,6 @@ func (r *replayRunner) drainTemporal(now time.Time, force bool) {
 				r.tracker,
 				r.adaptiveMinReports,
 				r.recentBandStore,
-				r.knownCallset,
 				now,
 			)
 		}

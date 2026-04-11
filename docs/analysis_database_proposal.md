@@ -149,7 +149,7 @@ In database metadata table, store:
 - **Threshold Snapshot:** Configuration values at decision time (enables replay analysis)
 - **Validation Results:**
   - CTY database lookup results (subject valid? winner valid?)
-  - Known calls database hits (SCP/MASTER.SCP)
+  - Custom-SCP static membership hits
   - Final confidence label assigned (C/B/V/P/S/?)
 
 **Why This Matters:**
@@ -432,7 +432,7 @@ Since reference cluster quality is unknown, use **Dawid-Skene disagreement model
 - Rejection reason breakdown (distribution)
 - Quality metrics:
   - CTY validation rate (% applied corrections that are CTY-valid)
-  - SCP hit rate (% corrections toward known calls)
+  - Custom-SCP static hit rate (% corrections toward static membership)
   - Average and median winner confidence
 - Distance distribution (count by edit distance 1/2/3)
 - Mode breakdown (CW/RTTY/SSB distribution)
@@ -648,10 +648,10 @@ Compare reliability of high-SNR vs low-SNR spotters:
 - Compute average stability for each group
 - Validate SNR gating effectiveness
 
-**4. Known Calls Validation**
-Cross-reference with CTY and SCP databases:
-- % corrections from unknown → known calls (likely good)
-- % corrections from known → unknown calls (likely bad)
+**4. Static Membership Validation**
+Cross-reference with CTY and custom-SCP static membership:
+- % corrections from unknown → static-member calls (likely good)
+- % corrections from static-member → unknown calls (likely bad)
 - CTY validity rate by mode, distance, confidence
 
 **5. Rejection Reason Analysis (Critical for False Negatives)**

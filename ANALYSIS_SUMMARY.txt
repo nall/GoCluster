@@ -135,9 +135,9 @@ RECOMMENDATIONS
    Current: 0.1 kHz separation, 0.5 runner-up ratio
    Consider: Adjust to allow corrections when stations are very close
 
-4. LEVERAGE KNOWN CALLS DATABASE
-   Already configured (MASTER.SCP)
-   Boost confidence when correction points to known-good call
+4. LEVERAGE CUSTOM-SCP STATIC MEMBERSHIP
+   Already configured under call_correction.custom_scp
+   Boost confidence when correction points to a static-member call
 
 5. ADD PARTIAL CORRECTION DETECTION
    Detect when correction is incomplete (R4FT → R4FD vs R4FDH)

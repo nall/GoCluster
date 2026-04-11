@@ -26,7 +26,6 @@ type BuildSettingsInput struct {
 	Window          time.Duration
 	FreqToleranceHz float64
 	RecentBandStore spot.RecentSupportStore
-	KnownCallset    *spot.KnownCallsigns
 }
 
 type ResolverPrimarySelection struct {
@@ -650,7 +649,6 @@ func BuildCorrectionSettings(in BuildSettingsInput) spot.CorrectionSettings {
 		TruncationDelta2ExtraConfidence:                cfg.FamilyPolicy.Truncation.Delta2Rails.ExtraConfidencePercent,
 		TruncationDelta2RequireCandidateValidated:      cfg.FamilyPolicy.Truncation.Delta2Rails.RequireCandidateValidated,
 		TruncationDelta2RequireSubjectUnvalidated:      cfg.FamilyPolicy.Truncation.Delta2Rails.RequireSubjectUnvalidated,
-		KnownCallset: in.KnownCallset,
 	}
 }
 

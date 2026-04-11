@@ -27,7 +27,6 @@ func TestMaybeApplyResolverCorrectionReplayNoSnapshot(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		now,
 	)
 
@@ -103,7 +102,6 @@ func TestMaybeApplyResolverCorrectionReplayAppliesWinner(t *testing.T) {
 		spot.ResolverEvidence{Key: key},
 		true,
 		cfg,
-		nil,
 		nil,
 		nil,
 		nil,

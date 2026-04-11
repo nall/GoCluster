@@ -486,7 +486,7 @@ func (p *outputPipeline) assignFTConfidence(ctx *outputSpotContext, uniqueSpotte
 	}
 	s.Confidence = ftConfidenceGlyphForUniqueSpotters(uniqueSpotters, policy)
 	if s.Confidence == "?" {
-		applyKnownCallFloor(s, p.knownCalls, p.recentBandStore, p.customSCPStore, p.ftRecentBandStore, p.correctionCfg)
+		applySupportFloor(s, p.recentBandStore, p.customSCPStore, p.ftRecentBandStore, p.correctionCfg)
 	}
 	ctx.dirty = true
 }

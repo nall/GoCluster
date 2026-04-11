@@ -92,7 +92,6 @@ type CorrectionSettings struct {
 	Distance3ExtraAdvantage  int
 	Distance3ExtraConfidence int
 
-	KnownCallset                      *KnownCallsigns
 	RecentBandRecordMinUniqueSpotters int
 	RecentBandStore                   RecentSupportStore
 
@@ -453,18 +452,6 @@ func EvaluateResolverPrimaryGates(
 }
 
 func resolverCallValidated(identity correctionCallIdentity, displayCall, subjectBand, subjectMode string, cfg CorrectionSettings, now time.Time) bool {
-	if cfg.KnownCallset != nil {
-		candidates := []string{identity.Raw, identity.VoteKey, identity.BaseKey, displayCall}
-		for _, call := range candidates {
-			call = strings.TrimSpace(call)
-			if call == "" {
-				continue
-			}
-			if cfg.KnownCallset.Contains(call) {
-				return true
-			}
-		}
-	}
 	minUnique := cfg.RecentBandRecordMinUniqueSpotters
 	if minUnique <= 0 {
 		minUnique = 2

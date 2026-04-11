@@ -66,10 +66,6 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 	if p.telnet == nil || s.IsBeacon {
 		return true
 	}
-	var knownCallset *spot.KnownCallsigns
-	if p.knownCalls != nil {
-		knownCallset = p.knownCalls.Load()
-	}
 	skipResolverApply := false
 	var resolverEvidence spot.ResolverEvidence
 	hasResolverEvidence := false
@@ -95,7 +91,6 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 				p.tracker,
 				p.dash,
 				p.recentBandStore,
-				knownCallset,
 				p.adaptiveMinReports,
 				p.spotterReliability,
 				p.spotterReliabilityCW,
@@ -141,7 +136,6 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 			p.tracker,
 			p.dash,
 			p.recentBandStore,
-			knownCallset,
 			p.adaptiveMinReports,
 			p.spotterReliability,
 			p.spotterReliabilityCW,
@@ -163,7 +157,6 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 			p.tracker,
 			p.dash,
 			p.recentBandStore,
-			knownCallset,
 			p.adaptiveMinReports,
 			p.spotterReliability,
 			p.spotterReliabilityCW,
@@ -283,7 +276,7 @@ func (p *outputPipeline) applyPostResolverAdjustments(ctx *outputSpotContext) bo
 			s.Confidence = "?"
 			ctx.dirty = true
 		}
-		if applyKnownCallFloor(s, p.knownCalls, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg) {
+		if applySupportFloor(s, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg) {
 			ctx.dirty = true
 		}
 	}

@@ -200,7 +200,6 @@ type runState struct {
 	counters        primaryCounters
 	predOnUnlabeled int64
 	ctyDB           *cty.CTYDatabase
-	knownCallset    *spot.KnownCallsigns
 	recentBand      *spot.RecentBandStore
 	spotterRel      spot.SpotterReliability
 	spotterRelCW    spot.SpotterReliability
@@ -275,10 +274,6 @@ func main() {
 		log.Fatal(err)
 	}
 	ctyDB, err := loadCTY(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-	knownCallset, err := loadKnownCallset(cfg.KnownCalls.File)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -385,7 +380,6 @@ func main() {
 		negSamples:     make([]bool, 0, maxInt(*evalNeg, 0)),
 		rng:            &xorshift64{state: *seed},
 		ctyDB:          ctyDB,
-		knownCallset:   knownCallset,
 		recentBand:     recentBandStore,
 		spotterRel:     spotterReliability,
 		spotterRelCW:   spotterReliabilityCW,
@@ -672,7 +666,6 @@ func evaluateResolverPrimaryDecision(
 		Window:          runtime.Window,
 		FreqToleranceHz: runtime.FreqToleranceHz,
 		RecentBandStore: st.recentBand,
-		KnownCallset:    st.knownCallset,
 	})
 	gateOptions := spot.ResolverPrimaryGateOptions{}
 	if st.cfg.CallCorrection.ResolverRecentPlus1Enabled || st.cfg.CallCorrection.BayesBonus.Enabled {
@@ -1202,17 +1195,6 @@ func loadCTY(cfg *config.Config) (*cty.CTYDatabase, error) {
 		return nil, fmt.Errorf("cty.file missing/unreadable %s: %w", path, err)
 	}
 	return cty.LoadCTYDatabase(path)
-}
-
-func loadKnownCallset(path string) (*spot.KnownCallsigns, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil, nil
-	}
-	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("known_calls.file missing/unreadable %s: %w", path, err)
-	}
-	return spot.LoadKnownCallsigns(path)
 }
 
 func shouldRejectCTYCall(call string) bool {

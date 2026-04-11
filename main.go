@@ -56,7 +56,6 @@ import (
 const (
 	dedupeEntryBytes          = 32
 	callMetaEntryBytes        = 96
-	knownCallEntryBytes       = 24
 	sourceModeDelimiter       = "|"
 	defaultConfigPath         = "data/config"
 	pathReliabilityConfigFile = "path_reliability.yaml"
@@ -746,7 +745,7 @@ func formatTopCounterSummary(counts map[string]uint64, limit int) string {
 // Key aspects: Uses a ticker, diff counters, and optional secondary dedupe stats.
 // Upstream: main stats goroutine.
 // Downstream: tracker accessors, loadFCCSnapshot, and UI/log output.
-func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, knownPtr *atomic.Pointer[spot.KnownCallsigns], recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, knownCallsPath string, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string) {
+func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string) {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
@@ -937,9 +936,9 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 
 		lines := make([]string, 0, 11)
 		lines = append(lines,
-			fmt.Sprintf("%s   %s", formatUptimeLine(tracker.GetUptime()), formatMemoryLine(buf, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, knownPtr)), // 1
-			formatGridLineOrPlaceholder(gridStats, gridDB, pathPredictor), // 2
-			formatDataLineOrPlaceholder(ctyLookup, ctyState, fccSnap),     // 3
+			fmt.Sprintf("%s   %s", formatUptimeLine(tracker.GetUptime()), formatMemoryLine(buf, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache)), // 1
+			formatGridLineOrPlaceholder(gridStats, gridDB, pathPredictor),                                                                                      // 2
+			formatDataLineOrPlaceholder(ctyLookup, ctyState, fccSnap),                                                                                          // 3
 			fmt.Sprintf("%s: %d TOTAL / %d CW / %d RTTY / %d FT8 / %d FT4",
 				withIngestStatusLabel("RBN", rbnLive), combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4), // 4
 			fmt.Sprintf("%s: %s TOTAL / %s CW / %s RTTY / %s FT8 / %s FT4 / %s MSK144",
@@ -975,7 +974,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 
 		if dash != nil {
 			dash.SetStats(lines)
-			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, knownPtr, recentBandStore, ctyState, knownCallsPath, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
+			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, recentBandStore, ctyState, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
 				rbnLive, pskLive, p92Live, rbnCWLive, rbnFTLive, peerSessions, peerSSIDs,
 				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4,
 				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63,
@@ -1278,7 +1277,6 @@ func processOutputSpots(
 	metaCache *callMetaCache,
 	harmonicDetector *spot.HarmonicDetector,
 	harmonicCfg config.HarmonicConfig,
-	knownCalls *atomic.Pointer[spot.KnownCallsigns],
 	freqAvg *spot.FrequencyAverager,
 	spotPolicy config.SpotPolicy,
 	dash ui.Surface,
@@ -1319,7 +1317,6 @@ func processOutputSpots(
 		metaCache,
 		harmonicDetector,
 		harmonicCfg,
-		knownCalls,
 		freqAvg,
 		spotPolicy,
 		dash,
@@ -2111,7 +2108,6 @@ func maybeApplyResolverCorrection(
 	tracker *stats.Tracker,
 	dash ui.Surface,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 	adaptive *spot.AdaptiveMinReports,
 	spotterReliability spot.SpotterReliability,
 	spotterReliabilityCW spot.SpotterReliability,
@@ -2129,7 +2125,6 @@ func maybeApplyResolverCorrection(
 		tracker,
 		dash,
 		recentBandStore,
-		knownCallset,
 		adaptive,
 		spotterReliability,
 		spotterReliabilityCW,
@@ -2150,7 +2145,6 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 	tracker *stats.Tracker,
 	dash ui.Surface,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 	adaptive *spot.AdaptiveMinReports,
 	spotterReliability spot.SpotterReliability,
 	spotterReliabilityCW spot.SpotterReliability,
@@ -2254,7 +2248,6 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 		Window:          runtime.Window,
 		FreqToleranceHz: runtime.FreqToleranceHz,
 		RecentBandStore: recentBandStore,
-		KnownCallset:    knownCallset,
 	})
 	gateOptions := spot.ResolverPrimaryGateOptions{}
 	if cfg.ResolverRecentPlus1Enabled || cfg.BayesBonus.Enabled {
@@ -2369,7 +2362,6 @@ func buildCorrectionSettings(
 	window time.Duration,
 	freqToleranceHz float64,
 	recentBandStore spot.RecentSupportStore,
-	knownCallset *spot.KnownCallsigns,
 ) spot.CorrectionSettings {
 	return correctionflow.BuildCorrectionSettings(correctionflow.BuildSettingsInput{
 		Cfg:             cfg,
@@ -2377,7 +2369,6 @@ func buildCorrectionSettings(
 		Window:          window,
 		FreqToleranceHz: freqToleranceHz,
 		RecentBandStore: recentBandStore,
-		KnownCallset:    knownCallset,
 	})
 }
 
@@ -2502,13 +2493,12 @@ func recordRecentBandObservation(s *spot.Spot, store spot.RecentSupportStore, cu
 }
 
 // Purpose: Apply confidence floor only when confidence is still unknown.
-// Key aspects: If confidence is '?', upgrade to 'S' when DX call is in static
-// known-calls/custom-SCP membership or admitted by recent-on-band evidence.
+// Key aspects: If confidence is '?', upgrade to 'S' when DX call is in
+// custom-SCP static membership or admitted by recent-on-band evidence.
 // Upstream: processOutputSpots after confidence assignment.
-// Downstream: KnownCallsigns.Contains, RecentBandStore.HasRecentSupport, and modeSupportsConfidenceGlyph.
-func applyKnownCallFloor(
+// Downstream: custom SCP and RecentBandStore support checks plus modeSupportsConfidenceGlyph.
+func applySupportFloor(
 	s *spot.Spot,
-	knownCalls *atomic.Pointer[spot.KnownCallsigns],
 	recentBandStore spot.RecentSupportStore,
 	customSCPStore *spot.CustomSCPStore,
 	ftRecentBandStore spot.RecentSupportStore,
@@ -2535,14 +2525,7 @@ func applyKnownCallFloor(
 		return false
 	}
 
-	knownHit := false
-	if customSCPStore != nil && corrCfg.CustomSCP.Enabled {
-		knownHit = customSCPStore.StaticContains(call)
-	} else if knownCalls != nil {
-		if known := knownCalls.Load(); known != nil && known.Contains(call) {
-			knownHit = true
-		}
-	}
+	staticHit := customSCPStore != nil && corrCfg.CustomSCP.Enabled && customSCPStore.StaticContains(call)
 
 	recentHit := false
 	if modeSupportsFTConfidenceGlyph(mode) {
@@ -2583,7 +2566,7 @@ func applyKnownCallFloor(
 		recentHit = hasRecentSupportForCallFamily(recentBandStore, call, band, mode, corrCfg.RecentBandRecordMinUniqueSpotters, time.Now().UTC())
 	}
 
-	if knownHit || recentHit {
+	if staticHit || recentHit {
 		s.Confidence = "S"
 		return true
 	}
@@ -2732,96 +2715,6 @@ func startSkewScheduler(ctx context.Context, cfg config.SkewConfig, store *skew.
 // Downstream: internal/schedule helpers.
 func nextSkewRefreshDelay(cfg config.SkewConfig, now time.Time) time.Duration {
 	return schedule.NextDailyUTC(cfg.RefreshUTC, now, 0, 30, schedule.ParseOptions{})
-}
-
-// Purpose: Periodically refresh the known callsigns dataset.
-// Key aspects: Scheduled daily refresh and atomic pointer swap.
-// Upstream: main startup when known calls are enabled.
-// Downstream: refreshKnownCallsigns, seedKnownCalls, and time.NewTimer.
-// startKnownCallScheduler downloads the known-calls file at the configured UTC
-// time every day and updates the in-memory cache pointer after each refresh.
-func startKnownCallScheduler(ctx context.Context, cfg config.KnownCallsConfig, knownPtr *atomic.Pointer[spot.KnownCallsigns], store *gridStoreHandle, metaCache *callMetaCache) {
-	if knownPtr == nil {
-		return
-	}
-	// Purpose: Background refresh loop for known callsigns.
-	// Key aspects: Waits until next scheduled time; exits on ctx.Done.
-	// Upstream: startKnownCallScheduler.
-	// Downstream: refreshKnownCallsigns and time.NewTimer.
-	go func() {
-		for {
-			delay := nextKnownCallRefreshDelay(cfg, time.Now().UTC())
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-			if fresh, updated, err := refreshKnownCallsigns(ctx, cfg); err != nil {
-				log.Printf("Warning: scheduled known calls download failed: %v", err)
-			} else if updated && fresh != nil {
-				knownPtr.Store(fresh)
-				log.Printf("Scheduled known calls download complete (%d entries)", fresh.Count())
-				if store != nil {
-					if db := store.Store(); db != nil {
-						if err := seedKnownCalls(db, fresh); err != nil {
-							log.Printf("Warning: failed to reseed known calls into grid database: %v", err)
-						}
-					}
-				}
-				if metaCache != nil {
-					metaCache.Clear()
-				}
-			} else {
-				log.Printf("Scheduled known calls download: up to date (%s)", cfg.File)
-			}
-		}
-	}()
-}
-
-// Purpose: Download and parse the known calls file when updated.
-// Key aspects: Uses conditional HTTP download and returns (cache, updated).
-// Upstream: startKnownCallScheduler and startup.
-// Downstream: download.Download and spot.LoadKnownCallsigns.
-// refreshKnownCallsigns downloads the known calls file, writes it to disk, and
-// returns the parsed cache when the remote content changed.
-func refreshKnownCallsigns(ctx context.Context, cfg config.KnownCallsConfig) (*spot.KnownCallsigns, bool, error) {
-	url := strings.TrimSpace(cfg.URL)
-	path := strings.TrimSpace(cfg.File)
-	if url == "" {
-		return nil, false, errors.New("known calls: URL is empty")
-	}
-	if path == "" {
-		return nil, false, errors.New("known calls: file path is empty")
-	}
-	if ctx == nil {
-		return nil, false, errors.New("known calls: nil context")
-	}
-	result, err := download.Download(ctx, download.Request{
-		URL:         url,
-		Destination: path,
-		Timeout:     1 * time.Minute,
-	})
-	if err != nil {
-		return nil, false, fmt.Errorf("known calls: %w", err)
-	}
-	if result.Status != download.StatusUpdated {
-		return nil, false, nil
-	}
-	known, err := spot.LoadKnownCallsigns(path)
-	if err != nil {
-		return nil, true, err
-	}
-	return known, true, nil
-}
-
-// Purpose: Compute delay until the next known calls refresh time.
-// Key aspects: Uses configured hour/minute and wraps to next day.
-// Upstream: startKnownCallScheduler.
-// Downstream: internal/schedule helpers.
-func nextKnownCallRefreshDelay(cfg config.KnownCallsConfig, now time.Time) time.Duration {
-	return schedule.NextDailyUTC(cfg.RefreshUTC, now, 1, 0, schedule.ParseOptions{})
 }
 
 // Purpose: Periodically refresh the CTY database from remote URL.
@@ -3176,35 +3069,6 @@ func formatGridLineOrPlaceholder(metrics *gridMetrics, store *gridStoreHandle, p
 	return formatGridLine(metrics, store, predictor)
 }
 
-// Purpose: Seed the grid database with known calls.
-// Key aspects: Writes known call grids and logs failures.
-// Upstream: main startup and known calls refresh scheduler.
-// Downstream: gridstore.Store.Set and known calls iterator.
-func seedKnownCalls(store *gridstore.Store, known *spot.KnownCallsigns) error {
-	if store == nil || known == nil {
-		return nil
-	}
-	if err := store.ClearKnownFlags(); err != nil {
-		return err
-	}
-	calls := known.List()
-	if len(calls) == 0 {
-		return nil
-	}
-	records := make([]gridstore.Record, 0, len(calls))
-	now := time.Now().UTC()
-	for _, call := range calls {
-		records = append(records, gridstore.Record{
-			Call:         call,
-			IsKnown:      true,
-			Observations: 0,
-			FirstSeen:    now,
-			UpdatedAt:    now,
-		})
-	}
-	return store.UpsertBatch(records)
-}
-
 // Purpose: Start the grid writer pipeline and return update hooks.
 // Key aspects: Provides enqueue, metrics, stop, lookup functions, and CTY-derived grids on misses.
 // Upstream: main grid store setup.
@@ -3246,9 +3110,6 @@ func startGridWriter(storeHandle *gridStoreHandle, flushInterval time.Duration, 
 		merged := existing
 		if incoming.Grid.Valid {
 			merged.Grid = incoming.Grid
-		}
-		if incoming.IsKnown {
-			merged.IsKnown = true
 		}
 		if incoming.CTYValid {
 			merged.CTYValid = true
@@ -3334,7 +3195,6 @@ func startGridWriter(storeHandle *gridStoreHandle, flushInterval time.Duration, 
 			UpdatedAt:    now,
 		}
 		if baseRec != nil {
-			derivedRec.IsKnown = baseRec.IsKnown
 			if baseRec.CTYValid {
 				derivedRec.CTYValid = true
 				derivedRec.CTYADIF = baseRec.CTYADIF
@@ -3773,7 +3633,7 @@ func startGridIntegrityScheduler(ctx context.Context, storeHandle *gridStoreHand
 	}()
 }
 
-func startGridStoreRecovery(ctx context.Context, storeHandle *gridStoreHandle, dbPath string, opts gridstore.Options, knownPtr *atomic.Pointer[spot.KnownCallsigns], metaCache *callMetaCache) {
+func startGridStoreRecovery(ctx context.Context, storeHandle *gridStoreHandle, dbPath string, opts gridstore.Options, metaCache *callMetaCache) {
 	if storeHandle == nil {
 		return
 	}
@@ -3805,13 +3665,6 @@ func startGridStoreRecovery(ctx context.Context, storeHandle *gridStoreHandle, d
 		storeHandle.Set(store)
 		elapsed := time.Since(start)
 		log.Printf("Gridstore: restored from %s in %s", checkpointPath, elapsed)
-		if knownPtr != nil {
-			if known := knownPtr.Load(); known != nil {
-				if err := seedKnownCalls(store, known); err != nil {
-					log.Printf("Warning: failed to seed known calls after restore: %v", err)
-				}
-			}
-		}
 		if metaCache != nil {
 			metaCache.Clear()
 		}
@@ -4062,12 +3915,12 @@ func sqlNullString(v string) sql.NullString {
 }
 
 // formatMemoryLine reports memory-ish metrics in order:
-// exec alloc / ring buffer / primary dedup (dup%) / secondary dedup (fast+med+slow) / call meta cache (hit%) / known calls (hit%).
+// exec alloc / ring buffer / primary dedup (dup%) / secondary dedup (fast+med+slow) / call meta cache (hit%).
 // Purpose: Format the memory/status line for the stats pane.
 // Key aspects: Reports ring buffer occupancy and cache hit stats.
 // Upstream: displayStatsWithFCC.
 // Downstream: buffer.RingBuffer stats and cache lookups.
-func formatMemoryLine(buf *buffer.RingBuffer, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, metaCache *callMetaCache, knownPtr *atomic.Pointer[spot.KnownCallsigns]) string {
+func formatMemoryLine(buf *buffer.RingBuffer, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, metaCache *callMetaCache) string {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	execMB := bytesToMB(mem.Alloc)
@@ -4111,22 +3964,8 @@ func formatMemoryLine(buf *buffer.RingBuffer, dedup *dedup.Deduplicator, seconda
 		}
 	}
 
-	knownMB := 0.0
-	knownRatio := 0.0
-	var known *spot.KnownCallsigns
-	if knownPtr != nil {
-		known = knownPtr.Load()
-	}
-	if known != nil {
-		knownMB = bytesToMB(uint64(known.Count() * knownCallEntryBytes))
-		lookups, hits := known.StatsDX()
-		if lookups > 0 {
-			knownRatio = float64(hits) / float64(lookups) * 100
-		}
-	}
-
-	return fmt.Sprintf("Memory MB: %.1f / %.1f / %.1f (%.1f%%) / %.1f / %.1f (%.1f%%) / %.1f (%.1f%%)",
-		execMB, ringMB, dedupeMB, dedupeRatio, secondaryMB, metaMB, metaRatio, knownMB, knownRatio)
+	return fmt.Sprintf("Memory MB: %.1f / %.1f / %.1f (%.1f%%) / %.1f / %.1f (%.1f%%)",
+		execMB, ringMB, dedupeMB, dedupeRatio, secondaryMB, metaMB, metaRatio)
 }
 
 // Purpose: Format a human-readable uptime line.
@@ -4318,10 +4157,8 @@ func buildOverviewLines(
 	secondaryMed *dedup.SecondaryDeduper,
 	secondarySlow *dedup.SecondaryDeduper,
 	metaCache *callMetaCache,
-	knownPtr *atomic.Pointer[spot.KnownCallsigns],
 	recentBandStore spot.RecentSupportStore,
 	ctyState *ctyRefreshState,
-	knownCallsPath string,
 	fccSnap *fccSnapshot,
 	gridStats *gridMetrics,
 	gridDB *gridStoreHandle,
@@ -4398,7 +4235,7 @@ func buildOverviewLines(
 		formatModeCacheLine(modeAssigner),
 	}
 	cacheBars = append(cacheBars, "")
-	cacheBars = append(cacheBars, formatKnownCallsByBandLines(recentBandStore, now, 0)...)
+	cacheBars = append(cacheBars, formatRecentSupportByBandLines(recentBandStore, now, 0)...)
 	cacheBars = append(cacheBars, "")
 
 	ctyTime := "n/a"
@@ -4686,13 +4523,13 @@ func formatPathLines(predictor *pathreliability.Predictor, now time.Time) []stri
 	return lines
 }
 
-func formatKnownCallsByBandLines(store spot.RecentSupportStore, now time.Time, maxBands int) []string {
-	lines := []string{"[yellow]Known calls[-]: n/a"}
+func formatRecentSupportByBandLines(store spot.RecentSupportStore, now time.Time, maxBands int) []string {
+	lines := []string{"[yellow]Recent support[-]: n/a"}
 	if store == nil {
 		return lines
 	}
 	total := store.ActiveCallCount(now)
-	lines[0] = fmt.Sprintf("[yellow]Known calls[-]: %s", humanize.Comma(int64(total)))
+	lines[0] = fmt.Sprintf("[yellow]Recent support[-]: %s", humanize.Comma(int64(total)))
 
 	counts := store.ActiveCallCountsByBand(now)
 	if len(counts) == 0 {

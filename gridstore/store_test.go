@@ -16,7 +16,6 @@ func TestUpsertBatchMerge(t *testing.T) {
 
 	first := Record{
 		Call:         "k1abc",
-		IsKnown:      false,
 		Grid:         sql.NullString{String: "aa00", Valid: true},
 		CTYValid:     true,
 		CTYADIF:      291,
@@ -34,7 +33,6 @@ func TestUpsertBatchMerge(t *testing.T) {
 
 	got := mustGet(t, store, "K1ABC")
 	assertGrid(t, got, "AA00")
-	assertKnown(t, got, false)
 	assertCTY(t, got, true, 291, 5, 8, "NA", "United States")
 	assertObservations(t, got, 1)
 	assertUnixTime(t, "first_seen", got.FirstSeen, now)
@@ -42,7 +40,6 @@ func TestUpsertBatchMerge(t *testing.T) {
 
 	second := Record{
 		Call:         "K1ABC",
-		IsKnown:      true,
 		Grid:         sql.NullString{},
 		Observations: 2,
 		FirstSeen:    later,
@@ -55,7 +52,6 @@ func TestUpsertBatchMerge(t *testing.T) {
 
 	merged := mustGet(t, store, "k1abc")
 	assertGrid(t, merged, "AA00")
-	assertKnown(t, merged, true)
 	assertCTY(t, merged, true, 291, 5, 8, "NA", "United States")
 	assertObservations(t, merged, 3)
 	assertUnixTime(t, "first_seen", merged.FirstSeen, now)
@@ -118,26 +114,6 @@ func TestDerivedGridDoesNotOverwriteActual(t *testing.T) {
 	if got.GridDerived {
 		t.Fatalf("expected actual grid to clear derived flag")
 	}
-}
-
-func TestClearKnownFlags(t *testing.T) {
-	store := openTestStore(t)
-	defer store.Close()
-
-	now := time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
-	recs := []Record{
-		{Call: "K1AAA", IsKnown: true, Observations: 1, FirstSeen: now, UpdatedAt: now},
-		{Call: "K1BBB", IsKnown: false, Observations: 1, FirstSeen: now, UpdatedAt: now},
-	}
-	if err := store.UpsertBatch(recs); err != nil {
-		t.Fatalf("upsert batch: %v", err)
-	}
-	if err := store.ClearKnownFlags(); err != nil {
-		t.Fatalf("clear known flags: %v", err)
-	}
-
-	assertKnown(t, mustGet(t, store, "K1AAA"), false)
-	assertKnown(t, mustGet(t, store, "K1BBB"), false)
 }
 
 func TestPurgeOlderThan(t *testing.T) {
@@ -208,13 +184,6 @@ func assertGrid(t *testing.T, rec *Record, grid string) {
 	}
 	if rec.Grid.String != grid {
 		t.Fatalf("expected grid %q, got %q", grid, rec.Grid.String)
-	}
-}
-
-func assertKnown(t *testing.T, rec *Record, known bool) {
-	t.Helper()
-	if rec.IsKnown != known {
-		t.Fatalf("expected known=%v, got %v", known, rec.IsKnown)
 	}
 }
 

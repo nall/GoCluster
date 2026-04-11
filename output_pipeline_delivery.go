@@ -33,10 +33,6 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	delayed := envelope.spot
 	checksCompleted := envelope.checksCompleted + 1
 	ctyDB := p.ctyLookup()
-	var knownCallset *spot.KnownCallsigns
-	if p.knownCalls != nil {
-		knownCallset = p.knownCalls.Load()
-	}
 	now := time.Now().UTC()
 	resolverEvidence := spot.ResolverEvidence{Key: envelope.resolverKey}
 	hasResolverEvidence := envelope.hasResolverKey
@@ -55,7 +51,6 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 		p.tracker,
 		p.dash,
 		p.recentBandStore,
-		knownCallset,
 		p.adaptiveMinReports,
 		p.spotterReliability,
 		p.spotterReliabilityCW,
@@ -64,7 +59,7 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	) {
 		return
 	}
-	applyKnownCallFloor(delayed, p.knownCalls, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg)
+	applySupportFloor(delayed, p.recentBandStore, p.customSCPStore, nil, p.correctionCfg)
 	delayed.RefreshBeaconFlag()
 	delayed.EnsureNormalized()
 	if applyLicenseGate(delayed, ctyDB, p.metaCache, p.unlicensedReporter) {

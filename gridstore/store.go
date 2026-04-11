@@ -1,5 +1,6 @@
-// Package gridstore persists known calls and grids in a Pebble key/value store,
-// providing durable lookup and aggregation for grid statistics and TTL purges.
+// Package gridstore persists call metadata and grids in a Pebble key/value
+// store, providing durable lookup and aggregation for grid statistics and TTL
+// purges.
 package gridstore
 
 import (
@@ -29,7 +30,6 @@ const (
 )
 
 const (
-	recordFlagKnown       = 1 << 0
 	recordFlagCTYValid    = 1 << 1
 	recordFlagGridDerived = 1 << 2
 )
@@ -68,10 +68,9 @@ type Options struct {
 	WriteQueueDepth       int
 }
 
-// Record represents a single callsign entry with optional grid and known-call flag.
+// Record represents a single callsign entry with optional grid and CTY metadata.
 type Record struct {
 	Call         string
-	IsKnown      bool
 	Grid         sql.NullString
 	GridDerived  bool
 	CTYValid     bool
@@ -87,7 +86,6 @@ type Record struct {
 }
 
 type recordValue struct {
-	isKnown      bool
 	grid         string
 	gridValid    bool
 	gridDerived  bool
@@ -119,7 +117,6 @@ type writeKind int
 
 const (
 	writeUpsertBatch writeKind = iota
-	writeClearKnown
 	writePurge
 )
 
@@ -300,23 +297,6 @@ func (s *Store) PurgeOlderThan(cutoff time.Time) (int64, error) {
 	return result.removed, result.err
 }
 
-// ClearKnownFlags clears the known-call flag for all entries.
-// Key aspects: Bulk update across the calls table.
-// Upstream: Admin reset flows or tests.
-// Downstream: writer loop.
-func (s *Store) ClearKnownFlags() error {
-	if s == nil || s.db == nil {
-		return errors.New("gridstore: store is not initialized")
-	}
-	resp := make(chan writeResult, 1)
-	req := writeRequest{kind: writeClearKnown, resp: resp}
-	if err := s.enqueue(req); err != nil {
-		return err
-	}
-	result := <-resp
-	return result.err
-}
-
 // Upsert inserts or updates a call record atomically.
 // Key aspects: Normalizes callsign; uses single writer goroutine.
 // Upstream: Spot processing and enrichment.
@@ -422,8 +402,6 @@ func (s *Store) writeLoop() {
 		switch req.kind {
 		case writeUpsertBatch:
 			result.err = s.applyUpsertBatch(req.recs)
-		case writeClearKnown:
-			result.err = s.applyClearKnownFlags()
 		case writePurge:
 			result.removed, result.err = s.applyPurgeOlderThan(req.cutoff)
 		default:
@@ -498,54 +476,6 @@ func (s *Store) applyUpsertBatch(recs []Record) error {
 
 	if countDelta != 0 {
 		s.count.Store(count)
-	}
-	return nil
-}
-
-// applyClearKnownFlags walks all records and clears known-call flags in batches.
-func (s *Store) applyClearKnownFlags() error {
-	iter, err := s.db.NewIter(iterOptionsForCallPrefix())
-	if err != nil {
-		return fmt.Errorf("gridstore: clear known iterator: %w", err)
-	}
-	defer iter.Close()
-
-	batch := s.db.NewBatch()
-	defer batch.Close()
-
-	pending := 0
-	for iter.First(); iter.Valid(); iter.Next() {
-		call, ok := parseCallKey(iter.Key())
-		if !ok {
-			continue
-		}
-		val, err := decodeRecordValue(iter.Value())
-		if err != nil {
-			return err
-		}
-		if !val.isKnown {
-			continue
-		}
-		val.isKnown = false
-		if err := batch.Set(callKeyBytes(call), encodeRecordValue(val), nil); err != nil {
-			return fmt.Errorf("gridstore: clear known %s: %w", call, err)
-		}
-		pending++
-		if pending >= maintenanceBatchCap {
-			if err := batch.Commit(pebble.Sync); err != nil {
-				return fmt.Errorf("gridstore: clear known commit: %w", err)
-			}
-			batch.Reset()
-			pending = 0
-		}
-	}
-	if err := iter.Error(); err != nil {
-		return fmt.Errorf("gridstore: clear known iterate: %w", err)
-	}
-	if pending > 0 {
-		if err := batch.Commit(pebble.Sync); err != nil {
-			return fmt.Errorf("gridstore: clear known commit: %w", err)
-		}
 	}
 	return nil
 }
@@ -674,7 +604,6 @@ func normalizeRecordValue(rec Record, now time.Time) recordValue {
 		obs = 0
 	}
 	return recordValue{
-		isKnown:      rec.IsKnown,
 		grid:         grid,
 		gridValid:    gridValid,
 		gridDerived:  gridDerived,
@@ -696,7 +625,6 @@ func mergeRecordValue(existing recordValue, found bool, incoming recordValue) re
 		return incoming
 	}
 	merged := incoming
-	merged.isKnown = existing.isKnown || incoming.isKnown
 	if !incoming.gridValid {
 		merged.grid = existing.grid
 		merged.gridValid = existing.gridValid
@@ -751,7 +679,6 @@ func recordValueToRecord(call string, val recordValue) Record {
 	}
 	return Record{
 		Call:         call,
-		IsKnown:      val.isKnown,
 		Grid:         grid,
 		GridDerived:  val.gridDerived && val.gridValid,
 		CTYValid:     val.ctyValid,
@@ -784,9 +711,6 @@ func encodeRecordValue(val recordValue) []byte {
 	buf := make([]byte, recordHeaderSize+gridLen+contLen+countryLen)
 	buf[0] = recordVersion
 	flags := byte(0)
-	if val.isKnown {
-		flags |= recordFlagKnown
-	}
 	if val.ctyValid {
 		flags |= recordFlagCTYValid
 	}
@@ -825,7 +749,6 @@ func decodeRecordValue(raw []byte) (recordValue, error) {
 		return recordValue{}, errInvalidRecord
 	}
 	flags := raw[1]
-	isKnown := (flags & recordFlagKnown) != 0
 	ctyValid := (flags & recordFlagCTYValid) != 0
 	gridDerived := (flags & recordFlagGridDerived) != 0
 	observations := binary.BigEndian.Uint64(raw[2:])
@@ -872,7 +795,6 @@ func decodeRecordValue(raw []byte) (recordValue, error) {
 		ctyCountry = ""
 	}
 	return recordValue{
-		isKnown:      isKnown,
 		grid:         grid,
 		gridValid:    gridValid,
 		gridDerived:  gridDerived && gridValid,
