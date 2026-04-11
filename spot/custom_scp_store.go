@@ -108,6 +108,25 @@ type customSCPSnapshot struct {
 	score          int
 }
 
+// CustomSCPStatsSnapshot reports bounded custom-SCP cardinality and cleanup
+// counters for opt-in diagnostics.
+type CustomSCPStatsSnapshot struct {
+	StaticCalls                int
+	ObservationKeys            int
+	ObservationSpotters        int
+	OversizedKeysSeenOnLoad    uint64
+	OverflowObservationsPruned uint64
+	StaleObservationsPruned    uint64
+	StaleStaticPruned          uint64
+}
+
+type customSCPDiagnostics struct {
+	oversizedKeysSeenOnLoad    uint64
+	overflowObservationsPruned uint64
+	staleObservationsPruned    uint64
+	staleStaticPruned          uint64
+}
+
 // CustomSCPStore is the replacement store for static known-call membership and
 // long-horizon recent evidence rails.
 type CustomSCPStore struct {
@@ -117,6 +136,9 @@ type CustomSCPStore struct {
 
 	entries map[customSCPKey]*customSCPEntry
 	static  map[string]int64
+
+	observationSpotters int
+	diag                customSCPDiagnostics
 
 	quit      chan struct{}
 	cleanupMu sync.Mutex
@@ -393,23 +415,32 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 		entry = &customSCPEntry{spotters: make(map[string]customSCPSpotterObs, 4)}
 		s.entries[key] = entry
 	}
-	s.pruneEntryLocked(entry, cutoff)
+	removed := s.pruneEntryLocked(entry, cutoff)
 	prev, exists := entry.spotters[spotter]
 	if !exists || seenUnix > prev.seenUnix {
+		if !exists {
+			s.observationSpotters++
+		}
 		entry.spotters[spotter] = customSCPSpotterObs{seenUnix: seenUnix, cellRes1: cellRes1}
 	}
 	if seenUnix > entry.lastSeen {
 		entry.lastSeen = seenUnix
 	}
 	if len(entry.spotters) > s.opts.MaxSpottersPerKey {
-		s.trimSpottersLocked(entry)
+		overflow := s.trimSpottersLocked(entry)
+		s.diag.overflowObservationsPruned += uint64(len(overflow))
+		removed = append(removed, overflow...)
 	}
 	if len(entry.spotters) == 0 {
-		delete(s.entries, key)
+		s.deleteEntryLocked(key)
+		s.deleteObservationPrefixLocked(key)
 		return
 	}
 	s.persistStaticLocked(call, s.static[call])
-	s.persistObservationLocked(key, spotter, entry.spotters[spotter])
+	if obs, ok := entry.spotters[spotter]; ok {
+		s.persistObservationLocked(key, spotter, obs)
+	}
+	s.deleteObservationSpottersLocked(key, entry, removed, nil)
 }
 
 // StaticContains reports whether call is in persisted custom SCP membership.
@@ -422,9 +453,31 @@ func (s *CustomSCPStore) StaticContains(call string) bool {
 		return false
 	}
 	s.mu.RLock()
-	_, ok := s.static[call]
+	seen, ok := s.static[call]
 	s.mu.RUnlock()
-	return ok
+	if !ok {
+		return false
+	}
+	return seen >= s.horizonCutoffUnix(time.Now().UTC())
+}
+
+// StatsSnapshot reports current custom-SCP cardinalities and bounded cleanup
+// counters for opt-in diagnostics.
+func (s *CustomSCPStore) StatsSnapshot() CustomSCPStatsSnapshot {
+	if s == nil {
+		return CustomSCPStatsSnapshot{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return CustomSCPStatsSnapshot{
+		StaticCalls:                len(s.static),
+		ObservationKeys:            len(s.entries),
+		ObservationSpotters:        s.observationSpotters,
+		OversizedKeysSeenOnLoad:    s.diag.oversizedKeysSeenOnLoad,
+		OverflowObservationsPruned: s.diag.overflowObservationsPruned,
+		StaleObservationsPruned:    s.diag.staleObservationsPruned,
+		StaleStaticPruned:          s.diag.staleStaticPruned,
+	}
 }
 
 // HasRecentSupport implements RecentSupportStore for resolver/stabilizer rails.
@@ -490,14 +543,14 @@ func (s *CustomSCPStore) ActiveCallCount(now time.Time) int {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.horizonCutoffUnix(now.UTC())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	calls := make(map[string]struct{})
 	for key, entry := range s.entries {
 		s.pruneEntryLocked(entry, cutoff)
 		if len(entry.spotters) == 0 {
-			delete(s.entries, key)
+			s.deleteEntryLocked(key)
 			continue
 		}
 		calls[key.call] = struct{}{}
@@ -513,14 +566,14 @@ func (s *CustomSCPStore) ActiveCallCountsByBand(now time.Time) map[string]int {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.horizonCutoffUnix(now.UTC())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	byBand := make(map[string]map[string]struct{})
 	for key, entry := range s.entries {
 		s.pruneEntryLocked(entry, cutoff)
 		if len(entry.spotters) == 0 {
-			delete(s.entries, key)
+			s.deleteEntryLocked(key)
 			continue
 		}
 		calls := byBand[key.band]
@@ -550,17 +603,18 @@ func (s *CustomSCPStore) snapshotFor(call, band, mode string, now time.Time) cus
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.horizonCutoffUnix(now.UTC())
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry := s.entries[customSCPKey{call: call, band: band, bucket: bucket}]
+	key := customSCPKey{call: call, band: band, bucket: bucket}
+	entry := s.entries[key]
 	if entry == nil {
 		return customSCPSnapshot{}
 	}
 	s.pruneEntryLocked(entry, cutoff)
 	if len(entry.spotters) == 0 {
-		delete(s.entries, customSCPKey{call: call, band: band, bucket: bucket})
+		s.deleteEntryLocked(key)
 		return customSCPSnapshot{}
 	}
 	cells := make(map[uint16]struct{}, len(entry.spotters))
@@ -588,13 +642,33 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	cutoff := now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.horizonCutoffUnix(now.UTC())
 
+	staleStaticCalls := make([]string, 0)
+	overflowDeletes := make([]customSCPDeleteRequest, 0)
 	s.mu.Lock()
 	for key, entry := range s.entries {
-		s.pruneEntryLocked(entry, cutoff)
+		removed := s.pruneEntryLocked(entry, cutoff)
+		if len(removed) > 0 {
+			s.diag.staleObservationsPruned += uint64(len(removed))
+			overflowDeletes = append(overflowDeletes, customSCPDeleteRequest{key: key, spotters: removed})
+		}
+		if len(entry.spotters) > s.opts.MaxSpottersPerKey {
+			trimmed := s.trimSpottersLocked(entry)
+			if len(trimmed) > 0 {
+				s.diag.overflowObservationsPruned += uint64(len(trimmed))
+				overflowDeletes = append(overflowDeletes, customSCPDeleteRequest{key: key, spotters: trimmed})
+			}
+		}
 		if len(entry.spotters) == 0 {
-			delete(s.entries, key)
+			s.deleteEntryLocked(key)
+		}
+	}
+	for call, seen := range s.static {
+		if seen < cutoff {
+			delete(s.static, call)
+			s.diag.staleStaticPruned++
+			staleStaticCalls = append(staleStaticCalls, call)
 		}
 	}
 	for len(s.entries) > s.opts.MaxKeys {
@@ -602,7 +676,8 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 	}
 	s.mu.Unlock()
 
-	// Best-effort disk cleanup: drop stale observation records.
+	// Best-effort disk cleanup: drop stale and overflow records so disk
+	// retention converges to the bounded in-memory view.
 	if s.db != nil {
 		iter, err := s.db.NewIter(nil)
 		if err != nil {
@@ -612,21 +687,42 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 		batch := s.db.NewBatch()
 		defer batch.Close()
 		pending := 0
+		for _, call := range staleStaticCalls {
+			_ = batch.Delete([]byte(customSCPMetaPrefix+call), nil)
+			pending++
+		}
+		for _, req := range overflowDeletes {
+			pending += s.deleteObservationSpottersFromRequestLocked(req, batch)
+		}
 		for iter.First(); iter.Valid(); iter.Next() {
 			key := string(iter.Key())
-			if !strings.HasPrefix(key, customSCPObsPrefix) {
-				continue
-			}
-			value := iter.Value()
-			if len(value) != 10 {
-				_ = batch.Delete(iter.Key(), nil)
-				pending++
-			} else {
-				seen := int64(binary.BigEndian.Uint64(value[:8]))
+			switch {
+			case strings.HasPrefix(key, customSCPMetaPrefix):
+				value := iter.Value()
+				if len(value) != 8 {
+					_ = batch.Delete(iter.Key(), nil)
+					pending++
+					continue
+				}
+				seen := int64(binary.BigEndian.Uint64(value))
 				if seen < cutoff {
 					_ = batch.Delete(iter.Key(), nil)
 					pending++
 				}
+			case strings.HasPrefix(key, customSCPObsPrefix):
+				value := iter.Value()
+				if len(value) != 10 {
+					_ = batch.Delete(iter.Key(), nil)
+					pending++
+				} else {
+					seen := int64(binary.BigEndian.Uint64(value[:8]))
+					if seen < cutoff {
+						_ = batch.Delete(iter.Key(), nil)
+						pending++
+					}
+				}
+			default:
+				continue
 			}
 			if pending >= 512 {
 				_ = batch.Commit(pebble.Sync)
@@ -649,13 +745,21 @@ func (s *CustomSCPStore) loadFromDB() error {
 		return fmt.Errorf("custom_scp: load iterator: %w", err)
 	}
 	defer iter.Close()
-	cutoff := time.Now().UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+	cutoff := s.horizonCutoffUnix(time.Now().UTC())
+	batch := s.db.NewBatch()
+	defer batch.Close()
+	pendingDeletes := 0
+	var currentKey customSCPKey
+	haveCurrentKey := false
+	overflowSeenForCurrentKey := false
 	for iter.First(); iter.Valid(); iter.Next() {
 		k := string(iter.Key())
 		v := iter.Value()
 		switch {
 		case strings.HasPrefix(k, customSCPMetaPrefix):
 			if len(v) != 8 {
+				_ = batch.Delete(iter.Key(), nil)
+				pendingDeletes++
 				continue
 			}
 			call := strings.TrimPrefix(k, customSCPMetaPrefix)
@@ -663,18 +767,34 @@ func (s *CustomSCPStore) loadFromDB() error {
 			if call == "" {
 				continue
 			}
+			if seen < cutoff {
+				_ = batch.Delete(iter.Key(), nil)
+				s.diag.staleStaticPruned++
+				pendingDeletes++
+				continue
+			}
 			s.static[NormalizeCallsign(call)] = seen
 		case strings.HasPrefix(k, customSCPObsPrefix):
 			call, band, bucket, spotter, ok := parseObservationKey(k)
 			if !ok || len(v) != 10 {
+				_ = batch.Delete(iter.Key(), nil)
+				pendingDeletes++
 				continue
 			}
 			seen := int64(binary.BigEndian.Uint64(v[:8]))
 			if seen < cutoff {
+				_ = batch.Delete(iter.Key(), nil)
+				s.diag.staleObservationsPruned++
+				pendingDeletes++
 				continue
 			}
 			cell := binary.BigEndian.Uint16(v[8:10])
 			key := customSCPKey{call: call, band: band, bucket: bucket}
+			if !haveCurrentKey || key != currentKey {
+				currentKey = key
+				haveCurrentKey = true
+				overflowSeenForCurrentKey = false
+			}
 			entry := s.entries[key]
 			if entry == nil {
 				if len(s.entries) >= s.opts.MaxKeys {
@@ -688,15 +808,35 @@ func (s *CustomSCPStore) loadFromDB() error {
 			}
 			prev, exists := entry.spotters[spotter]
 			if !exists || seen > prev.seenUnix {
+				if !exists {
+					s.observationSpotters++
+				}
 				entry.spotters[spotter] = customSCPSpotterObs{seenUnix: seen, cellRes1: cell}
 			}
 			if seen > entry.lastSeen {
 				entry.lastSeen = seen
 			}
+			if len(entry.spotters) > s.opts.MaxSpottersPerKey {
+				if !overflowSeenForCurrentKey {
+					s.diag.oversizedKeysSeenOnLoad++
+					overflowSeenForCurrentKey = true
+				}
+				trimmed := s.trimSpottersLocked(entry)
+				s.diag.overflowObservationsPruned += uint64(len(trimmed))
+				pendingDeletes += s.deleteObservationSpottersLocked(key, entry, trimmed, batch)
+			}
+		}
+		if pendingDeletes >= 512 {
+			_ = batch.Commit(pebble.NoSync)
+			batch.Reset()
+			pendingDeletes = 0
 		}
 	}
 	if err := iter.Error(); err != nil {
 		return fmt.Errorf("custom_scp: load iterate: %w", err)
+	}
+	if pendingDeletes > 0 {
+		_ = batch.Commit(pebble.NoSync)
 	}
 	return nil
 }
@@ -734,46 +874,29 @@ func (s *CustomSCPStore) evictOldestKeyLocked() {
 	if !set {
 		return
 	}
-	delete(s.entries, victim)
-	if s.db != nil {
-		prefix := []byte(observationPrefixForKey(victim))
-		iter, err := s.db.NewIter(&pebble.IterOptions{
-			LowerBound: prefix,
-			UpperBound: append(prefix, 0xff),
-		})
-		if err == nil {
-			batch := s.db.NewBatch()
-			for iter.First(); iter.Valid(); iter.Next() {
-				_ = batch.Delete(iter.Key(), nil)
-			}
-			_ = batch.Commit(pebble.NoSync)
-			batch.Close()
-			iter.Close()
-		}
-	}
+	s.deleteEntryLocked(victim)
+	s.deleteObservationPrefixLocked(victim)
 }
 
-func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64) {
+func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64) []string {
 	if entry == nil || len(entry.spotters) == 0 {
-		return
+		return nil
 	}
+	removed := make([]string, 0)
 	for spotter, obs := range entry.spotters {
 		if obs.seenUnix < cutoff {
 			delete(entry.spotters, spotter)
+			s.observationSpotters--
+			removed = append(removed, spotter)
 		}
 	}
-	latest := int64(0)
-	for _, obs := range entry.spotters {
-		if obs.seenUnix > latest {
-			latest = obs.seenUnix
-		}
-	}
-	entry.lastSeen = latest
+	s.refreshEntryLastSeenLocked(entry)
+	return removed
 }
 
-func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry) {
+func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry) []string {
 	if entry == nil || len(entry.spotters) <= s.opts.MaxSpottersPerKey {
-		return
+		return nil
 	}
 	type candidate struct {
 		spotter string
@@ -790,8 +913,40 @@ func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry) {
 		return all[i].seen < all[j].seen
 	})
 	remove := len(all) - s.opts.MaxSpottersPerKey
+	removed := make([]string, 0, remove)
 	for i := 0; i < remove; i++ {
 		delete(entry.spotters, all[i].spotter)
+		s.observationSpotters--
+		removed = append(removed, all[i].spotter)
+	}
+	s.refreshEntryLastSeenLocked(entry)
+	return removed
+}
+
+type customSCPDeleteRequest struct {
+	key      customSCPKey
+	spotters []string
+}
+
+func (s *CustomSCPStore) horizonCutoffUnix(now time.Time) int64 {
+	return now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
+}
+
+func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
+	entry := s.entries[key]
+	if entry == nil {
+		return
+	}
+	s.observationSpotters -= len(entry.spotters)
+	if s.observationSpotters < 0 {
+		s.observationSpotters = 0
+	}
+	delete(s.entries, key)
+}
+
+func (s *CustomSCPStore) refreshEntryLastSeenLocked(entry *customSCPEntry) {
+	if entry == nil {
+		return
 	}
 	latest := int64(0)
 	for _, obs := range entry.spotters {
@@ -800,6 +955,61 @@ func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry) {
 		}
 	}
 	entry.lastSeen = latest
+}
+
+func (s *CustomSCPStore) deleteObservationSpottersFromRequestLocked(req customSCPDeleteRequest, batch *pebble.Batch) int {
+	return s.deleteObservationSpottersLocked(req.key, s.entries[req.key], req.spotters, batch)
+}
+
+func (s *CustomSCPStore) deleteObservationSpottersLocked(key customSCPKey, entry *customSCPEntry, spotters []string, batch *pebble.Batch) int {
+	if s == nil || s.db == nil || len(spotters) == 0 {
+		return 0
+	}
+	uniq := make(map[string]struct{}, len(spotters))
+	deleted := 0
+	for _, spotter := range spotters {
+		if spotter == "" {
+			continue
+		}
+		if entry != nil {
+			if _, ok := entry.spotters[spotter]; ok {
+				continue
+			}
+		}
+		if _, ok := uniq[spotter]; ok {
+			continue
+		}
+		uniq[spotter] = struct{}{}
+		keyBytes := []byte(observationKeyString(key, spotter))
+		if batch != nil {
+			_ = batch.Delete(keyBytes, nil)
+		} else {
+			_ = s.db.Delete(keyBytes, pebble.NoSync)
+		}
+		deleted++
+	}
+	return deleted
+}
+
+func (s *CustomSCPStore) deleteObservationPrefixLocked(key customSCPKey) {
+	if s == nil || s.db == nil {
+		return
+	}
+	prefix := []byte(observationPrefixForKey(key))
+	iter, err := s.db.NewIter(&pebble.IterOptions{
+		LowerBound: prefix,
+		UpperBound: append(prefix, 0xff),
+	})
+	if err != nil {
+		return
+	}
+	defer iter.Close()
+	batch := s.db.NewBatch()
+	defer batch.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		_ = batch.Delete(iter.Key(), nil)
+	}
+	_ = batch.Commit(pebble.NoSync)
 }
 
 func (s *CustomSCPStore) snrPasses(bucket string, report int, hasReport bool) bool {

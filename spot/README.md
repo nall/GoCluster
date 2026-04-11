@@ -99,6 +99,8 @@ Local non-test `DX` self-spots are treated as operator-authoritative in the live
 
 - recent on-band support helps the `S` floor and some resolver gates
 - custom SCP stores persistent support evidence
+- custom SCP retention is bounded by `history_horizon_days`, `max_keys`, and `max_spotters_per_key`
+- custom SCP static membership now ages out on the same horizon as recent evidence
 - custom SCP admission is intentionally `V`-only to avoid reinforcement loops from weaker classes
 
 ## Related Files

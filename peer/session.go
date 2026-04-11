@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"dxcluster/config"
 	ztelnet "github.com/ziutek/telnet"
 )
 
@@ -45,6 +46,7 @@ type session struct {
 	peer           PeerEndpoint
 	localCall      string
 	remoteCall     string
+	inboundCC      bool
 	pc9x           bool
 	preferPC9x     bool
 	password       string
@@ -145,7 +147,10 @@ func (s *session) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.manager.registerSession(s)
+	if err := s.manager.registerSession(s); err != nil {
+		s.close()
+		return err
+	}
 	defer s.manager.unregisterSession(s)
 
 	if s.keepalive > 0 {
@@ -187,6 +192,12 @@ func (s *session) Run(ctx context.Context) error {
 		}
 		if frame.Type == "PC51" {
 			s.handlePing(frame)
+			continue
+		}
+		if frame.Type == "PC20" && s.inboundCC {
+			// CC peers may send PC20 after the banner-driven inbound establish path
+			// is already complete. Reply with PC22 without re-running init.
+			_ = s.sendPriorityLine("PC22^")
 			continue
 		}
 		s.manager.HandleFrame(frame, s)
@@ -622,10 +633,16 @@ func (s *session) runInboundHandshake() error {
 		call = line
 		break
 	}
-	if !s.manager.allowInbound(call, s.conn.RemoteAddr()) {
-		return fmt.Errorf("unauthorized inbound peer: %s", call)
+	peer, err := s.manager.authorizeInbound(call, s.conn.RemoteAddr())
+	if err != nil {
+		return err
 	}
-	s.remoteCall = call
+	s.peer = peer
+	s.localCall = s.manager.resolveLocalCall(peer)
+	s.remoteCall = peer.remoteCall
+	s.password = peer.password
+	s.preferPC9x = peer.preferPC9x
+	s.id = peer.ID()
 	if s.password != "" {
 		if err := s.sendLine("password:"); err != nil {
 			return fmt.Errorf("send password prompt: %w", err)
@@ -657,9 +674,35 @@ func (s *session) runInboundHandshake() error {
 			continue
 		}
 		switch frame.Type {
+		case "PC18":
+			switch s.peer.family {
+			case config.PeeringPeerFamilyCCluster:
+				if !isCCClusterBanner(frame) {
+					log.Printf("Peering: inbound family mismatch for %s: configured=%s banner=%q", s.remoteCall, s.peer.family, line)
+					return fmt.Errorf("inbound family mismatch: %s expects ccluster banner", s.remoteCall)
+				}
+				s.pc9x = true
+				s.inboundCC = true
+				if err := s.sendInit(); err != nil {
+					return err
+				}
+				return nil
+			case config.PeeringPeerFamilyDXSpider:
+				if isCCClusterBanner(frame) {
+					log.Printf("Peering: inbound family mismatch for %s: configured=%s banner=%q", s.remoteCall, s.peer.family, line)
+					return fmt.Errorf("inbound family mismatch: %s expects dxspider banner", s.remoteCall)
+				}
+			}
 		case "PC92":
 			s.pc9x = true
 			s.manager.HandleFrame(frame, s)
+			if s.peer.family == config.PeeringPeerFamilyCCluster {
+				s.inboundCC = true
+				if err := s.sendInit(); err != nil {
+					return err
+				}
+				return nil
+			}
 		case "PC19", "PC16", "PC17", "PC21":
 			s.pc9x = false
 			s.manager.HandleFrame(frame, s)
@@ -673,6 +716,17 @@ func (s *session) runInboundHandshake() error {
 			return nil
 		}
 	}
+}
+
+func isCCClusterBanner(frame *Frame) bool {
+	if frame == nil || frame.Type != "PC18" {
+		return false
+	}
+	fields := frame.payloadFields()
+	if len(fields) == 0 {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(fields[0])), "cc cluster version:")
 }
 
 func (s *session) sendPC18() error {

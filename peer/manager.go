@@ -26,6 +26,8 @@ type Manager struct {
 	maxAgeSeconds     int
 	topology          *topologyStore
 	sessions          map[string]*session
+	outboundPeers     []PeerEndpoint
+	inboundPeers      map[string]PeerEndpoint
 	mu                sync.RWMutex
 	allowIPs          []*net.IPNet
 	allowCalls        map[string]struct{}
@@ -62,6 +64,27 @@ const (
 	defaultLegacyQueue = 64
 )
 
+func buildPeerRegistry(peers []config.PeeringPeer) ([]PeerEndpoint, map[string]PeerEndpoint, error) {
+	outbound := make([]PeerEndpoint, 0, len(peers))
+	inbound := make(map[string]PeerEndpoint)
+	for _, peerCfg := range peers {
+		if !peerCfg.Enabled {
+			continue
+		}
+		endpoint, err := newPeerEndpoint(peerCfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		if peerCfg.AllowsOutbound() {
+			outbound = append(outbound, endpoint)
+		}
+		if peerCfg.AllowsInbound() {
+			inbound[endpoint.remoteCall] = endpoint
+		}
+	}
+	return outbound, inbound, nil
+}
+
 func NewManager(cfg config.PeeringConfig, localCall string, ingest chan<- *spot.Spot, maxAgeSeconds int, dropReporter func(string)) (*Manager, error) {
 	if strings.TrimSpace(localCall) == "" {
 		return nil, fmt.Errorf("peering local callsign is empty")
@@ -82,6 +105,10 @@ func NewManager(cfg config.PeeringConfig, localCall string, ingest chan<- *spot.
 	if err != nil {
 		return nil, err
 	}
+	outboundPeers, inboundPeers, err := buildPeerRegistry(cfg.Peers)
+	if err != nil {
+		return nil, err
+	}
 	allowCalls := make(map[string]struct{})
 	for _, call := range cfg.ACL.AllowCallsigns {
 		call = strutil.NormalizeUpper(call)
@@ -98,6 +125,8 @@ func NewManager(cfg config.PeeringConfig, localCall string, ingest chan<- *spot.
 		maxAgeSeconds: maxAgeSeconds,
 		topology:      topo,
 		sessions:      make(map[string]*session),
+		outboundPeers: outboundPeers,
+		inboundPeers:  inboundPeers,
 		allowIPs:      allowIPs,
 		allowCalls:    allowCalls,
 		dedupe:        newDedupeCache(10 * time.Minute),
@@ -124,11 +153,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		go m.acceptLoop()
 	}
 
-	for _, peerCfg := range m.cfg.Peers {
-		if !peerCfg.Enabled {
-			continue
-		}
-		peer := newPeerEndpoint(peerCfg)
+	for _, peer := range m.outboundPeers {
 		go m.runOutbound(peer)
 	}
 
@@ -364,13 +389,25 @@ func pc61DropReason(err error) string {
 	}
 }
 
-func (m *Manager) registerSession(s *session) {
+func (m *Manager) registerSession(s *session) error {
 	if m == nil || s == nil {
-		return
+		return nil
+	}
+	key := strings.TrimSpace(s.id)
+	if key == "" {
+		key = strings.TrimSpace(s.remoteCall)
+	}
+	if key == "" {
+		return fmt.Errorf("peer session identity is empty")
 	}
 	m.mu.Lock()
-	m.sessions[s.id] = s
-	m.mu.Unlock()
+	defer m.mu.Unlock()
+	if existing, ok := m.sessions[key]; ok && existing != s {
+		return fmt.Errorf("duplicate peer session: %s", key)
+	}
+	s.id = key
+	m.sessions[key] = s
+	return nil
 }
 
 func (m *Manager) unregisterSession(s *session) {
@@ -378,7 +415,9 @@ func (m *Manager) unregisterSession(s *session) {
 		return
 	}
 	m.mu.Lock()
-	delete(m.sessions, s.id)
+	if existing, ok := m.sessions[s.id]; ok && existing == s {
+		delete(m.sessions, s.id)
+	}
 	m.mu.Unlock()
 }
 
@@ -511,30 +550,67 @@ func (m *Manager) trySendLine(sess *session, line string, kind string) {
 	}
 }
 
-func (m *Manager) allowInbound(call string, addr net.Addr) bool {
-	call = strutil.NormalizeUpper(call)
-	if len(m.allowCalls) > 0 {
-		if _, ok := m.allowCalls[call]; !ok {
-			return false
-		}
-	}
-	if len(m.allowIPs) == 0 {
-		return true
+func remoteAddrIP(addr net.Addr) net.IP {
+	if addr == nil {
+		return nil
 	}
 	host, _, err := net.SplitHostPort(addr.String())
 	if err != nil {
 		host = addr.String()
 	}
-	ip := net.ParseIP(host)
+	return net.ParseIP(host)
+}
+
+func ipAllowed(blocks []*net.IPNet, addr net.Addr) bool {
+	if len(blocks) == 0 {
+		return true
+	}
+	ip := remoteAddrIP(addr)
 	if ip == nil {
 		return false
 	}
-	for _, block := range m.allowIPs {
+	for _, block := range blocks {
 		if block.Contains(ip) {
 			return true
 		}
 	}
 	return false
+}
+
+func (m *Manager) hasActiveSession(id string) bool {
+	if m == nil || strings.TrimSpace(id) == "" {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.sessions[id]
+	return ok
+}
+
+func (m *Manager) authorizeInbound(call string, addr net.Addr) (PeerEndpoint, error) {
+	call = strutil.NormalizeUpper(call)
+	if len(m.allowCalls) > 0 {
+		if _, ok := m.allowCalls[call]; !ok {
+			return PeerEndpoint{}, fmt.Errorf("unauthorized inbound peer: %s", call)
+		}
+	}
+	if !ipAllowed(m.allowIPs, addr) {
+		return PeerEndpoint{}, fmt.Errorf("unauthorized inbound peer ip: %s", addr.String())
+	}
+	peer, ok := m.inboundPeers[call]
+	if !ok {
+		return PeerEndpoint{}, fmt.Errorf("unauthorized inbound peer: %s", call)
+	}
+	if !ipAllowed(peer.allowIPs, addr) {
+		return PeerEndpoint{}, fmt.Errorf("unauthorized inbound peer ip: %s", addr.String())
+	}
+	if m.hasActiveSession(peer.ID()) {
+		return PeerEndpoint{}, fmt.Errorf("duplicate peer session: %s", call)
+	}
+	if strings.TrimSpace(peer.host) == "" {
+		peer.host = addr.String()
+	}
+	return peer, nil
 }
 
 func (m *Manager) acceptLoop() {
@@ -577,6 +653,14 @@ func (m *Manager) runOutbound(peer PeerEndpoint) {
 		if m.ctx != nil && m.ctx.Err() != nil {
 			return
 		}
+		if m.hasActiveSession(peer.ID()) {
+			delay := time.Duration(m.cfg.Backoff.BaseMS) * time.Millisecond
+			if delay <= 0 {
+				delay = 2 * time.Second
+			}
+			time.Sleep(delay)
+			continue
+		}
 		addr := net.JoinHostPort(peer.host, strconv.Itoa(peer.port))
 		log.Printf("Peering: dialing %s as %s", addr, peer.loginCall)
 		conn, err := dialer.Dial("tcp", addr)
@@ -594,7 +678,6 @@ func (m *Manager) runOutbound(peer PeerEndpoint) {
 		if strings.TrimSpace(sess.remoteCall) == "" {
 			sess.remoteCall = "*"
 		}
-		sess.id = addr
 		if err := sess.Run(m.ctx); err != nil && m.ctx.Err() == nil {
 			log.Printf("Peering: session to %s ended: %v", addr, err)
 		}
@@ -686,7 +769,7 @@ func (m *Manager) liveUserCount() int {
 	return m.cfg.UserCount
 }
 
-func (m *Manager) sessionSettings(peer PeerEndpoint) sessionSettings {
+func (m *Manager) resolveLocalCall(peer PeerEndpoint) string {
 	local := peer.loginCall
 	if local == "" {
 		local = m.cfg.LocalCallsign
@@ -694,8 +777,12 @@ func (m *Manager) sessionSettings(peer PeerEndpoint) sessionSettings {
 	if local == "" {
 		local = m.localCall
 	}
+	return strutil.NormalizeUpper(local)
+}
+
+func (m *Manager) sessionSettings(peer PeerEndpoint) sessionSettings {
 	return sessionSettings{
-		localCall:       strutil.NormalizeUpper(local),
+		localCall:       m.resolveLocalCall(peer),
 		preferPC9x:      peer.preferPC9x,
 		nodeVersion:     m.cfg.NodeVersion,
 		nodeBuild:       m.cfg.NodeBuild,

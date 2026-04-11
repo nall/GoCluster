@@ -13,8 +13,20 @@ This directory owns DXSpider-style cluster peering.
 
 Peering is explicit:
 
-- each outbound peer must be individually enabled
+- each peer record in `peering.peers[]` must be individually enabled
+- `direction: outbound` dials the peer
+- `direction: inbound` waits for the peer to connect
+- `direction: both` allows either side to establish the link
+- omitted `direction` defaults to `outbound`
+- omitted `family` defaults to `dxspider`
 - the node can run receive-only peering when `forward_spots` is false or omitted
+
+Inbound admission is explicit:
+
+- the global `peering.acl.*` block is only a coarse prefilter
+- a connecting peer must also match an enabled peer record by `remote_callsign`
+- `allow_ips` on a peer record optionally pins that peer to specific source IPs/CIDRs
+- if `direction: both` produces simultaneous inbound/outbound attempts, the first established session wins and later duplicates are rejected
 
 In receive-only mode:
 
@@ -36,6 +48,12 @@ The runtime is intentionally conservative about what it republishes to peers.
 - local `DX` command spots remain the operator-authored exception
 
 ## Control Plane
+
+Configured peer family drives inbound startup:
+
+- `dxspider` peers keep the strict inbound path and still need remote `PC20` to finish startup
+- `ccluster` peers can complete inbound startup from a `PC18` banner carrying `CC Cluster Version:` or from the first valid `PC92`
+- outbound CC behavior is unchanged in this slice
 
 Keepalive and topology traffic has higher priority than normal outbound spot backlog.
 

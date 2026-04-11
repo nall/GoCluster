@@ -5191,7 +5191,7 @@ func maybeStartHeapLogger() {
 // Key aspects: Logs bounded cardinalities; no impact when disabled.
 // Upstream: main startup.
 // Downstream: tracker cardinality, dedup stats, predictor bucket counts.
-func maybeStartMapLogger(tracker *stats.Tracker, predictor *pathreliability.Predictor, dedup *dedup.Deduplicator, secondaryFast, secondaryMed, secondarySlow *dedup.SecondaryDeduper) {
+func maybeStartMapLogger(tracker *stats.Tracker, predictor *pathreliability.Predictor, dedup *dedup.Deduplicator, secondaryFast, secondaryMed, secondarySlow *dedup.SecondaryDeduper, customSCPStore *spot.CustomSCPStore) {
 	intervalStr := strings.TrimSpace(os.Getenv(envMapLogInterval))
 	if intervalStr == "" {
 		return
@@ -5234,8 +5234,26 @@ func maybeStartMapLogger(tracker *stats.Tracker, predictor *pathreliability.Pred
 				pathBuckets = predictor.TotalBuckets()
 			}
 
-			log.Printf("Map sizes: stats sources=%d source-modes=%d; dedup primary=%d secondary fast=%d med=%d slow=%d; path buckets=%d",
-				sourceCount, sourceModeCount, primarySize, fastSize, medSize, slowSize, pathBuckets)
+			customSCP := spot.CustomSCPStatsSnapshot{}
+			if customSCPStore != nil {
+				customSCP = customSCPStore.StatsSnapshot()
+			}
+
+			log.Printf("Map sizes: stats sources=%d source-modes=%d; dedup primary=%d secondary fast=%d med=%d slow=%d; path buckets=%d; custom_scp static=%d keys=%d spotters=%d load_oversized=%d overflow_pruned=%d stale_obs_pruned=%d stale_static_pruned=%d",
+				sourceCount,
+				sourceModeCount,
+				primarySize,
+				fastSize,
+				medSize,
+				slowSize,
+				pathBuckets,
+				customSCP.StaticCalls,
+				customSCP.ObservationKeys,
+				customSCP.ObservationSpotters,
+				customSCP.OversizedKeysSeenOnLoad,
+				customSCP.OverflowObservationsPruned,
+				customSCP.StaleObservationsPruned,
+				customSCP.StaleStaticPruned)
 		}
 	}()
 }

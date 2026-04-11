@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -33,6 +34,16 @@ const (
 	TelnetHandshakeMinimal = "minimal"
 	// TelnetHandshakeNone disables all telnet option negotiation.
 	TelnetHandshakeNone = "none"
+	// PeeringPeerFamilyDXSpider is the default DXSpider-compatible peer family.
+	PeeringPeerFamilyDXSpider = "dxspider"
+	// PeeringPeerFamilyCCluster marks a CC Cluster peer.
+	PeeringPeerFamilyCCluster = "ccluster"
+	// PeeringPeerDirectionOutbound dials the remote peer only.
+	PeeringPeerDirectionOutbound = "outbound"
+	// PeeringPeerDirectionInbound waits for the remote peer to connect.
+	PeeringPeerDirectionInbound = "inbound"
+	// PeeringPeerDirectionBoth permits inbound and outbound connections for a peer.
+	PeeringPeerDirectionBoth = "both"
 )
 
 // Purpose: Normalize and validate the telnet transport setting.
@@ -608,13 +619,70 @@ type PeeringConfig struct {
 }
 
 type PeeringPeer struct {
-	Enabled        bool   `yaml:"enabled"`
-	Host           string `yaml:"host"`
-	Port           int    `yaml:"port"`
-	Password       string `yaml:"password"`
-	PreferPC9x     bool   `yaml:"prefer_pc9x"`
-	LoginCallsign  string `yaml:"login_callsign"`
-	RemoteCallsign string `yaml:"remote_callsign"`
+	Enabled        bool     `yaml:"enabled"`
+	Host           string   `yaml:"host"`
+	Port           int      `yaml:"port"`
+	Password       string   `yaml:"password"`
+	PreferPC9x     bool     `yaml:"prefer_pc9x"`
+	LoginCallsign  string   `yaml:"login_callsign"`
+	RemoteCallsign string   `yaml:"remote_callsign"`
+	Family         string   `yaml:"family"`
+	Direction      string   `yaml:"direction"`
+	AllowIPs       []string `yaml:"allow_ips"`
+}
+
+func (p PeeringPeer) AllowsOutbound() bool {
+	return p.Direction == "" || p.Direction == PeeringPeerDirectionOutbound || p.Direction == PeeringPeerDirectionBoth
+}
+
+func (p PeeringPeer) AllowsInbound() bool {
+	return p.Direction == PeeringPeerDirectionInbound || p.Direction == PeeringPeerDirectionBoth
+}
+
+func normalizePeeringPeerFamily(value string) (string, bool) {
+	trimmed := strutil.NormalizeLower(value)
+	if trimmed == "" {
+		return PeeringPeerFamilyDXSpider, true
+	}
+	switch trimmed {
+	case PeeringPeerFamilyDXSpider, PeeringPeerFamilyCCluster:
+		return trimmed, true
+	default:
+		return "", false
+	}
+}
+
+func normalizePeeringPeerDirection(value string) (string, bool) {
+	trimmed := strutil.NormalizeLower(value)
+	if trimmed == "" {
+		return PeeringPeerDirectionOutbound, true
+	}
+	switch trimmed {
+	case PeeringPeerDirectionOutbound, PeeringPeerDirectionInbound, PeeringPeerDirectionBoth:
+		return trimmed, true
+	default:
+		return "", false
+	}
+}
+
+func validatePeeringAllowIPs(path string, entries []string) error {
+	for idx, raw := range entries {
+		cidr := strings.TrimSpace(raw)
+		if cidr == "" {
+			continue
+		}
+		if !strings.Contains(cidr, "/") {
+			if strings.Contains(cidr, ":") {
+				cidr += "/128"
+			} else {
+				cidr += "/32"
+			}
+		}
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return fmt.Errorf("invalid %s[%d]: %w", path, idx, err)
+		}
+	}
+	return nil
 }
 
 type PeeringTimeouts struct {
@@ -2479,6 +2547,56 @@ func normalizePeeringConfig(cfg *Config) error {
 	}
 	if cfg.Peering.Topology.PersistIntervalSeconds <= 0 {
 		cfg.Peering.Topology.PersistIntervalSeconds = 300
+	}
+	seenRemoteCalls := make(map[string]int)
+	for i := range cfg.Peering.Peers {
+		peer := &cfg.Peering.Peers[i]
+		peer.Host = strings.TrimSpace(peer.Host)
+		peer.Password = strings.TrimSpace(peer.Password)
+		peer.LoginCallsign = strutil.NormalizeUpper(peer.LoginCallsign)
+		peer.RemoteCallsign = strutil.NormalizeUpper(peer.RemoteCallsign)
+		family, ok := normalizePeeringPeerFamily(peer.Family)
+		if !ok {
+			return fmt.Errorf("invalid peering.peers[%d].family %q (expected %q or %q)", i, peer.Family, PeeringPeerFamilyDXSpider, PeeringPeerFamilyCCluster)
+		}
+		peer.Family = family
+		direction, ok := normalizePeeringPeerDirection(peer.Direction)
+		if !ok {
+			return fmt.Errorf("invalid peering.peers[%d].direction %q (expected %q, %q, or %q)", i, peer.Direction, PeeringPeerDirectionOutbound, PeeringPeerDirectionInbound, PeeringPeerDirectionBoth)
+		}
+		peer.Direction = direction
+		switch peer.Direction {
+		case PeeringPeerDirectionInbound:
+			if peer.RemoteCallsign == "" {
+				return fmt.Errorf("invalid peering.peers[%d].remote_callsign: required for inbound peers", i)
+			}
+		case PeeringPeerDirectionOutbound:
+			if peer.Host == "" {
+				return fmt.Errorf("invalid peering.peers[%d].host: required for outbound peers", i)
+			}
+			if peer.Port <= 0 {
+				return fmt.Errorf("invalid peering.peers[%d].port: required for outbound peers", i)
+			}
+		case PeeringPeerDirectionBoth:
+			if peer.RemoteCallsign == "" {
+				return fmt.Errorf("invalid peering.peers[%d].remote_callsign: required for both-direction peers", i)
+			}
+			if peer.Host == "" {
+				return fmt.Errorf("invalid peering.peers[%d].host: required for both-direction peers", i)
+			}
+			if peer.Port <= 0 {
+				return fmt.Errorf("invalid peering.peers[%d].port: required for both-direction peers", i)
+			}
+		}
+		if err := validatePeeringAllowIPs(fmt.Sprintf("peering.peers[%d].allow_ips", i), peer.AllowIPs); err != nil {
+			return err
+		}
+		if peer.Enabled && peer.RemoteCallsign != "" {
+			if prev, exists := seenRemoteCalls[peer.RemoteCallsign]; exists {
+				return fmt.Errorf("invalid peering.peers[%d].remote_callsign: duplicate enabled peer callsign also used by peering.peers[%d]", i, prev)
+			}
+			seenRemoteCalls[peer.RemoteCallsign] = i
+		}
 	}
 	return nil
 }

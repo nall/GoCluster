@@ -1273,7 +1273,7 @@ func (r *clusterRuntime) logStartup() {
 	log.Println("---")
 	maybeStartContentionProfiling()
 	maybeStartHeapLogger()
-	maybeStartMapLogger(r.statsTracker, r.pathPredictor, r.deduplicator, r.secondaryFast, r.secondaryMed, r.secondarySlow)
+	maybeStartMapLogger(r.statsTracker, r.pathPredictor, r.deduplicator, r.secondaryFast, r.secondaryMed, r.secondarySlow, r.customSCPStore)
 	maybeStartDiagServer()
 }
 
