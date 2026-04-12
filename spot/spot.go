@@ -54,6 +54,7 @@ type Spot struct {
 	DXMetadata        CallMetadata   // Metadata for the DX station
 	DEMetadata        CallMetadata   // Metadata for the spotter station
 	Confidence        string         // Consensus confidence label (e.g., "75%" or "?")
+	ownedSnapshot     bool
 	formatted         string
 	formatOnce        sync.Once // ensures FormatDXCluster builds expensive string only once per spot
 
@@ -494,8 +495,33 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		DECellID:           s.DECellID,
 		DECallStripped:     s.DECallStripped,
 		DECallNormStripped: s.DECallNormStripped,
+		ownedSnapshot:      true,
 	}
 	return clone
+}
+
+// SnapshotForAsync returns an immutable sink snapshot. Callers that already
+// own a snapshot reuse it; mutable pipeline spots clone exactly once before
+// crossing goroutine boundaries.
+func (s *Spot) SnapshotForAsync() *Spot {
+	if s == nil {
+		return nil
+	}
+	if s.ownedSnapshot {
+		return s
+	}
+	return s.Clone()
+}
+
+// SealForAsync marks the caller-owned spot as an immutable async snapshot and
+// returns the same pointer. Callers must guarantee no further mutation after
+// this handoff point.
+func (s *Spot) SealForAsync() *Spot {
+	if s == nil {
+		return nil
+	}
+	s.ownedSnapshot = true
+	return s
 }
 
 // EffectiveObservedFrequency returns the raw source-reported RF frequency when
@@ -617,163 +643,164 @@ func displayDXCall(call string) string {
 //   - CW/RTTY: no '+' prefix (e.g., "CW 23 dB")
 //   - All other modes: '+' is shown for non-negative values (e.g., "FT8 +12 dB")
 func (s *Spot) FormatDXCluster() string {
-	layout := currentDXClusterLayout()
 	// Purpose: Populate s.formatted once for reuse on repeat formatting.
 	// Key aspects: Uses sync.Once to avoid redundant allocations.
 	// Upstream: FormatDXCluster.
 	// Downstream: stringBuilder helpers and s.formatZoneGridComment.
 	s.formatOnce.Do(func() {
-		// Pre-size a buffer to avoid multiple allocations while preserving the
-		// exact column layout described above.
-		timeStr := s.Time.UTC().Format("1504Z")
-		freqStr := strconv.FormatFloat(s.Frequency, 'f', 2, 64)
-		commentPayload := s.formatZoneGridComment()
-
-		tailStartIdx := layout.tailStartIdx
-		gridWidth := 4
-
-		// Keep the left side stable by truncating overly-long spotter calls so
-		// frequency and subsequent fields stay aligned.
-		deCall := s.DECall
-		if s.DECallStripped != "" {
-			deCall = s.DECallStripped
-		}
-		maxPrefixLen := freqFieldWidthToEnd - len(freqStr) // prefix + spacesToFreq
-		maxDELen := maxPrefixLen - len("DX de ") - len(":")
-		if maxDELen < 1 {
-			maxDELen = 1
-		}
-		// Keep short SSID markers for display, but if a trailing "-#" would make
-		// the left field too tight, drop just that marker before any hard truncation.
-		if strings.HasSuffix(deCall, "-#") {
-			maxDELenWithGap := maxDELen - 1
-			if maxDELenWithGap < 1 {
-				maxDELenWithGap = 1
-			}
-			if len(deCall) > maxDELenWithGap {
-				deCall = strings.TrimSuffix(deCall, "-#")
-			}
-		}
-		if len(deCall) > maxDELen {
-			deCall = deCall[:maxDELen]
-		}
-		prefix := "DX de " + deCall + ":"
-
-		spacesToFreq := freqFieldWidthToEnd - len(prefix) - len(freqStr)
-		if spacesToFreq < 0 {
-			spacesToFreq = 0
-		}
-
-		// Estimate final length to reduce builder growth.
-		estimatedLen := layout.lineLength
-		if estimatedLen < len(prefix) {
-			estimatedLen = len(prefix)
-		}
-		var b stringBuilder
-		b.Grow(estimatedLen)
-
-		b.AppendString(prefix)
-		writeSpaces(&b, spacesToFreq)
-		b.AppendString(freqStr)
-		b.AppendString("  ")
-
-		// DX callsigns longer than the available space are truncated to keep the
-		// mode anchor fixed at column 40.
-		dxCallRaw := s.DXCallNorm
-		if dxCallRaw == "" {
-			dxCallRaw = NormalizeCallsign(s.DXCall)
-		}
-		dxCall := displayDXCall(dxCallRaw)
-		if dxCall == "" {
-			dxCall = displayDXCall(s.DXCall)
-		}
-		maxDXLen := commentColumn - b.Len()
-		if maxDXLen < 0 {
-			maxDXLen = 0
-		}
-		if len(dxCall) > maxDXLen {
-			dxCall = dxCall[:maxDXLen]
-		}
-		b.AppendString(dxCall)
-		if pad := dxCallFieldWidth - len(dxCall); pad > 0 {
-			writeSpaces(&b, pad)
-		}
-
-		spacesToComment := commentColumn - b.Len()
-		if spacesToComment < 0 {
-			spacesToComment = 0
-		}
-		writeSpaces(&b, spacesToComment)
-
-		// Build comment section: Mode + signal report (when present) + optional comment.
-		commentStart := b.Len()
-		b.AppendString(s.Mode)
-		if s.HasReport {
-			b.AppendByte(' ')
-			if strings.EqualFold(s.Mode, "CW") || strings.EqualFold(s.Mode, "RTTY") {
-				b.AppendString(strconv.Itoa(s.Report))
-			} else {
-				if s.Report >= 0 {
-					b.AppendByte('+')
-				}
-				b.AppendString(strconv.Itoa(s.Report))
-			}
-			b.AppendString(" dB")
-		}
-		if trimmed := strings.TrimSpace(commentPayload); trimmed != "" {
-			// Reserve one column before the fixed tail so grid/confidence/time are
-			// always visually separated from the comment payload.
-			remaining := (tailStartIdx - 1) - b.Len()
-			if b.Len() > commentStart {
-				if remaining <= 1 {
-					remaining = 0
-				} else {
-					b.AppendByte(' ')
-					remaining--
-				}
-			}
-			if remaining > 0 {
-				if len(trimmed) > remaining {
-					trimmed = trimmed[:remaining]
-				}
-				b.AppendString(trimmed)
-			}
-		}
-
-		gridLabel := formatGridLabel(s.DXMetadata.Grid, s.DXMetadata.GridDerived)
-		if gridLabel == "" {
-			gridLabel = strings.Repeat(" ", gridWidth)
-		} else if len(gridLabel) < gridWidth {
-			gridLabel = gridLabel + strings.Repeat(" ", gridWidth-len(gridLabel))
-		} else if len(gridLabel) > gridWidth {
-			gridLabel = gridLabel[:gridWidth]
-		}
-
-		confLabel := " "
-		if trimmed := strings.TrimSpace(s.Confidence); trimmed != "" {
-			confLabel = firstPrintableASCIIOrQuestion(trimmed)
-		}
-
-		// Ensure the last comment column leaves room for the fixed tail.
-		if b.Len() > tailStartIdx {
-			b.Truncate(tailStartIdx)
-		} else if b.Len() < tailStartIdx {
-			writeSpaces(&b, tailStartIdx-b.Len())
-		}
-		b.AppendByte(' ') // space before glyph
-		b.AppendByte(' ') // glyph placeholder
-		b.AppendByte(' ') // space before grid
-
-		b.AppendString(gridLabel)
-		b.AppendByte(' ')
-		b.AppendString(confLabel)
-		b.AppendByte(' ')
-		b.AppendString(timeStr)
-
-		s.formatted = b.String()
+		s.formatted = s.buildDXClusterLine(s.formatZoneGridComment())
 	})
 
 	return s.formatted
+}
+
+// FormatDXClusterWithComment renders a DX-cluster line with an alternate
+// comment payload without mutating the spot or invalidating its cached format.
+func (s *Spot) FormatDXClusterWithComment(comment string) string {
+	if s == nil {
+		return ""
+	}
+	if comment == s.Comment {
+		return s.FormatDXCluster()
+	}
+	return s.buildDXClusterLine(sanitizeDXClusterComment(comment))
+}
+
+func (s *Spot) buildDXClusterLine(commentPayload string) string {
+	layout := currentDXClusterLayout()
+	timeStr := s.Time.UTC().Format("1504Z")
+	freqStr := strconv.FormatFloat(s.Frequency, 'f', 2, 64)
+
+	tailStartIdx := layout.tailStartIdx
+	gridWidth := 4
+
+	deCall := s.DECall
+	if s.DECallStripped != "" {
+		deCall = s.DECallStripped
+	}
+	maxPrefixLen := freqFieldWidthToEnd - len(freqStr)
+	maxDELen := maxPrefixLen - len("DX de ") - len(":")
+	if maxDELen < 1 {
+		maxDELen = 1
+	}
+	if strings.HasSuffix(deCall, "-#") {
+		maxDELenWithGap := maxDELen - 1
+		if maxDELenWithGap < 1 {
+			maxDELenWithGap = 1
+		}
+		if len(deCall) > maxDELenWithGap {
+			deCall = strings.TrimSuffix(deCall, "-#")
+		}
+	}
+	if len(deCall) > maxDELen {
+		deCall = deCall[:maxDELen]
+	}
+	prefix := "DX de " + deCall + ":"
+
+	spacesToFreq := freqFieldWidthToEnd - len(prefix) - len(freqStr)
+	if spacesToFreq < 0 {
+		spacesToFreq = 0
+	}
+
+	estimatedLen := layout.lineLength
+	if estimatedLen < len(prefix) {
+		estimatedLen = len(prefix)
+	}
+	var b stringBuilder
+	b.Grow(estimatedLen)
+
+	b.AppendString(prefix)
+	writeSpaces(&b, spacesToFreq)
+	b.AppendString(freqStr)
+	b.AppendString("  ")
+
+	dxCallRaw := s.DXCallNorm
+	if dxCallRaw == "" {
+		dxCallRaw = NormalizeCallsign(s.DXCall)
+	}
+	dxCall := displayDXCall(dxCallRaw)
+	if dxCall == "" {
+		dxCall = displayDXCall(s.DXCall)
+	}
+	maxDXLen := commentColumn - b.Len()
+	if maxDXLen < 0 {
+		maxDXLen = 0
+	}
+	if len(dxCall) > maxDXLen {
+		dxCall = dxCall[:maxDXLen]
+	}
+	b.AppendString(dxCall)
+	if pad := dxCallFieldWidth - len(dxCall); pad > 0 {
+		writeSpaces(&b, pad)
+	}
+
+	spacesToComment := commentColumn - b.Len()
+	if spacesToComment < 0 {
+		spacesToComment = 0
+	}
+	writeSpaces(&b, spacesToComment)
+
+	commentStart := b.Len()
+	b.AppendString(s.Mode)
+	if s.HasReport {
+		b.AppendByte(' ')
+		if strings.EqualFold(s.Mode, "CW") || strings.EqualFold(s.Mode, "RTTY") {
+			b.AppendString(strconv.Itoa(s.Report))
+		} else {
+			if s.Report >= 0 {
+				b.AppendByte('+')
+			}
+			b.AppendString(strconv.Itoa(s.Report))
+		}
+		b.AppendString(" dB")
+	}
+	if trimmed := strings.TrimSpace(commentPayload); trimmed != "" {
+		remaining := (tailStartIdx - 1) - b.Len()
+		if b.Len() > commentStart {
+			if remaining <= 1 {
+				remaining = 0
+			} else {
+				b.AppendByte(' ')
+				remaining--
+			}
+		}
+		if remaining > 0 {
+			if len(trimmed) > remaining {
+				trimmed = trimmed[:remaining]
+			}
+			b.AppendString(trimmed)
+		}
+	}
+
+	gridLabel := formatGridLabel(s.DXMetadata.Grid, s.DXMetadata.GridDerived)
+	if gridLabel == "" {
+		gridLabel = strings.Repeat(" ", gridWidth)
+	} else if len(gridLabel) < gridWidth {
+		gridLabel = gridLabel + strings.Repeat(" ", gridWidth-len(gridLabel))
+	} else if len(gridLabel) > gridWidth {
+		gridLabel = gridLabel[:gridWidth]
+	}
+
+	confLabel := " "
+	if trimmed := strings.TrimSpace(s.Confidence); trimmed != "" {
+		confLabel = firstPrintableASCIIOrQuestion(trimmed)
+	}
+
+	if b.Len() > tailStartIdx {
+		b.Truncate(tailStartIdx)
+	} else if b.Len() < tailStartIdx {
+		writeSpaces(&b, tailStartIdx-b.Len())
+	}
+	b.AppendByte(' ')
+	b.AppendByte(' ')
+	b.AppendByte(' ')
+	b.AppendString(gridLabel)
+	b.AppendByte(' ')
+	b.AppendString(confLabel)
+	b.AppendByte(' ')
+	b.AppendString(timeStr)
+
+	return b.String()
 }
 
 // FreqToBand converts a frequency in kHz to a band string

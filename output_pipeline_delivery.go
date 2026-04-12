@@ -100,12 +100,17 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	}
 	recordRecentBandObservation(delayed, p.recentBandStore, p.customSCPStore, p.correctionCfg)
 	allowFast, allowMed, allowSlow := p.computeTelnetAllows(delayed)
+	delayedSnapshot := delayed.SnapshotForAsync()
+	if delayedSnapshot == nil {
+		return
+	}
+	dxCall := normalizedDXCall(delayedSnapshot)
 	if !allowFast && !allowMed && !allowSlow {
-		p.telnet.DeliverSelfSpot(delayed)
+		p.telnet.DeliverSelfSpotOwned(dxCall, delayedSnapshot)
 		return
 	}
 	if p.familySuppressor != nil && p.familySuppressor.ShouldSuppressWithResolver(delayed, p.correctionCfg, time.Now().UTC(), delaySnapshot, delaySnapshotOK) {
-		p.telnet.DeliverSelfSpot(delayed)
+		p.telnet.DeliverSelfSpotOwned(dxCall, delayedSnapshot)
 		return
 	}
 	if p.tracker != nil {
@@ -116,7 +121,7 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	if p.lastOutput != nil {
 		p.lastOutput.Store(time.Now().UTC().UnixNano())
 	}
-	p.telnet.BroadcastSpot(delayed, allowFast, allowMed, allowSlow)
+	p.telnet.BroadcastSpotOwned(delayedSnapshot, allowFast, allowMed, allowSlow)
 }
 
 func (p *outputPipeline) computeTelnetAllows(s *spot.Spot) (bool, bool, bool) {
@@ -161,7 +166,7 @@ func (p *outputPipeline) deliverSpot(ctx *outputSpotContext) {
 		return
 	}
 	p.updateGridCache(ctx.spot)
-	p.emitSpot(ctx.spot, plan)
+	p.emitSpot(ctx, plan)
 }
 
 func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeliveryPlan, bool) {
@@ -270,19 +275,28 @@ func (p *outputPipeline) updateGridCache(s *spot.Spot) {
 	}
 }
 
-func (p *outputPipeline) emitSpot(s *spot.Spot, plan outputDeliveryPlan) {
+func (p *outputPipeline) emitSpot(ctx *outputSpotContext, plan outputDeliveryPlan) {
+	if ctx == nil || ctx.spot == nil {
+		return
+	}
+	shared := ctx.spot.SealForAsync()
+	if shared == nil {
+		return
+	}
+	if p.buf != nil && shouldBufferSpot(shared) {
+		p.buf.AddOwned(shared)
+	}
 	emittedNow := false
-	if p.archiveWriter != nil && plan.archivePeerAllowMed && shouldArchiveSpot(s) {
-		p.archiveWriter.Enqueue(s)
+	if p.archiveWriter != nil && plan.archivePeerAllowMed && shouldArchiveSpot(shared) {
+		p.archiveWriter.EnqueueOwned(shared)
 		emittedNow = true
 	}
 	if plan.telnetDeliverNow {
-		p.telnet.BroadcastSpot(s, plan.allowFast, plan.allowMed, plan.allowSlow)
+		p.telnet.BroadcastSpotOwned(shared, plan.allowFast, plan.allowMed, plan.allowSlow)
 		emittedNow = true
 	}
 	if p.peerManager != nil && plan.archivePeerAllowMed {
-		peerSpot := cloneSpotForPeerPublish(s)
-		if p.peerManager.PublishDX(peerSpot) {
+		if p.peerManager.PublishDXWithComment(shared, peerPublishComment(shared)) {
 			emittedNow = true
 		}
 	}

@@ -42,6 +42,32 @@ func TestSignalResolverQueueSaturationIsNonBlocking(t *testing.T) {
 	}
 }
 
+func TestSignalResolverSnapshotCellsSupportLookupAndMetrics(t *testing.T) {
+	resolver := NewSignalResolver(SignalResolverConfig{})
+	key := NewResolverSignalKey(7010.0, "40m", "CW", 500)
+	cell := &resolverSnapshotCell{}
+	cell.snapshot.Store(&ResolverSnapshot{
+		Key:         key,
+		EvaluatedAt: time.Now().UTC(),
+		State:       ResolverStateConfident,
+		Winner:      "AA1AA",
+	})
+	resolver.snapshots.Store(key, cell)
+
+	snap, ok := resolver.Lookup(key)
+	if !ok {
+		t.Fatalf("expected lookup to return a published snapshot")
+	}
+	if snap.Winner != "AA1AA" || snap.State != ResolverStateConfident {
+		t.Fatalf("unexpected lookup snapshot: %+v", snap)
+	}
+
+	metrics := resolver.MetricsSnapshot()
+	if metrics.StateConfident != 1 {
+		t.Fatalf("expected metrics to count one confident snapshot, got %+v", metrics)
+	}
+}
+
 func TestSignalResolverHysteresisTransition(t *testing.T) {
 	resolver := NewSignalResolver(SignalResolverConfig{
 		QueueSize:              64,
@@ -371,8 +397,8 @@ func TestSignalResolverReliabilityFloorDropsLowWeightEvidence(t *testing.T) {
 	}
 }
 
-func mustBuildResolverConfusionModelForTieBreak(t *testing.T) *ConfusionModel {
-	t.Helper()
+func mustBuildResolverConfusionModelForTieBreak(tb testing.TB) *ConfusionModel {
+	tb.Helper()
 	raw := confusionModelFile{
 		Modes:       []string{"CW"},
 		SNREdges:    []float64{-50, 50},
@@ -401,7 +427,7 @@ func mustBuildResolverConfusionModelForTieBreak(t *testing.T) *ConfusionModel {
 	raw.InsCounts[0][0] = []int64{1, 1, 1, 1}
 	model, err := buildConfusionModel(raw)
 	if err != nil {
-		t.Fatalf("build confusion model: %v", err)
+		tb.Fatalf("build confusion model: %v", err)
 	}
 	return model
 }

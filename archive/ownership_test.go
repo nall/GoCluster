@@ -53,3 +53,25 @@ func TestEnqueueSnapshotsSpot(t *testing.T) {
 		t.Fatalf("expected queued spot")
 	}
 }
+
+func TestEnqueueOwnedReusesSnapshot(t *testing.T) {
+	w := &Writer{
+		queue: make(chan *spot.Spot, 1),
+		stop:  make(chan struct{}),
+	}
+	snapshot := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8").SnapshotForAsync()
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+
+	w.EnqueueOwned(snapshot)
+
+	select {
+	case queued := <-w.queue:
+		if queued != snapshot {
+			t.Fatalf("expected owned enqueue to reuse snapshot pointer")
+		}
+	default:
+		t.Fatalf("expected queued spot")
+	}
+}

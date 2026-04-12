@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 )
 
 // ControlPacket defines the interface for structs intended to hold
@@ -107,6 +108,15 @@ var (
 	ErrorProtocolViolation            = errors.New("protocol Violation")
 )
 
+const readPacketBufferMaxCap = 16 * 1024
+
+var readPacketBufferPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, 0, 4096)
+		return &buf
+	},
+}
+
 // ConnErrors is a map of the errors codes constants for Connect()
 // to a Go error
 var ConnErrors = map[byte]error{
@@ -126,9 +136,9 @@ var ConnErrors = map[byte]error{
 // always be nil, a nil ControlPacket indicating an error occurred.
 func ReadPacket(r io.Reader) (ControlPacket, error) {
 	var fh FixedHeader
-	b := make([]byte, 1)
+	var b [1]byte
 
-	_, err := io.ReadFull(r, b)
+	_, err := io.ReadFull(r, b[:])
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +153,8 @@ func ReadPacket(r io.Reader) (ControlPacket, error) {
 		return nil, err
 	}
 
-	packetBytes := make([]byte, fh.RemainingLength)
+	packetBytes := getReadPacketBuffer(fh.RemainingLength)
+	defer putReadPacketBuffer(packetBytes)
 	n, err := io.ReadFull(r, packetBytes)
 	if err != nil {
 		return nil, err
@@ -154,6 +165,28 @@ func ReadPacket(r io.Reader) (ControlPacket, error) {
 
 	err = cp.Unpack(bytes.NewBuffer(packetBytes))
 	return cp, err
+}
+
+func getReadPacketBuffer(size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	if size > readPacketBufferMaxCap {
+		return make([]byte, size)
+	}
+	pooled, _ := readPacketBufferPool.Get().(*[]byte)
+	if pooled == nil || cap(*pooled) < size {
+		return make([]byte, size)
+	}
+	return (*pooled)[:size]
+}
+
+func putReadPacketBuffer(buf []byte) {
+	if cap(buf) == 0 || cap(buf) > readPacketBufferMaxCap {
+		return
+	}
+	buf = buf[:0]
+	readPacketBufferPool.Put(&buf)
 }
 
 // NewControlPacket is used to create a new ControlPacket of the type specified
@@ -281,8 +314,8 @@ func (fh *FixedHeader) unpack(typeAndFlags byte, r io.Reader) error {
 }
 
 func decodeByte(b io.Reader) (byte, error) {
-	num := make([]byte, 1)
-	_, err := b.Read(num)
+	var num [1]byte
+	_, err := b.Read(num[:])
 	if err != nil {
 		return 0, err
 	}
@@ -291,12 +324,12 @@ func decodeByte(b io.Reader) (byte, error) {
 }
 
 func decodeUint16(b io.Reader) (uint16, error) {
-	num := make([]byte, 2)
-	_, err := b.Read(num)
+	var num [2]byte
+	_, err := b.Read(num[:])
 	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint16(num), nil
+	return binary.BigEndian.Uint16(num[:]), nil
 }
 
 func encodeUint16(num uint16) []byte {
@@ -359,9 +392,9 @@ func encodeLength(length int) []byte {
 func decodeLength(r io.Reader) (int, error) {
 	var rLength uint32
 	var multiplier uint32
-	b := make([]byte, 1)
+	var b [1]byte
 	for multiplier < 27 { // fix: Infinite '(digit & 128) == 1' will cause the dead loop
-		_, err := io.ReadFull(r, b)
+		_, err := io.ReadFull(r, b[:])
 		if err != nil {
 			return 0, err
 		}

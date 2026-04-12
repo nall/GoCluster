@@ -21,14 +21,14 @@ func BenchmarkOutputPipelineEmitSpotOwnership(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ringSnapshot := src.Clone()
-		ringSnapshot.ID = uint64(i + 1)
-		archiveSnapshot := src.Clone()
-		telnetSnapshot := src.Clone()
-		peerSnapshot := cloneSpotForPeerPublish(src)
-		runtime.KeepAlive(ringSnapshot)
+		shared := src.Clone().SealForAsync()
+		shared.ID = uint64(i + 1)
+		archiveSnapshot := shared
+		telnetSnapshot := shared
+		peerComment := peerPublishComment(shared)
+		runtime.KeepAlive(shared)
 		runtime.KeepAlive(archiveSnapshot)
 		runtime.KeepAlive(telnetSnapshot)
-		runtime.KeepAlive(peerSnapshot)
+		runtime.KeepAlive(peerComment)
 	}
 }

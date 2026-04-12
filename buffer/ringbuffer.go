@@ -47,16 +47,35 @@ func (rb *RingBuffer) Add(s *spot.Spot) {
 	if rb == nil || s == nil {
 		return
 	}
-	// Assign monotonic ID using atomic counter
-	newID := rb.total.Add(1)
-	s.ID = newID
 	snapshot := s.Clone()
 	if snapshot == nil {
 		return
 	}
-	snapshot.ID = newID
+	newID := rb.AddOwned(snapshot)
+	s.ID = newID
+}
 
-	idx := (newID - 1) % uint64(rb.capacity)
+// AddOwned publishes an already-owned spot snapshot into the ring with a
+// monotonic ID. Callers must not mutate the snapshot after publication.
+// Key aspects: Avoids an extra clone when the caller already crossed the async
+// ownership boundary before inserting into recent history.
+// Upstream: output pipeline reuse of a final immutable spot snapshot.
+// Downstream: atomic slot store; Spot.ID mutation on the snapshot.
+func (rb *RingBuffer) AddOwned(snapshot *spot.Spot) uint64 {
+	if rb == nil || snapshot == nil {
+		return 0
+	}
+	newID := rb.total.Add(1)
+	snapshot.ID = newID
+	rb.storeSnapshot(newID, snapshot)
+	return newID
+}
+
+func (rb *RingBuffer) storeSnapshot(id uint64, snapshot *spot.Spot) {
+	if rb == nil || snapshot == nil || id == 0 {
+		return
+	}
+	idx := (id - 1) % uint64(rb.capacity)
 	// Publishing via atomic.Store ensures readers either see the previous spot or this one, never partial state
 	rb.slots[idx].Store(snapshot)
 }

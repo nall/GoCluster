@@ -100,34 +100,28 @@ func TestMakeUnlicensedReporterEmitsPlainTextToSurface(t *testing.T) {
 	}
 }
 
-func TestCloneSpotForPeerPublishAddsModeWhenCommentEmpty(t *testing.T) {
+func TestPeerPublishCommentAddsModeWhenCommentEmpty(t *testing.T) {
 	src := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "")
 	src.Mode = "FT8"
 	src.Comment = ""
 
-	peerSpot := cloneSpotForPeerPublish(src)
-	if peerSpot == nil {
-		t.Fatalf("expected peer spot, got nil")
-	}
-	if peerSpot == src {
-		t.Fatalf("expected a cloned spot when adding inferred mode to comment")
-	}
-	if peerSpot.Comment != "FT8" {
-		t.Fatalf("expected comment to carry inferred mode, got %q", peerSpot.Comment)
+	comment := peerPublishComment(src)
+	if comment != "FT8" {
+		t.Fatalf("expected comment to carry inferred mode, got %q", comment)
 	}
 	if src.Comment != "" {
 		t.Fatalf("expected original comment to remain empty, got %q", src.Comment)
 	}
 }
 
-func TestCloneSpotForPeerPublishPassthroughWhenCommentPresent(t *testing.T) {
+func TestPeerPublishCommentPassthroughWhenCommentPresent(t *testing.T) {
 	src := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "")
 	src.Mode = "FT8"
 	src.Comment = "cq test"
 
-	peerSpot := cloneSpotForPeerPublish(src)
-	if peerSpot != src {
-		t.Fatalf("expected passthrough when comment present")
+	comment := peerPublishComment(src)
+	if comment != "cq test" {
+		t.Fatalf("expected passthrough comment, got %q", comment)
 	}
 }
 

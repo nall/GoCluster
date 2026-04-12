@@ -308,6 +308,36 @@ func TestPublishDXReceiveOnlyStillPublishesManualSpot(t *testing.T) {
 	}
 }
 
+func TestPublishDXWithCommentFallsBackToManualMode(t *testing.T) {
+	dst := &session{
+		id:         "dst",
+		remoteCall: "DST",
+		pc9x:       true,
+		ctx:        context.Background(),
+		writeCh:    make(chan string, 1),
+	}
+	m := &Manager{
+		cfg:       config.PeeringConfig{ForwardSpots: true, HopCount: 2},
+		localCall: "LOCAL",
+		sessions:  map[string]*session{"dst": dst},
+	}
+
+	sp := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	sp.Comment = ""
+	if !m.PublishDXWithComment(sp, "FT8") {
+		t.Fatal("expected manual DX spot to publish with override comment")
+	}
+
+	select {
+	case got := <-dst.writeCh:
+		if !strings.Contains(got, "^FT8^") {
+			t.Fatalf("expected override comment in PC61 publish, got %q", got)
+		}
+	default:
+		t.Fatal("expected DX publish to destination peer")
+	}
+}
+
 func TestHandleFrameSpotRelaySuppressedWhenForwardSpotsDisabled(t *testing.T) {
 	tests := []struct {
 		name string

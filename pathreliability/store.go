@@ -30,6 +30,17 @@ type Store struct {
 	shards    []shard
 	cfg       Config
 	bandIndex BandIndex
+
+	statsMu        sync.RWMutex
+	statsRefreshMu sync.Mutex
+	stats          pathStoreStatsSnapshot
+}
+
+type pathStoreStatsSnapshot struct {
+	asOfUnix int64
+	fine     int
+	coarse   int
+	byBand   []bandCounts
 }
 
 // NewStore constructs a path store with normalized config.
@@ -46,6 +57,9 @@ func NewStore(cfg Config, bands []string) *Store {
 	}
 	for i := range s.shards {
 		s.shards[i].buckets = make(map[uint64]*bucket)
+	}
+	s.stats = pathStoreStatsSnapshot{
+		byBand: make([]bandCounts, len(idx.Bands())),
 	}
 	return s
 }
@@ -283,70 +297,58 @@ func (s *Store) TotalBuckets() int {
 	return total
 }
 
-// Stats returns counts of active fine/coarse buckets (non-stale).
-func (s *Store) Stats(now time.Time) (fine int, coarse int) {
+// Stats returns the last refreshed counts of active fine/coarse buckets.
+func (s *Store) Stats(_ time.Time) (fine int, coarse int) {
 	if s == nil || !s.cfg.Enabled {
 		return 0, 0
 	}
-	bands := s.bandIndex.Bands()
-	staleAfterByBand := make([]int64, len(bands))
-	for i, band := range bands {
-		halfLife := s.bandIndex.HalfLifeSeconds(band, s.cfg)
-		staleAfterByBand[i] = s.staleAfterSeconds(halfLife)
-	}
-	nowSec := now.Unix()
-	for i := range s.shards {
-		sh := &s.shards[i]
-		sh.mu.RLock()
-		for key, b := range sh.buckets {
-			if b == nil {
-				continue
-			}
-			age := nowSec - b.lastUpdate
-			if age < 0 {
-				age = 0
-			}
-			isCoarse := key&0xFFFF != 0
-			var idx uint16
-			if isCoarse {
-				idx = uint16((key >> 32) & 0xFFFF)
-			} else {
-				idx = uint16((key >> 48) & 0xFFFF)
-			}
-			if int(idx) >= len(staleAfterByBand) {
-				continue
-			}
-			staleAfter := staleAfterByBand[idx]
-			if staleAfter > 0 && age > staleAfter {
-				continue
-			}
-			if isCoarse {
-				coarse++
-			} else {
-				fine++
-			}
-		}
-		sh.mu.RUnlock()
-	}
-	return fine, coarse
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	return s.stats.fine, s.stats.coarse
 }
 
-// StatsByBand returns counts of active fine/coarse buckets per band.
-func (s *Store) StatsByBand(now time.Time) []bandCounts {
+// StatsByBand returns the last refreshed counts of active fine/coarse buckets
+// per band.
+func (s *Store) StatsByBand(_ time.Time) []bandCounts {
 	if s == nil || !s.cfg.Enabled {
 		return nil
 	}
-	bands := s.bandIndex.Bands()
-	if len(bands) == 0 {
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if len(s.stats.byBand) == 0 {
 		return nil
 	}
+	counts := make([]bandCounts, len(s.stats.byBand))
+	copy(counts, s.stats.byBand)
+	return counts
+}
+
+// RefreshStatsSnapshot recomputes the cached active-bucket counts used by
+// operator-facing stats displays. It is intentionally explicit so ingest writes
+// never scan the whole store.
+func (s *Store) RefreshStatsSnapshot(now time.Time) {
+	if s == nil || !s.cfg.Enabled {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+	nowSec := now.Unix()
+
+	s.statsRefreshMu.Lock()
+	defer s.statsRefreshMu.Unlock()
+
+	bands := s.bandIndex.Bands()
 	counts := make([]bandCounts, len(bands))
 	staleAfterByBand := make([]int64, len(bands))
 	for i, band := range bands {
 		halfLife := s.bandIndex.HalfLifeSeconds(band, s.cfg)
 		staleAfterByBand[i] = s.staleAfterSeconds(halfLife)
 	}
-	nowSec := now.Unix()
+	fine := 0
+	coarse := 0
 	for i := range s.shards {
 		sh := &s.shards[i]
 		sh.mu.RLock()
@@ -374,13 +376,23 @@ func (s *Store) StatsByBand(now time.Time) []bandCounts {
 			}
 			if isCoarse {
 				counts[idx].coarse++
+				coarse++
 			} else {
 				counts[idx].fine++
+				fine++
 			}
 		}
 		sh.mu.RUnlock()
 	}
-	return counts
+
+	s.statsMu.Lock()
+	s.stats = pathStoreStatsSnapshot{
+		asOfUnix: nowSec,
+		fine:     fine,
+		coarse:   coarse,
+		byBand:   counts,
+	}
+	s.statsMu.Unlock()
 }
 
 // WeightHistogramByBand returns per-band bucket weight histograms for active buckets.

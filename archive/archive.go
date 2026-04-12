@@ -243,16 +243,25 @@ func (w *Writer) Stop() {
 }
 
 // Enqueue tries to enqueue a spot snapshot for archival without blocking.
-// Key aspects: Clones before queueing so the archive writer owns the queued
-// value and later normalization cannot race with the live pipeline.
+// Key aspects: Reuses an already-owned async snapshot when available; otherwise
+// clones before queueing so later normalization cannot race with the pipeline.
 // Upstream: main.go spot ingest/broadcast.
 // Downstream: writer queue channel.
 func (w *Writer) Enqueue(s *spot.Spot) {
 	if w == nil || s == nil {
 		return
 	}
-	snapshot := s.Clone()
+	snapshot := s.SnapshotForAsync()
 	if snapshot == nil {
+		return
+	}
+	w.EnqueueOwned(snapshot)
+}
+
+// EnqueueOwned enqueues a caller-owned immutable snapshot without cloning it
+// again. Callers must guarantee the spot will not be mutated after handoff.
+func (w *Writer) EnqueueOwned(snapshot *spot.Spot) {
+	if w == nil || snapshot == nil {
 		return
 	}
 	select {

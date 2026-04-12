@@ -197,6 +197,15 @@ func (m *Manager) Stop() {
 // forwarding policy allows it. Receive-only mode still permits DX command
 // spots while suppressing transit relay.
 func (m *Manager) PublishDX(s *spot.Spot) bool {
+	if s == nil {
+		return false
+	}
+	return m.PublishDXWithComment(s, s.Comment)
+}
+
+// PublishDXWithComment publishes a locally produced spot to peers using the
+// provided comment text for PC11/PC61 formatting.
+func (m *Manager) PublishDXWithComment(s *spot.Spot, comment string) bool {
 	if m == nil || s == nil || !m.ShouldPublishLocalSpot(s) {
 		return false
 	}
@@ -204,7 +213,7 @@ func (m *Manager) PublishDX(s *spot.Spot) bool {
 	if hop <= 0 {
 		hop = defaultHopCount
 	}
-	m.broadcastSpot(s, hop, m.localCall, nil)
+	m.broadcastSpot(s, comment, hop, m.localCall, nil)
 	return true
 }
 
@@ -270,7 +279,7 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 					// see the formatted spot via normal broadcast after ingest.
 					m.forwardFrame(frame, frame.Hop-1, sess, true)
 				} else {
-					m.broadcastSpot(spotEntry, frame.Hop-1, spotEntry.SourceNode, sess)
+					m.broadcastSpot(spotEntry, spotEntry.Comment, frame.Hop-1, spotEntry.SourceNode, sess)
 				}
 			}
 		}
@@ -451,7 +460,7 @@ func (m *Manager) SetDirectMessage(fn func(to, line string)) {
 	m.directMessage = fn
 }
 
-func (m *Manager) broadcastSpot(s *spot.Spot, hop int, origin string, exclude *session) {
+func (m *Manager) broadcastSpot(s *spot.Spot, comment string, hop int, origin string, exclude *session) {
 	if m == nil || s == nil {
 		return
 	}
@@ -471,10 +480,10 @@ func (m *Manager) broadcastSpot(s *spot.Spot, hop int, origin string, exclude *s
 			continue
 		}
 		if sess.pc9x {
-			line := formatPC61(s, origin, hop)
+			line := formatPC61(s, comment, origin, hop)
 			m.trySendLine(sess, line, "spot")
 		} else {
-			line := formatPC11(s, origin, hop)
+			line := formatPC11(s, comment, origin, hop)
 			m.trySendLine(sess, line, "spot")
 		}
 	}

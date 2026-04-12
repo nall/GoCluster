@@ -31,6 +31,7 @@ When the user asks what existing code does and has not asked for changes:
 - If no skill applies, state `Skill check: none applicable`.
 - Canonical skills location is `~/.codex/skills` (Windows typically `%USERPROFILE%\.codex\skills`).
 - Repo-managed skills may also exist under `codex-skills/`; prefer the installed version when both exist.
+- When the user asks why a path is slow and local profile data exists, prefer a profiling-specific skill over a general explanation skill.
 
 ## OBJECTIVITY AND INTEGRITY
 - Optimize for correctness over agreement.
@@ -38,6 +39,8 @@ When the user asks what existing code does and has not asked for changes:
 - Surface risks, tradeoffs, and counter-arguments.
 - Never claim validation that was not actually performed.
 - Never hide uncertainty behind confident language.
+- Before claiming a patch is implemented, tested, or improved, verify it against the current workspace state and actual command output.
+- Do not give file/line-level implementation summaries unless those files were actually inspected in the current workspace state.
 
 ## QUALITY BAR
 Commercial-grade from the first draft. Do not write simple code that needs hardening later.
@@ -55,6 +58,8 @@ Commercial-grade from the first draft. Do not write simple code that needs harde
   - Files: soft review trigger > 500 lines for hand-written source files.
   - If a file grows past 500 lines, explain why splitting would reduce clarity or worsen cohesion.
 - Prefer cohesive helpers over monolithic routines, but do not fragment code so aggressively that control flow becomes harder to follow.
+- On hot paths, generic helper reuse is subordinate to runtime shape. If the path is dominated by single-item overflow or single-item correction, default to in-place single-victim logic unless measurements justify a more abstract design.
+- Any new shared helper introduced on a hot path must prove zero or near-zero allocation with targeted benchmarks before it is considered acceptable.
 
 ## CRITICAL CHECKLIST
 Apply this checklist before every change.
@@ -110,6 +115,10 @@ Apply this checklist before every change.
   - `Validation Score: X/6`
   - `Failed items: none | <comma-separated failed item numbers/names>`
   - `Auto-fail conditions triggered: no | yes (<conditions>)`
+- Before any final close-out for implementation work, do a quick proof pass against the current repo state:
+  - inspect `git diff --name-only`
+  - inspect the touched files directly
+  - cite only commands that actually ran in the current session
 
 ## REQUIRED CHECKER BASELINE
 Use these by default unless the task clearly does not touch the relevant area.
@@ -120,6 +129,11 @@ Use these by default unless the task clearly does not touch the relevant area.
 - Parser/protocol changes: fuzz where applicable
 - Hot-path changes: benchmarks before/after and pprof when appropriate
 - Never claim a checker ran unless it actually ran
+- For optimization work, do not call a change successful from microbenchmarks alone. Separate cold-start vs warm-runtime evidence, startup/load vs steady-state costs, `alloc_space` vs `inuse_space`, and repo-owned costs vs dependency/platform/runtime noise.
+- When discussing the “latest” profile or bundle, include absolute timestamps and process age/restart context when that affects interpretation.
+- If an optimization removes one hotspot but creates a larger one, call the round partially successful and immediately re-rank the backlog to the new hotspot.
+- If live `pprof` confirmation is missing, say the work is `implemented and locally validated`, not `confirmed in runtime`.
+- If profile conclusions depend on workload differences or incomplete comparability, state that explicitly and lower confidence.
 
 See `docs/dev-runbook.md` for exact command sequences.
 
@@ -209,6 +223,16 @@ If any user-visible behavior changes or the blast radius expands, immediately re
 18. Self-Audit
 19. PR-style summary with Scope-to-Code Traceability
 20. Exact 3-line `VALIDATION.md` result block
+
+### Iterative optimization workflow additions
+For iterative performance work across multiple profile bundles:
+- maintain a compact comparison ledger in the conversation with:
+  - bundle timestamp
+  - build/start time when available
+  - cold/warm/transition classification
+  - top CPU/mutex/heap/alloc deltas
+  - confidence level
+- update the ledger before re-ranking the next optimization target
 
 Detailed requirements for each step live in:
 - `docs/change-workflow.md`

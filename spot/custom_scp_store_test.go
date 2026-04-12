@@ -284,6 +284,71 @@ func TestCustomSCPStoreLoadPrunesLegacyOversizedKey(t *testing.T) {
 	}
 }
 
+func TestCustomSCPStoreRecordObservationOverflowRetainsNewestDeterministically(t *testing.T) {
+	opts := CustomSCPOptions{
+		Path:                   filepath.Join(t.TempDir(), "scp"),
+		HorizonDays:            30,
+		StaticHorizonDays:      30,
+		MaxSpottersPerKey:      2,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	}
+	store, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	seenAt := time.Date(2026, 4, 11, 22, 0, 0, 0, time.UTC)
+	for _, spotter := range []string{"N0AAA", "N0BBB", "N0CCC"} {
+		store.recordObservation("K1ABC", "40m", "CW", spotter, 101, 0, false, seenAt)
+	}
+
+	key := customSCPKey{call: "K1ABC", band: "40m", bucket: "cw"}
+	entry := store.entries[key]
+	if entry == nil {
+		t.Fatalf("expected retained custom SCP entry")
+	}
+	if len(entry.spotters) != 2 {
+		t.Fatalf("expected 2 retained spotters, got %d", len(entry.spotters))
+	}
+	if _, ok := entry.spotters["N0AAA"]; ok {
+		t.Fatalf("expected lexical tie-break to evict N0AAA")
+	}
+	if _, ok := entry.spotters["N0BBB"]; !ok {
+		t.Fatalf("expected N0BBB retained after overflow trim")
+	}
+	if _, ok := entry.spotters["N0CCC"]; !ok {
+		t.Fatalf("expected N0CCC retained after overflow trim")
+	}
+}
+
+func TestCustomSCPTrimSpottersLockedDoesNotRefreshLastSeen(t *testing.T) {
+	store := &CustomSCPStore{
+		opts: sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: 1}),
+	}
+	entry := &customSCPEntry{
+		spotters: map[string]customSCPSpotterObs{
+			"N0AAA": {seenUnix: 10, cellRes1: 101},
+			"N0BBB": {seenUnix: 20, cellRes1: 102},
+		},
+		lastSeen: 999,
+	}
+	store.observationSpotters = len(entry.spotters)
+
+	if trimmed := store.trimSpottersLocked(entry, nil); trimmed != 1 {
+		t.Fatalf("expected one trimmed spotter, got %d", trimmed)
+	}
+	if entry.lastSeen != 999 {
+		t.Fatalf("expected normal overflow trim to leave lastSeen unchanged, got %d", entry.lastSeen)
+	}
+}
+
 func TestCustomSCPStoreCleanupPrunesOverflowAndStaleStatic(t *testing.T) {
 	opts := CustomSCPOptions{
 		Path:                   filepath.Join(t.TempDir(), "scp"),
@@ -318,11 +383,16 @@ func TestCustomSCPStoreCleanupPrunesOverflowAndStaleStatic(t *testing.T) {
 	}
 	store.observationSpotters = 4
 	store.static["K1OLD"] = now.Add(-31 * 24 * time.Hour).Unix()
+	store.markEntryForCleanupLocked(key, store.entries[key])
+	store.upsertStaticExpiryLocked("K1OLD", store.static["K1OLD"])
 	store.mu.Unlock()
 	for spotter, obs := range store.entries[key].spotters {
 		setRawObservation(t, store, key, spotter, obs.seenUnix, obs.cellRes1)
 	}
 	store.persistStaticLocked("K1OLD", now.Add(-31*24*time.Hour).Unix())
+	if item := store.entryExpiryItems[key]; item == nil || item.dueUnix != customSCPImmediateCleanupDueUnix {
+		t.Fatalf("expected oversized entry queued for immediate cleanup, item=%+v", item)
+	}
 
 	store.cleanup(now)
 
@@ -355,6 +425,58 @@ func TestCustomSCPStoreCleanupPrunesOverflowAndStaleStatic(t *testing.T) {
 	if stats.OverflowObservationsPruned < 2 {
 		t.Fatalf("expected overflow prune counter to record cleanup trimming, got %+v", stats)
 	}
+}
+
+func TestCustomSCPStoreCleanupIgnoresUpdatedEntryExpiry(t *testing.T) {
+	opts := CustomSCPOptions{
+		Path:                   filepath.Join(t.TempDir(), "scp"),
+		HorizonDays:            30,
+		StaticHorizonDays:      30,
+		MaxSpottersPerKey:      2,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	}
+	store, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	now := time.Now().UTC()
+	key := customSCPKey{call: "K1FRESH", band: "20m", bucket: "cw"}
+	store.mu.Lock()
+	entry := &customSCPEntry{
+		spotters: map[string]customSCPSpotterObs{
+			"N0AAA": {seenUnix: now.Add(-29 * 24 * time.Hour).Unix(), cellRes1: 201},
+		},
+	}
+	store.entries[key] = entry
+	store.observationSpotters = 1
+	store.markEntryForCleanupLocked(key, entry)
+	entry.spotters["N0AAA"] = customSCPSpotterObs{seenUnix: now.Add(-1 * time.Hour).Unix(), cellRes1: 201}
+	store.markEntryForCleanupLocked(key, entry)
+	store.mu.Unlock()
+
+	store.cleanup(now)
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	entry = store.entries[key]
+	if entry == nil {
+		t.Fatalf("expected refreshed entry to survive cleanup")
+	}
+	if len(entry.spotters) != 1 {
+		t.Fatalf("expected refreshed entry to retain one spotter, got %d", len(entry.spotters))
+	}
+	if entry.oldestSeenUnix >= store.observationHorizonCutoffUnix(now) {
+		return
+	}
+	t.Fatalf("expected updated expiry to reflect fresh observation, got oldest=%d cutoff=%d", entry.oldestSeenUnix, store.observationHorizonCutoffUnix(now))
 }
 
 func TestCustomSCPStoreLoadDeletesStaleStaticMembership(t *testing.T) {

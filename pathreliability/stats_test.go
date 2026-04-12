@@ -14,6 +14,7 @@ func TestStoreStatsByBandCounts(t *testing.T) {
 
 	store.Update(EncodeCell("FN31"), EncodeCell("FN32"), InvalidCell, InvalidCell, "160m", dbToPower(-5), 1.0, now)
 	store.Update(InvalidCell, InvalidCell, EncodeCoarseCell("FN31"), EncodeCoarseCell("FN32"), "80m", dbToPower(-10), 1.0, now)
+	store.RefreshStatsSnapshot(now)
 
 	stats := store.StatsByBand(now)
 	if len(stats) != 2 {
@@ -36,6 +37,7 @@ func TestPredictorStatsByBand(t *testing.T) {
 
 	predictor.Update(BucketCombined, EncodeCell("FN31"), EncodeCell("FN32"), InvalidCell, InvalidCell, "160m", -5, 1.0, now, false)
 	predictor.Update(BucketCombined, InvalidCell, InvalidCell, EncodeCoarseCell("FN31"), EncodeCoarseCell("FN32"), "80m", -7, 1.0, now, false)
+	predictor.RefreshStatsSnapshot(now)
 
 	stats := predictor.StatsByBand(now)
 	if len(stats) != 2 {
@@ -49,6 +51,64 @@ func TestPredictorStatsByBand(t *testing.T) {
 	}
 	if stats[1].Fine != 0 || stats[1].Coarse != 1 {
 		t.Fatalf("expected 80m fine=0 coarse=1, got fine=%d coarse=%d", stats[1].Fine, stats[1].Coarse)
+	}
+}
+
+func TestStoreStatsRequireExplicitRefresh(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.StaleAfterSeconds = 600
+	store := NewStore(cfg, []string{"160m"})
+	now := time.Now().UTC()
+
+	store.Update(EncodeCell("FN31"), EncodeCell("FN32"), InvalidCell, InvalidCell, "160m", dbToPower(-5), 1.0, now)
+
+	stats := store.StatsByBand(now)
+	if len(stats) != 1 {
+		t.Fatalf("expected 1 band, got %d", len(stats))
+	}
+	if stats[0].fine != 0 || stats[0].coarse != 0 {
+		t.Fatalf("expected cached stats to remain zero before explicit refresh, got fine=%d coarse=%d", stats[0].fine, stats[0].coarse)
+	}
+
+	store.RefreshStatsSnapshot(now)
+	stats = store.StatsByBand(now)
+	if stats[0].fine != 1 || stats[0].coarse != 0 {
+		t.Fatalf("expected explicit refresh to populate counts, got fine=%d coarse=%d", stats[0].fine, stats[0].coarse)
+	}
+}
+
+func TestStoreStatsRemainCachedUntilExplicitRefresh(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.DefaultHalfLifeSec = 10
+	cfg.StaleAfterHalfLifeMultiplier = 1
+	cfg.StaleAfterSeconds = 999
+	store := NewStore(cfg, []string{"160m"})
+	now := time.Now().UTC()
+
+	store.Update(EncodeCell("FN31"), EncodeCell("FN32"), InvalidCell, InvalidCell, "160m", dbToPower(-5), 1.0, now)
+	store.RefreshStatsSnapshot(now)
+
+	stats := store.StatsByBand(now)
+	if stats[0].fine != 1 || stats[0].coarse != 0 {
+		t.Fatalf("expected initial refreshed stats to show one fine bucket, got fine=%d coarse=%d", stats[0].fine, stats[0].coarse)
+	}
+
+	removed := store.PurgeStale(now.Add(11 * time.Second))
+	if removed != 1 {
+		t.Fatalf("expected purge to remove 1 bucket, got %d", removed)
+	}
+
+	stats = store.StatsByBand(now.Add(11 * time.Second))
+	if stats[0].fine != 1 || stats[0].coarse != 0 {
+		t.Fatalf("expected cached stats to remain stale until refresh, got fine=%d coarse=%d", stats[0].fine, stats[0].coarse)
+	}
+
+	store.RefreshStatsSnapshot(now.Add(11 * time.Second))
+	stats = store.StatsByBand(now.Add(11 * time.Second))
+	if stats[0].fine != 0 || stats[0].coarse != 0 {
+		t.Fatalf("expected explicit refresh to reflect purge, got fine=%d coarse=%d", stats[0].fine, stats[0].coarse)
 	}
 }
 

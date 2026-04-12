@@ -2135,8 +2135,17 @@ func (s *Server) BroadcastSpot(spot *spot.Spot, allowFast, allowMed, allowSlow b
 	if s == nil || spot == nil {
 		return
 	}
-	snapshot := spot.Clone()
+	snapshot := spot.SnapshotForAsync()
 	if snapshot == nil {
+		return
+	}
+	s.BroadcastSpotOwned(snapshot, allowFast, allowMed, allowSlow)
+}
+
+// BroadcastSpotOwned enqueues a caller-owned immutable spot snapshot for
+// broadcast. Callers must guarantee the spot will not be mutated after handoff.
+func (s *Server) BroadcastSpotOwned(snapshot *spot.Spot, allowFast, allowMed, allowSlow bool) {
+	if s == nil || snapshot == nil {
 		return
 	}
 	payload := &broadcastPayload{
@@ -2167,7 +2176,19 @@ func (s *Server) DeliverSelfSpot(spot *spot.Spot) {
 	if dxCall == "" {
 		return
 	}
+	snapshot := spot.SnapshotForAsync()
+	if snapshot == nil {
+		return
+	}
+	s.DeliverSelfSpotOwned(dxCall, snapshot)
+}
 
+// DeliverSelfSpotOwned sends a caller-owned immutable snapshot only to the
+// matching callsign client when SELF delivery is enabled.
+func (s *Server) DeliverSelfSpotOwned(dxCall string, snapshot *spot.Spot) {
+	if s == nil || snapshot == nil || dxCall == "" {
+		return
+	}
 	s.clientsMutex.RLock()
 	client := s.clients[dxCall]
 	s.clientsMutex.RUnlock()
@@ -2183,10 +2204,6 @@ func (s *Server) DeliverSelfSpot(spot *spot.Spot) {
 	}
 
 	enqueueAt := time.Now().UTC()
-	snapshot := spot.Clone()
-	if snapshot == nil {
-		return
-	}
 	client.enqueueSpot(&spotEnvelope{spot: snapshot, enqueueAt: enqueueAt})
 }
 
@@ -3257,12 +3274,7 @@ func (s *Server) formatSpotForClientWithDiag(client *Client, sp *spot.Spot) stri
 	if sp == nil {
 		return ""
 	}
-	clone := sp.CloneWithComment(diagTagForSpot(client, sp))
-	if clone == nil {
-		return ""
-	}
-
-	base := clone.FormatDXCluster()
+	base := sp.FormatDXClusterWithComment(diagTagForSpot(client, sp))
 	if s == nil || s.pathPredictor == nil || !s.pathDisplay {
 		return base + "\n"
 	}

@@ -53,6 +53,11 @@ type confusionOp struct {
 	o    rune
 }
 
+type confusionAlignmentWorkspace struct {
+	dp  []int
+	ops []confusionOp
+}
+
 // LoadConfusionModel parses and validates confusion_model.json output from the
 // RBN analytics pipeline.
 func LoadConfusionModel(path string) (*ConfusionModel, error) {
@@ -192,18 +197,27 @@ func (m *ConfusionModel) ScoreCandidate(observed, candidate, mode string, snr fl
 	if m == nil {
 		return 0
 	}
+	trueRunes := []rune(strutil.NormalizeUpper(candidate))
+	obsRunes := []rune(strutil.NormalizeUpper(observed))
+	return m.scorePreparedCandidate(obsRunes, trueRunes, mode, snr, nil)
+}
+
+func (m *ConfusionModel) scorePreparedCandidate(observedRunes, candidateRunes []rune, mode string, snr float64, workspace *confusionAlignmentWorkspace) float64 {
+	if m == nil {
+		return 0
+	}
 	mode = strutil.NormalizeUpper(mode)
 	modeIdx, ok := m.modeIndex[mode]
 	if !ok {
 		return 0
 	}
 	bandIdx := m.snrBandIndex(snr)
-	trueRunes := []rune(strutil.NormalizeUpper(candidate))
-	obsRunes := []rune(strutil.NormalizeUpper(observed))
+	trueRunes := candidateRunes
+	obsRunes := observedRunes
 	if len(trueRunes) == 0 || len(obsRunes) == 0 {
 		return 0
 	}
-	ops := alignConfusionCalls(trueRunes, obsRunes)
+	ops := alignConfusionCallsWithWorkspace(trueRunes, obsRunes, workspace)
 	if len(ops) == 0 {
 		return 0
 	}
@@ -252,31 +266,43 @@ func (m *ConfusionModel) snrBandIndex(snr float64) int {
 	return last
 }
 
-func alignConfusionCalls(trueRunes, obsRunes []rune) []confusionOp {
+func alignConfusionCallsWithWorkspace(trueRunes, obsRunes []rune, workspace *confusionAlignmentWorkspace) []confusionOp {
 	m := len(trueRunes)
 	n := len(obsRunes)
-	dp := make([][]int, m+1)
+	if workspace == nil {
+		workspace = &confusionAlignmentWorkspace{}
+	}
+	width := n + 1
+	cellCount := (m + 1) * width
+	if cap(workspace.dp) < cellCount {
+		workspace.dp = make([]int, cellCount)
+	} else {
+		workspace.dp = workspace.dp[:cellCount]
+	}
+	dp := workspace.dp
+	index := func(i, j int) int {
+		return i*width + j
+	}
 	for i := 0; i <= m; i++ {
-		dp[i] = make([]int, n+1)
-		dp[i][0] = i
+		dp[index(i, 0)] = i
 	}
 	for j := 0; j <= n; j++ {
-		dp[0][j] = j
+		dp[index(0, j)] = j
 	}
 	for i := 1; i <= m; i++ {
 		for j := 1; j <= n; j++ {
 			if trueRunes[i-1] == obsRunes[j-1] {
-				dp[i][j] = dp[i-1][j-1]
+				dp[index(i, j)] = dp[index(i-1, j-1)]
 				continue
 			}
-			delCost := dp[i-1][j]
-			insCost := dp[i][j-1]
-			subCost := dp[i-1][j-1]
-			dp[i][j] = 1 + minInt(delCost, insCost, subCost)
+			delCost := dp[index(i-1, j)]
+			insCost := dp[index(i, j-1)]
+			subCost := dp[index(i-1, j-1)]
+			dp[index(i, j)] = 1 + minInt(delCost, insCost, subCost)
 		}
 	}
 
-	ops := make([]confusionOp, 0, m+n)
+	ops := workspace.ops[:0]
 	i := m
 	j := n
 	for i > 0 || j > 0 {
@@ -296,9 +322,9 @@ func alignConfusionCalls(trueRunes, obsRunes []rune) []confusionOp {
 			j--
 			continue
 		}
-		delCost := dp[i-1][j]
-		insCost := dp[i][j-1]
-		subCost := dp[i-1][j-1]
+		delCost := dp[index(i-1, j)]
+		insCost := dp[index(i, j-1)]
+		subCost := dp[index(i-1, j-1)]
 		minCost := minInt(delCost, insCost, subCost)
 		if subCost == minCost {
 			ops = append(ops, confusionOp{kind: confusionOpSub, t: trueRunes[i-1], o: obsRunes[j-1]})
@@ -317,6 +343,7 @@ func alignConfusionCalls(trueRunes, obsRunes []rune) []confusionOp {
 	for l, r := 0, len(ops)-1; l < r; l, r = l+1, r-1 {
 		ops[l], ops[r] = ops[r], ops[l]
 	}
+	workspace.ops = ops
 	return ops
 }
 

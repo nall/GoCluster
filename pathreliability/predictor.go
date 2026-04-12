@@ -153,6 +153,15 @@ func (p *Predictor) TotalBuckets() int {
 	return p.combined.TotalBuckets()
 }
 
+// RefreshStatsSnapshot recomputes the cached bucket-count snapshot used by
+// operator-facing stats displays.
+func (p *Predictor) RefreshStatsSnapshot(now time.Time) {
+	if p == nil || !p.cfg.Enabled || p.combined == nil {
+		return
+	}
+	p.combined.RefreshStatsSnapshot(now)
+}
+
 // PredictorStats returns counts of active fine/coarse buckets (non-stale).
 type PredictorStats struct {
 	CombinedFine   int

@@ -343,3 +343,31 @@ func BenchmarkConvertToSpotFTCanonicalized(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkHandlePayloadFT8(b *testing.B) {
+	client := NewClient("localhost", 1883, nil, []string{"FT8"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+	msg := PSKRMessage{
+		Frequency:       14074000,
+		Mode:            "FT8",
+		Report:          intPtr(5),
+		Timestamp:       time.Now().Add(-time.Minute).Unix(),
+		SenderCall:      "K1ABC",
+		SenderLocator:   "FN42",
+		ReceiverCall:    "N0CALL",
+		ReceiverLocator: "EM10",
+	}
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		b.Fatalf("marshal payload: %v", err)
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		client.handlePayload(payload)
+		select {
+		case <-client.spotChan:
+		default:
+			b.Fatal("expected enqueued spot")
+		}
+	}
+}

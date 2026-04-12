@@ -11,8 +11,8 @@ import (
 // Key aspects: Sanitizes comment and formats dates/times in DXSpider style.
 // Upstream: Peer session writer.
 // Downstream: sanitizeComment, fmt.Sprintf.
-func formatPC61(s *spot.Spot, origin string, hop int) string {
-	comment := sanitizeComment(s.Comment)
+func formatPC61(s *spot.Spot, comment string, origin string, hop int) string {
+	comment = sanitizeComment(comment)
 	spotterIP := strings.TrimSpace(s.SpotterIP)
 	return fmt.Sprintf("PC61^%.1f^%s^%s^%s^%s^%s^%s^%s^H%d^",
 		s.Frequency,
@@ -31,8 +31,8 @@ func formatPC61(s *spot.Spot, origin string, hop int) string {
 // Key aspects: Sanitizes comment and formats dates/times in DXSpider style.
 // Upstream: Peer session writer for legacy peers.
 // Downstream: sanitizeComment, fmt.Sprintf.
-func formatPC11(s *spot.Spot, origin string, hop int) string {
-	comment := sanitizeComment(s.Comment)
+func formatPC11(s *spot.Spot, comment string, origin string, hop int) string {
+	comment = sanitizeComment(comment)
 	return fmt.Sprintf("PC11^%.1f^%s^%s^%s^%s^%s^%s^H%d^",
 		s.Frequency,
 		s.DXCall,

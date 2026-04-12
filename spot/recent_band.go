@@ -1,7 +1,6 @@
 package spot
 
 import (
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +52,9 @@ type RecentBandStore struct {
 	cleanupInterval    time.Duration
 	maxSpottersPerCall int
 
+	statsMu sync.RWMutex
+	active  activeBandCallCounter
+
 	cleanupMu sync.Mutex
 	quit      chan struct{}
 }
@@ -100,11 +102,6 @@ func NewRecentBandStoreWithOptions(opts RecentBandOptions) *RecentBandStore {
 		perShardMax:        perShard,
 		cleanupInterval:    cleanup,
 		maxSpottersPerCall: maxSpotters,
-	}
-	for i := range store.shards {
-		store.shards[i] = recentBandShard{
-			entries: make(map[recentBandKey]*recentBandEntry, perShard),
-		}
 	}
 	return store
 }
@@ -154,7 +151,15 @@ func (s *RecentBandStore) Record(call, band, mode, spotter string, seenAt time.T
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
+	if shard.entries == nil {
+		capHint := 16
+		if s.perShardMax > 0 && s.perShardMax < capHint {
+			capHint = s.perShardMax
+		}
+		shard.entries = make(map[recentBandKey]*recentBandEntry, capHint)
+	}
 	entry := shard.entries[key]
+	wasActive := recentBandEntryActive(entry)
 	if entry == nil {
 		if len(shard.entries) >= s.perShardMax {
 			s.evictOneEntryLocked(shard, cutoff)
@@ -178,8 +183,15 @@ func (s *RecentBandStore) Record(call, band, mode, spotter string, seenAt time.T
 	if len(entry.spotters) > s.maxSpottersPerCall {
 		s.trimSpottersLocked(entry)
 	}
-	if len(entry.spotters) == 0 {
+	isActive := recentBandEntryActive(entry)
+	if !wasActive && isActive {
+		s.noteEntryActivation(key)
+	}
+	if !isActive {
 		delete(shard.entries, key)
+		if wasActive {
+			s.noteEntryDeactivation(key)
+		}
 	}
 }
 
@@ -219,75 +231,33 @@ func (s *RecentBandStore) RecentSupportCount(call, band, mode string, now time.T
 	}
 	s.pruneEntryLocked(entry, cutoff)
 	if len(entry.spotters) == 0 {
-		delete(shard.entries, key)
+		s.deleteEntryLocked(shard, key)
 		return 0
 	}
 	return len(entry.spotters)
 }
 
-// ActiveCallCount returns the number of distinct calls with non-stale recent
-// support records across all bands/modes.
-func (s *RecentBandStore) ActiveCallCount(now time.Time) int {
+// ActiveCallCount returns the maintained distinct-call snapshot across all
+// bands/modes. Read-side queries are intentionally side-effect free; freshness
+// advances on writes and cleanup passes.
+func (s *RecentBandStore) ActiveCallCount(_ time.Time) int {
 	if s == nil || s.window <= 0 {
 		return 0
 	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-	cutoff := now.Add(-s.window)
-	calls := make(map[string]struct{})
-	for i := range s.shards {
-		shard := &s.shards[i]
-		shard.mu.Lock()
-		for key, entry := range shard.entries {
-			s.pruneEntryLocked(entry, cutoff)
-			if len(entry.spotters) == 0 {
-				delete(shard.entries, key)
-				continue
-			}
-			calls[key.call] = struct{}{}
-		}
-		shard.mu.Unlock()
-	}
-	return len(calls)
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	return s.active.Total()
 }
 
-// ActiveCallCountsByBand returns active distinct-call counts for each band.
-// A call is counted once per band even when it appears in multiple modes.
-func (s *RecentBandStore) ActiveCallCountsByBand(now time.Time) map[string]int {
+// ActiveCallCountsByBand returns the maintained distinct-call snapshot for each
+// band. A call is counted once per band even when it appears in multiple modes.
+func (s *RecentBandStore) ActiveCallCountsByBand(_ time.Time) map[string]int {
 	if s == nil || s.window <= 0 {
 		return nil
 	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-	cutoff := now.Add(-s.window)
-	byBand := make(map[string]map[string]struct{})
-	for i := range s.shards {
-		shard := &s.shards[i]
-		shard.mu.Lock()
-		for key, entry := range shard.entries {
-			s.pruneEntryLocked(entry, cutoff)
-			if len(entry.spotters) == 0 {
-				delete(shard.entries, key)
-				continue
-			}
-			if byBand[key.band] == nil {
-				byBand[key.band] = make(map[string]struct{})
-			}
-			byBand[key.band][key.call] = struct{}{}
-		}
-		shard.mu.Unlock()
-	}
-	out := make(map[string]int, len(byBand))
-	for band, calls := range byBand {
-		out[band] = len(calls)
-	}
-	return out
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	return s.active.CountsByBand()
 }
 
 func (s *RecentBandStore) cleanup(now time.Time) {
@@ -301,7 +271,7 @@ func (s *RecentBandStore) cleanup(now time.Time) {
 		for key, entry := range shard.entries {
 			s.pruneEntryLocked(entry, cutoff)
 			if len(entry.spotters) == 0 {
-				delete(shard.entries, key)
+				s.deleteEntryLocked(shard, key)
 			}
 		}
 		for len(shard.entries) > s.perShardMax {
@@ -347,7 +317,7 @@ func (s *RecentBandStore) evictOneEntryLocked(shard *recentBandShard, cutoff tim
 	for key, entry := range shard.entries {
 		s.pruneEntryLocked(entry, cutoff)
 		if len(entry.spotters) == 0 {
-			delete(shard.entries, key)
+			s.deleteEntryLocked(shard, key)
 		}
 	}
 	if len(shard.entries) < s.perShardMax {
@@ -359,14 +329,14 @@ func (s *RecentBandStore) evictOneEntryLocked(shard *recentBandShard, cutoff tim
 	victimSet := false
 	var oldest time.Time
 	for key, entry := range shard.entries {
-		if !victimSet || entry.lastSeen.Before(oldest) {
+		if !victimSet || entry.lastSeen.Before(oldest) || (entry.lastSeen.Equal(oldest) && recentBandKeyLess(key, victim)) {
 			victim = key
 			oldest = entry.lastSeen
 			victimSet = true
 		}
 	}
 	if victimSet {
-		delete(shard.entries, victim)
+		s.deleteEntryLocked(shard, victim)
 	}
 }
 
@@ -392,31 +362,34 @@ func (s *RecentBandStore) trimSpottersLocked(entry *recentBandEntry) {
 	if entry == nil || len(entry.spotters) <= s.maxSpottersPerCall {
 		return
 	}
-	type spotterSeen struct {
-		spotter string
-		seenAt  time.Time
+	for len(entry.spotters) > s.maxSpottersPerCall {
+		spotter, _, ok := oldestRecentBandSpotter(entry)
+		if !ok {
+			break
+		}
+		delete(entry.spotters, spotter)
 	}
-	all := make([]spotterSeen, 0, len(entry.spotters))
+}
+
+// oldestRecentBandSpotter returns the deterministic overflow victim for one
+// recent-band entry. Equal timestamps break lexically on spotter.
+func oldestRecentBandSpotter(entry *recentBandEntry) (string, time.Time, bool) {
+	if entry == nil || len(entry.spotters) == 0 {
+		return "", time.Time{}, false
+	}
+	var (
+		victimKey string
+		victimAt  time.Time
+		set       bool
+	)
 	for spotter, seenAt := range entry.spotters {
-		all = append(all, spotterSeen{spotter: spotter, seenAt: seenAt})
-	}
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].seenAt.Equal(all[j].seenAt) {
-			return all[i].spotter < all[j].spotter
-		}
-		return all[i].seenAt.Before(all[j].seenAt)
-	})
-	remove := len(all) - s.maxSpottersPerCall
-	for i := 0; i < remove; i++ {
-		delete(entry.spotters, all[i].spotter)
-	}
-	var latest time.Time
-	for _, seenAt := range entry.spotters {
-		if seenAt.After(latest) {
-			latest = seenAt
+		if !set || seenAt.Before(victimAt) || (seenAt.Equal(victimAt) && spotter < victimKey) {
+			victimKey = spotter
+			victimAt = seenAt
+			set = true
 		}
 	}
-	entry.lastSeen = latest
+	return victimKey, victimAt, set
 }
 
 func normalizeRecentBandCall(call string) string {
@@ -451,4 +424,42 @@ func hashRecentBandKey(key recentBandKey) uint64 {
 	h *= prime64
 	mix(strings.ToUpper(key.mode))
 	return h
+}
+
+func (s *RecentBandStore) deleteEntryLocked(shard *recentBandShard, key recentBandKey) {
+	if shard == nil || shard.entries == nil {
+		return
+	}
+	entry := shard.entries[key]
+	if entry == nil {
+		return
+	}
+	s.noteEntryDeactivation(key)
+	delete(shard.entries, key)
+}
+
+func (s *RecentBandStore) noteEntryActivation(key recentBandKey) {
+	s.statsMu.Lock()
+	s.active.Add(key.call, key.band)
+	s.statsMu.Unlock()
+}
+
+func (s *RecentBandStore) noteEntryDeactivation(key recentBandKey) {
+	s.statsMu.Lock()
+	s.active.Remove(key.call, key.band)
+	s.statsMu.Unlock()
+}
+
+func recentBandEntryActive(entry *recentBandEntry) bool {
+	return entry != nil && len(entry.spotters) > 0
+}
+
+func recentBandKeyLess(a, b recentBandKey) bool {
+	if a.call != b.call {
+		return a.call < b.call
+	}
+	if a.band != b.band {
+		return a.band < b.band
+	}
+	return a.mode < b.mode
 }

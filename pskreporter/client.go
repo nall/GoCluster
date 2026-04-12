@@ -567,7 +567,7 @@ func (c *Client) handlePayload(payload []byte) {
 	var pskrMsg PSKRMessage
 	if err := jsonFast.Unmarshal(payload, &pskrMsg); err != nil {
 		if errCompat := jsonCompat.Unmarshal(payload, &pskrMsg); errCompat != nil {
-			c.lastParseErrAt.Store(time.Now().UTC().UnixNano())
+			c.lastParseErrAt.Store(time.Now().UnixNano())
 			if count, ok := c.parseErrorCounter.Inc(); ok {
 				log.Printf("PSKReporter: Failed to parse message (total=%d): %v", count, errCompat)
 			}
@@ -591,8 +591,9 @@ func (c *Client) handlePayload(payload []byte) {
 	if s == nil {
 		return
 	}
+	nowUnixNano := time.Now().UnixNano()
 	if pathOnly {
-		c.lastSpotAt.Store(time.Now().UTC().UnixNano())
+		c.lastSpotAt.Store(nowUnixNano)
 		select {
 		case c.pathOnlyChan <- s:
 		default:
@@ -602,7 +603,7 @@ func (c *Client) handlePayload(payload []byte) {
 		}
 		return
 	}
-	c.lastSpotAt.Store(time.Now().UTC().UnixNano())
+	c.lastSpotAt.Store(nowUnixNano)
 	select {
 	case c.spotChan <- s:
 	default:
@@ -630,8 +631,8 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 		return nil
 	}
 
-	norm := c.normalizeMessage(msg, modeInfo)
-	if norm == nil {
+	norm, ok := c.normalizeMessage(msg, modeInfo)
+	if !ok {
 		return nil
 	}
 
@@ -723,12 +724,12 @@ func isCWorRTTY(mode string) bool {
 // Key aspects: Uses pre-parsed mode info, validates frequency, normalizes callsigns, uppercases grids.
 // Upstream: convertToSpot.
 // Downstream: spot.NormalizeCallsign, decorateSpotterCall.
-func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *normalizedPSK {
+func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) (normalizedPSK, bool) {
 	if msg == nil {
-		return nil
+		return normalizedPSK{}, false
 	}
 	if modeInfo.canonical == "" || msg.SenderCall == "" || msg.ReceiverCall == "" {
-		return nil
+		return normalizedPSK{}, false
 	}
 	modeUpper := modeInfo.canonical
 	displayMode := modeInfo.variant
@@ -737,7 +738,7 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *norma
 	}
 	freqKHz := float64(msg.Frequency) / 1000.0
 	if freqKHz <= 0 {
-		return nil
+		return normalizedPSK{}, false
 	}
 	observedFreqKHz := freqKHz
 	ftCanonicalized := false
@@ -749,7 +750,7 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *norma
 	deCall := c.decorateSpotterCall(msg.ReceiverCall)
 	dxGrid := strutil.NormalizeUpper(msg.SenderLocator)
 	deGrid := strutil.NormalizeUpper(msg.ReceiverLocator)
-	return &normalizedPSK{
+	return normalizedPSK{
 		modeUpper:       modeUpper,
 		displayMode:     displayMode,
 		dxCall:          dxCall,
@@ -759,7 +760,7 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *norma
 		freqKHz:         freqKHz,
 		observedFreqKHz: observedFreqKHz,
 		ftCanonicalized: ftCanonicalized,
-	}
+	}, true
 }
 
 // Purpose: Normalize spotter callsign and optionally append an SSID suffix.
@@ -767,33 +768,29 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) *norma
 // Upstream: normalizeMessage.
 // Downstream: spot.NormalizeCallsign, spot.CallCache.
 func (c *Client) decorateSpotterCall(raw string) string {
-	cacheKey := "0|" + raw
-	if c.appendSSID {
-		cacheKey = "1|" + raw
-	}
-	if cached, ok := c.spotterCache.Get(cacheKey); ok {
+	if cached, ok := c.spotterCache.Get(raw); ok {
 		return cached
 	}
 	normalized := spot.NormalizeCallsign(raw)
 	if !c.appendSSID {
-		c.spotterCache.Add(cacheKey, normalized)
+		c.spotterCache.Add(raw, normalized)
 		return normalized
 	}
 	if normalized == "" {
-		c.spotterCache.Add(cacheKey, normalized)
+		c.spotterCache.Add(raw, normalized)
 		return normalized
 	}
 	if strings.Contains(normalized, "-") {
-		c.spotterCache.Add(cacheKey, normalized)
+		c.spotterCache.Add(raw, normalized)
 		return normalized
 	}
 	// Appending "-#" increases length by 2. Skip if it would violate validation limits.
 	if len(normalized)+2 > spot.MaxCallsignLength() {
-		c.spotterCache.Add(cacheKey, normalized)
+		c.spotterCache.Add(raw, normalized)
 		return normalized
 	}
 	normalized = normalized + "-#"
-	c.spotterCache.Add(cacheKey, normalized)
+	c.spotterCache.Add(raw, normalized)
 	return normalized
 }
 

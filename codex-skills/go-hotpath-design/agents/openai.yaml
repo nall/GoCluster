@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Hot-Path Design"
+  short_description: "Design Go hot-path fixes from real runtime shape"
+  default_prompt: "Inspect the measured Go hot path, identify its true runtime shape, choose the algorithm that fits that shape, and produce a validation-driven optimization plan."

@@ -55,3 +55,54 @@ func BenchmarkSignalResolverEvaluate(b *testing.B) {
 		resolver.evaluateKey(st, now)
 	}
 }
+
+func BenchmarkSignalResolverEvaluateConfusionTie(b *testing.B) {
+	model := mustBuildResolverConfusionModelForTieBreak(b)
+	resolver := NewSignalResolver(SignalResolverConfig{
+		QueueSize:                 64,
+		MaxActiveKeys:             32,
+		MaxCandidatesPerKey:       8,
+		MaxReportersPerCand:       32,
+		InactiveTTL:               time.Minute,
+		EvalMinInterval:           5 * time.Millisecond,
+		SweepInterval:             5 * time.Millisecond,
+		HysteresisWindows:         1,
+		FreqGuardMinSeparationKHz: 0.1,
+		FreqGuardRunnerUpRatio:    0.6,
+		MaxEditDistance:           3,
+		ConfusionModel:            model,
+		ConfusionWeight:           100.0,
+	})
+	key := NewResolverSignalKey(7010.0, "40m", "CW", 500)
+	now := time.Now().UTC()
+	st := &resolverKeyState{
+		key:           key,
+		recencyWindow: 30 * time.Second,
+		candidates:    make(map[string]*resolverCandidate, 2),
+		reporterRefs:  make(map[string]resolverReporterRef, 2),
+		lastSeen:      now,
+	}
+	for idx, call := range []string{"AA1AA", "ZZ1ZZ"} {
+		reporter := fmt.Sprintf("K1%03d", idx)
+		st.reporterRefs[reporter] = resolverReporterRef{
+			refCount:    1,
+			weightMilli: resolverReliabilityScale,
+		}
+		st.candidates[call] = &resolverCandidate{
+			lastSeen:    now,
+			lastReport:  10,
+			lastFreqKHz: 7010.0,
+			reporters: map[string]time.Time{
+				reporter: now,
+			},
+			identity:  normalizeCorrectionCallIdentity(call),
+			callRunes: []rune(call),
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resolver.evaluateKey(st, now)
+	}
+}

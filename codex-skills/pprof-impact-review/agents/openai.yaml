@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pprof Impact Review"
+  short_description: "Compare local pprof bundles across optimization rounds"
+  default_prompt: "Review the relevant local pprof bundles, classify them as cold or warm, extract the key symbol deltas, and decide whether the optimization was a net win, regression, or mixed result."

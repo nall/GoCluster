@@ -56,7 +56,7 @@ type ftConfidenceItem struct {
 	seq uint64
 }
 
-type ftConfidenceHeap []*ftConfidenceItem
+type ftConfidenceHeap []ftConfidenceItem
 
 func (h ftConfidenceHeap) Len() int { return len(h) }
 
@@ -72,7 +72,7 @@ func (h ftConfidenceHeap) Swap(i, j int) {
 }
 
 func (h *ftConfidenceHeap) Push(x any) {
-	item, _ := x.(*ftConfidenceItem)
+	item, _ := x.(ftConfidenceItem)
 	*h = append(*h, item)
 }
 
@@ -87,25 +87,18 @@ func (h *ftConfidenceHeap) Pop() any {
 	return item
 }
 
-func popFTConfidenceDue(h *ftConfidenceHeap, now time.Time, force bool) []*ftConfidenceItem {
+func popFTConfidenceDue(h *ftConfidenceHeap, now time.Time, force bool, scratch []ftConfidenceItem) []ftConfidenceItem {
 	if h == nil || h.Len() == 0 {
 		return nil
 	}
-	out := make([]*ftConfidenceItem, 0, 8)
+	out := scratch[:0]
 	for h.Len() > 0 {
 		head := (*h)[0]
-		if head == nil {
-			heap.Pop(h)
-			continue
-		}
 		if !force && head.due.After(now) {
 			break
 		}
 		itemAny := heap.Pop(h)
-		item, _ := itemAny.(*ftConfidenceItem)
-		if item == nil {
-			continue
-		}
+		item, _ := itemAny.(ftConfidenceItem)
 		out = append(out, item)
 	}
 	return out
@@ -124,6 +117,7 @@ type ftConfidenceController struct {
 	tracker          *stats.Tracker
 	pending          map[ftConfidenceKey]*ftConfidencePendingGroup
 	queue            ftConfidenceHeap
+	dueScratch       []ftConfidenceItem
 	seq              uint64
 }
 
@@ -227,6 +221,9 @@ func (c *ftConfidenceController) Observe(now time.Time, ctx *outputSpotContext) 
 		}
 		group.contexts = append(group.contexts, ctx)
 		if spotter != "" {
+			if group.spotters == nil {
+				group.spotters = make(map[string]struct{}, 2)
+			}
 			group.spotters[spotter] = struct{}{}
 		}
 		group.lastSeen = now
@@ -252,10 +249,11 @@ func (c *ftConfidenceController) Observe(now time.Time, ctx *outputSpotContext) 
 		hardDeadline: now.Add(timing.hardCap),
 		due:          due,
 		seq:          c.seq,
-		contexts:     []*outputSpotContext{ctx},
-		spotters:     make(map[string]struct{}, 2),
+		contexts:     make([]*outputSpotContext, 1, 4),
 	}
+	group.contexts[0] = ctx
 	if spotter != "" {
+		group.spotters = make(map[string]struct{}, 2)
 		group.spotters[spotter] = struct{}{}
 	}
 	c.pending[key] = group
@@ -275,15 +273,13 @@ func (c *ftConfidenceController) Drain(now time.Time, force bool) []*ftConfidenc
 	} else {
 		now = now.UTC()
 	}
-	items := popFTConfidenceDue(&c.queue, now, force)
+	items := popFTConfidenceDue(&c.queue, now, force, c.dueScratch)
+	c.dueScratch = items[:0]
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]*ftConfidencePendingGroup, 0, len(items))
 	for _, item := range items {
-		if item == nil {
-			continue
-		}
 		group := c.pending[item.key]
 		if group == nil {
 			continue
@@ -309,10 +305,6 @@ func (c *ftConfidenceController) NextDue() (time.Time, bool) {
 	}
 	for c.queue.Len() > 0 {
 		head := c.queue[0]
-		if head == nil {
-			heap.Pop(&c.queue)
-			continue
-		}
 		group := c.pending[head.key]
 		if group == nil || head.seq != group.seq || !head.due.Equal(group.due) {
 			heap.Pop(&c.queue)
@@ -380,7 +372,7 @@ func (c *ftConfidenceController) pushDueItem(group *ftConfidencePendingGroup) {
 	if c == nil || group == nil {
 		return
 	}
-	heap.Push(&c.queue, &ftConfidenceItem{
+	heap.Push(&c.queue, ftConfidenceItem{
 		key: group.key,
 		due: group.due,
 		seq: group.seq,

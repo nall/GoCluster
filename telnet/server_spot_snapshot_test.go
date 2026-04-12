@@ -48,6 +48,25 @@ func TestBroadcastSpotSnapshotsPayload(t *testing.T) {
 	}
 }
 
+func TestBroadcastSpotOwnedReusesSnapshot(t *testing.T) {
+	srv := NewServer(ServerOptions{BroadcastQueue: 1}, nil)
+	snapshot := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8").SnapshotForAsync()
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+
+	srv.BroadcastSpotOwned(snapshot, true, true, true)
+
+	select {
+	case payload := <-srv.broadcast:
+		if payload.spot != snapshot {
+			t.Fatalf("expected owned broadcast to reuse snapshot pointer")
+		}
+	default:
+		t.Fatalf("expected broadcast payload")
+	}
+}
+
 func TestDeliverSelfSpotSnapshotsPayload(t *testing.T) {
 	srv := NewServer(ServerOptions{ClientBuffer: 1}, nil)
 	f := filter.NewFilter()
@@ -93,6 +112,36 @@ func TestDeliverSelfSpotSnapshotsPayload(t *testing.T) {
 		}
 		if env.spot.DEMetadata.Grid != "FN31" {
 			t.Fatalf("expected self-delivery grid to remain stable, got %q", env.spot.DEMetadata.Grid)
+		}
+	default:
+		t.Fatalf("expected self-delivery payload")
+	}
+}
+
+func TestDeliverSelfSpotOwnedReusesSnapshot(t *testing.T) {
+	srv := NewServer(ServerOptions{ClientBuffer: 1}, nil)
+	f := filter.NewFilter()
+	f.SetSelfEnabled(true)
+	client := &Client{
+		server:   srv,
+		callsign: "K1ABC",
+		filter:   f,
+		spotChan: make(chan *spotEnvelope, 1),
+		done:     make(chan struct{}),
+	}
+	srv.clients["K1ABC"] = client
+
+	snapshot := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8").SnapshotForAsync()
+	if snapshot == nil {
+		t.Fatal("expected snapshot")
+	}
+
+	srv.DeliverSelfSpotOwned("K1ABC", snapshot)
+
+	select {
+	case env := <-client.spotChan:
+		if env.spot != snapshot {
+			t.Fatalf("expected owned self-delivery to reuse snapshot pointer")
 		}
 	default:
 		t.Fatalf("expected self-delivery payload")

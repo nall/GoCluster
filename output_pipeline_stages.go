@@ -323,9 +323,6 @@ func (p *outputPipeline) finalizeSpotForMetrics(ctx *outputSpotContext) bool {
 		s.DECallStripped = stripped
 		s.DECallNormStripped = stripped
 	}
-	if p.buf != nil && shouldBufferSpot(s) {
-		p.buf.Add(s)
-	}
 	return true
 }
 

@@ -41,3 +41,27 @@ func TestAddStoresIndependentSnapshot(t *testing.T) {
 		t.Fatalf("expected buffered normalized grid to remain stable, got %q", got.DEGridNorm)
 	}
 }
+
+func TestAddOwnedReusesSnapshot(t *testing.T) {
+	rb := NewRingBuffer(4)
+	snapshot := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8").SnapshotForAsync()
+	if snapshot == nil {
+		t.Fatal("expected owned snapshot")
+	}
+
+	id := rb.AddOwned(snapshot)
+	if id == 0 {
+		t.Fatal("expected monotonic ID")
+	}
+
+	recent := rb.GetRecent(1)
+	if len(recent) != 1 {
+		t.Fatalf("expected one recent spot, got %d", len(recent))
+	}
+	if recent[0] != snapshot {
+		t.Fatalf("expected AddOwned to publish the provided snapshot")
+	}
+	if recent[0].ID != id {
+		t.Fatalf("expected published snapshot ID %d, got %d", id, recent[0].ID)
+	}
+}

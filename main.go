@@ -926,6 +926,9 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		rbnFTLive := rbnDigitalClient != nil && rbnDigitalClient.HealthSnapshot().Connected
 		rbnLive := rbnFeedsLive(rbnClient, rbnDigitalClient)
 		pskLive := pskReporterLive(pskSnap, now)
+		if pathPredictor != nil {
+			pathPredictor.RefreshStatsSnapshot(now)
+		}
 		peerSessions := 0
 		var peerSSIDs []string
 		if peerManager != nil {
@@ -1345,10 +1348,7 @@ func cloneSpotForTelnetStabilizer(s *spot.Spot) *spot.Spot {
 	if s == nil {
 		return nil
 	}
-	clone := s.CloneWithComment(s.Comment)
-	clone.InvalidateMetadataCache()
-	clone.EnsureNormalized()
-	return clone
+	return s.Clone()
 }
 
 type stabilizerDelayDecision = correctionflow.StabilizerDelayDecision
@@ -1806,25 +1806,25 @@ func lookupGridUnified(call string, gridLookupSync func(string) (string, bool, b
 	return "", false, false
 }
 
-// cloneSpotForPeerPublish ensures manual spots carry an inferred mode to peers
-// even when the user omitted a comment. Peers only see the comment field in
-// PC61/PC11 frames, so we fall back to the inferred mode when the comment is
-// blank. Other sources and spots with comments are passed through as-is.
-func cloneSpotForPeerPublish(src *spot.Spot) *spot.Spot {
+// peerPublishComment ensures manual spots carry an inferred mode to peers even
+// when the user omitted a comment. Peers only see the comment field in PC61/PC11
+// frames, so we fall back to the inferred mode when the comment is blank.
+func peerPublishComment(src *spot.Spot) string {
 	if src == nil {
-		return nil
+		return ""
 	}
+	comment := strings.TrimSpace(src.Comment)
 	if src.SourceType != spot.SourceManual {
-		return src
+		return comment
 	}
-	if strings.TrimSpace(src.Comment) != "" {
-		return src
+	if comment != "" {
+		return comment
 	}
 	mode := strings.TrimSpace(src.Mode)
 	if mode == "" {
-		return src
+		return comment
 	}
-	return src.CloneWithComment(mode)
+	return mode
 }
 
 // applyLicenseGate runs the FCC license check after all corrections and returns true when the spot should be dropped.

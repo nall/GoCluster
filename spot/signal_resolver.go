@@ -185,7 +185,8 @@ type SignalResolver struct {
 	stopOnce  sync.Once
 	started   atomic.Bool
 
-	snapshots sync.Map // ResolverSignalKey -> ResolverSnapshot
+	snapshots          sync.Map // ResolverSignalKey -> *resolverSnapshotCell
+	confusionWorkspace confusionAlignmentWorkspace
 
 	activeKeys atomic.Int64
 
@@ -209,6 +210,8 @@ type resolverCandidate struct {
 	lastReport  int
 	lastFreqKHz float64
 	reporters   map[string]time.Time
+	identity    correctionCallIdentity
+	callRunes   []rune
 }
 
 type resolverKeyState struct {
@@ -228,6 +231,10 @@ type resolverKeyState struct {
 	stableWinner  string
 	pendingWinner string
 	pendingWins   int
+
+	rankedScratch           []rankedResolverCandidate
+	candidateRanksScratch   []ResolverCandidateSupport
+	publishedCandidateRanks []ResolverCandidateSupport
 }
 
 type rankedResolverCandidate struct {
@@ -239,11 +246,17 @@ type rankedResolverCandidate struct {
 	lastReport           int
 	lastFreqKHz          float64
 	reporters            map[string]time.Time
+	identity             correctionCallIdentity
+	callRunes            []rune
 }
 
 type resolverReporterRef struct {
 	refCount    int
 	weightMilli int
+}
+
+type resolverSnapshotCell struct {
+	snapshot atomic.Pointer[ResolverSnapshot]
 }
 
 // NewSignalResolver builds a resolver. Call Start to activate the owner goroutine.
@@ -306,8 +319,10 @@ func (r *SignalResolver) Lookup(key ResolverSignalKey) (ResolverSnapshot, bool) 
 		return ResolverSnapshot{}, false
 	}
 	if value, ok := r.snapshots.Load(key); ok {
-		if snap, valid := value.(ResolverSnapshot); valid {
-			return snap, true
+		if cell, valid := value.(*resolverSnapshotCell); valid && cell != nil {
+			if snap := cell.snapshot.Load(); snap != nil {
+				return *snap, true
+			}
 		}
 	}
 	return ResolverSnapshot{}, false
@@ -337,8 +352,12 @@ func (r *SignalResolver) MetricsSnapshot() SignalResolverMetrics {
 		HighWaterReporters:    r.highWaterReporters.Load(),
 	}
 	r.snapshots.Range(func(_, value any) bool {
-		snap, ok := value.(ResolverSnapshot)
-		if !ok {
+		cell, ok := value.(*resolverSnapshotCell)
+		if !ok || cell == nil {
+			return true
+		}
+		snap := cell.snapshot.Load()
+		if snap == nil {
 			return true
 		}
 		switch snap.State {
@@ -439,6 +458,8 @@ func (r *SignalResolver) applyEvidence(states map[ResolverSignalKey]*resolverKey
 		}
 		candidate = &resolverCandidate{
 			reporters: make(map[string]time.Time, r.cfg.MaxReportersPerCand),
+			identity:  normalizeCorrectionCallIdentity(ev.DXCall),
+			callRunes: []rune(ev.DXCall),
 		}
 		st.candidates[ev.DXCall] = candidate
 	}
@@ -599,7 +620,7 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 	r.pruneKeyState(st, now)
 	st.lastEvalAt = now
 
-	ranked := make([]rankedResolverCandidate, 0, len(st.candidates))
+	ranked := st.rankedScratch[:0]
 	for call, candidate := range st.candidates {
 		if candidate == nil {
 			continue
@@ -616,6 +637,8 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 			lastReport:           candidate.lastReport,
 			lastFreqKHz:          candidate.lastFreqKHz,
 			reporters:            candidate.reporters,
+			identity:             candidate.identity,
+			callRunes:            candidate.callRunes,
 		}
 		ranked = append(ranked, entry)
 	}
@@ -629,14 +652,15 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 		st.stableWinner = ""
 		st.pendingWinner = ""
 		st.pendingWins = 0
-		r.snapshots.Store(st.key, snapshot)
+		st.rankedScratch = ranked[:0]
+		r.publishSnapshot(st.key, snapshot)
 		return
 	}
 
 	sort.Slice(ranked, func(i, j int) bool {
 		return resolverCandidateRanksAhead(ranked[i], ranked[j])
 	})
-	applyResolverConfusionTieBreak(ranked, st.key.Mode, r.cfg.ConfusionModel, r.cfg.ConfusionWeight)
+	applyResolverConfusionTieBreak(ranked, st.key.Mode, r.cfg.ConfusionModel, r.cfg.ConfusionWeight, &r.confusionWorkspace)
 
 	top := ranked[0]
 	hasRunner := len(ranked) > 1
@@ -667,19 +691,25 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 			confusionTieMargin = top.confusionScore - runner.confusionScore
 		}
 	}
-	candidateRanks := make([]ResolverCandidateSupport, 0, len(ranked))
+	candidateRanksScratch := st.candidateRanksScratch[:0]
 	for _, candidate := range ranked {
-		candidateRanks = append(candidateRanks, ResolverCandidateSupport{
+		candidateRanksScratch = append(candidateRanksScratch, ResolverCandidateSupport{
 			Call:                 candidate.call,
 			Support:              candidate.support,
 			WeightedSupportMilli: candidate.weightedSupportMilli,
 		})
 	}
+	candidateRanks := st.publishedCandidateRanks
+	if !resolverCandidateSupportSlicesEqual(candidateRanks, candidateRanksScratch) {
+		candidateRanks = append(make([]ResolverCandidateSupport, 0, len(candidateRanksScratch)), candidateRanksScratch...)
+		st.publishedCandidateRanks = candidateRanks
+	}
+	st.candidateRanksScratch = candidateRanksScratch[:0]
 
 	split := false
 	if hasRunner {
-		winnerIdentity := normalizeCorrectionCallIdentity(top.call)
-		runnerIdentity := normalizeCorrectionCallIdentity(runner.call)
+		winnerIdentity := top.identity
+		runnerIdentity := runner.identity
 		related := false
 		if _, ok := detectCorrectionFamilyByIdentity(winnerIdentity, runnerIdentity, r.cfg.FamilyPolicy); ok {
 			related = true
@@ -714,7 +744,8 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 		snapshot.RunnerWeightedSupportMilli = runner.weightedSupportMilli
 		snapshot.TotalWeightedSupportMilli = totalWeightedSupportMilli
 		snapshot.CandidateRanks = candidateRanks
-		r.snapshots.Store(st.key, snapshot)
+		st.rankedScratch = ranked[:0]
+		r.publishSnapshot(st.key, snapshot)
 		return
 	}
 
@@ -769,7 +800,35 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 	snapshot.RunnerWeightedSupportMilli = runnerWeightedSupportMilli
 	snapshot.TotalWeightedSupportMilli = totalWeightedSupportMilli
 	snapshot.CandidateRanks = candidateRanks
-	r.snapshots.Store(st.key, snapshot)
+	st.rankedScratch = ranked[:0]
+	r.publishSnapshot(st.key, snapshot)
+}
+
+func (r *SignalResolver) publishSnapshot(key ResolverSignalKey, snapshot ResolverSnapshot) {
+	if r == nil {
+		return
+	}
+	cell := r.snapshotCell(key)
+	published := new(ResolverSnapshot)
+	*published = snapshot
+	cell.snapshot.Store(published)
+}
+
+func (r *SignalResolver) snapshotCell(key ResolverSignalKey) *resolverSnapshotCell {
+	if r == nil {
+		return nil
+	}
+	if value, ok := r.snapshots.Load(key); ok {
+		if cell, valid := value.(*resolverSnapshotCell); valid && cell != nil {
+			return cell
+		}
+	}
+	cell := &resolverSnapshotCell{}
+	actual, _ := r.snapshots.LoadOrStore(key, cell)
+	if existing, ok := actual.(*resolverSnapshotCell); ok && existing != nil {
+		return existing
+	}
+	return cell
 }
 
 func normalizeSignalResolverConfig(cfg SignalResolverConfig) SignalResolverConfig {
@@ -851,7 +910,7 @@ func normalizeResolverEvidence(e ResolverEvidence) (ResolverEvidence, bool) {
 	}, true
 }
 
-func applyResolverConfusionTieBreak(ranked []rankedResolverCandidate, mode string, model *ConfusionModel, weight float64) {
+func applyResolverConfusionTieBreak(ranked []rankedResolverCandidate, mode string, model *ConfusionModel, weight float64, workspace *confusionAlignmentWorkspace) {
 	if len(ranked) < 2 || model == nil || weight <= 0 {
 		return
 	}
@@ -869,7 +928,7 @@ func applyResolverConfusionTieBreak(ranked []rankedResolverCandidate, mode strin
 	}
 	cohort := ranked[:tieEnd]
 	for i := range cohort {
-		score := resolverConfusionAggregateScore(cohort[i], cohort, mode, model)
+		score := resolverConfusionAggregateScore(cohort[i], cohort, mode, model, workspace)
 		if math.IsNaN(score) || math.IsInf(score, 0) {
 			score = 0
 		}
@@ -893,6 +952,7 @@ func resolverConfusionAggregateScore(
 	cohort []rankedResolverCandidate,
 	mode string,
 	model *ConfusionModel,
+	workspace *confusionAlignmentWorkspace,
 ) float64 {
 	if model == nil || len(cohort) <= 1 {
 		return 0
@@ -906,7 +966,7 @@ func resolverConfusionAggregateScore(
 		if weight <= 0 {
 			weight = 1
 		}
-		score += model.ScoreCandidate(observed.call, candidate.call, mode, float64(observed.lastReport)) * weight
+		score += model.scorePreparedCandidate(observed.callRunes, candidate.callRunes, mode, float64(observed.lastReport), workspace) * weight
 	}
 	return score
 }
@@ -939,6 +999,18 @@ func totalUniqueResolverReporters(candidates []rankedResolverCandidate) int {
 	return len(seen)
 }
 
+func resolverCandidateSupportSlicesEqual(existing []ResolverCandidateSupport, ranked []ResolverCandidateSupport) bool {
+	if len(existing) != len(ranked) {
+		return false
+	}
+	for i := range existing {
+		if existing[i] != ranked[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func resolverCandidateRanksAhead(left, right rankedResolverCandidate) bool {
 	if left.weightedSupportMilli != right.weightedSupportMilli {
 		return left.weightedSupportMilli > right.weightedSupportMilli
@@ -954,7 +1026,7 @@ func resolverCandidateRanksAhead(left, right rankedResolverCandidate) bool {
 
 func supportForResolverCall(candidates []rankedResolverCandidate, call string) int {
 	for _, candidate := range candidates {
-		if strings.EqualFold(candidate.call, call) {
+		if candidate.call == call {
 			return candidate.support
 		}
 	}
@@ -963,7 +1035,7 @@ func supportForResolverCall(candidates []rankedResolverCandidate, call string) i
 
 func weightedSupportForResolverCall(candidates []rankedResolverCandidate, call string) int {
 	for _, candidate := range candidates {
-		if strings.EqualFold(candidate.call, call) {
+		if candidate.call == call {
 			return candidate.weightedSupportMilli
 		}
 	}
@@ -976,7 +1048,7 @@ func runnerForResolverCall(candidates []rankedResolverCandidate, winner string) 
 		found  bool
 	)
 	for _, candidate := range candidates {
-		if strings.EqualFold(candidate.call, winner) {
+		if candidate.call == winner {
 			continue
 		}
 		if !found || resolverCandidateRanksAhead(candidate, runner) {
