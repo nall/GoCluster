@@ -6,7 +6,7 @@ archive:
   db_path: "data/archive/pebble"
 
   # Async writer backpressure controls.
-  queue_size: 10000           # Drops newest when full to protect hot path.
+  queue_size: 5000            # Drops newest when full to protect hot path.
   batch_size: 3000            # Max rows per flush.
   batch_interval_ms: 3000     # Max time to wait before flushing even if batch_size not reached.
   busy_timeout_ms: 1000       # Ignored for Pebble (retained for compatibility).
@@ -18,5 +18,5 @@ archive:
   cleanup_interval_seconds: 900    # How often to purge expired rows.
   cleanup_batch_size: 2000         # Max rows per cleanup batch delete.
   cleanup_batch_yield_ms: 50       # Sleep between cleanup batches; 0 disables the yield.
-  retention_ft_seconds: 43200      # FT8/FT4 retention window (12h).
-  retention_default_seconds: 86400 # Other modes retention window (72h).
+  retention_ft_seconds: 21600      # FT8/FT4 retention window (6h).
+  retention_default_seconds: 43200 # Other modes retention window (12h).

@@ -167,11 +167,11 @@ call_correction:
     s_floor_min_unique_h3_cells_exact: 2
     s_floor_min_unique_spotters_family: 5
     s_floor_min_unique_h3_cells_family: 3
-    max_keys: 500000
-    max_spotters_per_key: 64
-    max_db_bytes: 8589934592
+    max_keys: 250000
+    max_spotters_per_key: 32
+    max_db_bytes: 4294967296
     cleanup_interval_seconds: 600
-    block_cache_mb: 64
+    block_cache_mb: 32
     bloom_filter_bits: 10
     memtable_size_mb: 32
     l0_compaction_threshold: 4

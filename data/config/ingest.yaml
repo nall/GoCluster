@@ -43,9 +43,9 @@ pskreporter:
   modes: ["FT8", "FT4", "FT2", "CW", "RTTY", "MSK144", "PSK"]  # Modes to accept after subscription (PSK covers PSK31/63/125 variants)
   path_only_modes: ["WSPR"]           # Modes used for path prediction only (never reach dedup/telnet/archive)
   workers: 8                          # 0 means automatic (uses all CPU cores, minimum 4)
-  spot_channel_size: 50000            # Buffered ingest channel between MQTT and processing
+  spot_channel_size: 25000            # Buffered ingest channel between MQTT and processing
   mqtt_inbound_workers: 8             # 0 means automatic (defaults to workers)
-  mqtt_inbound_queue_depth: 8192      # 0 means automatic (defaults to workers * 256, capped)
+  mqtt_inbound_queue_depth: 4096      # 0 means automatic (defaults to workers * 256, capped)
   mqtt_qos12_enqueue_timeout_ms: 250  # QoS1/2 inbound queue timeout before disconnect (0 = immediate)
   append_spotter_ssid: true           # Append "-#" to receiver calls lacking an SSID for dedup
   max_payload_bytes: 8192             # Drop payloads larger than this many bytes
