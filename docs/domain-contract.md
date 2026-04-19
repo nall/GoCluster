@@ -56,6 +56,10 @@ These rules must be explicit, deterministic, and testable.
 ### Control queue full
 - Disconnect immediately.
 
+### Duplicate bulletins
+- Suppress identical WWV, WCY, and `TO ALL` announcement lines before they enter per-client control queues when the configured telnet bulletin dedupe window is enabled.
+- The bulletin dedupe state must have both a time window and a hard cardinality cap.
+
 ### Prioritization
 - Control messages drain before spots.
 - Control traffic must not be starved by high-volume spot traffic.

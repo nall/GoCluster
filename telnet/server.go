@@ -181,6 +181,7 @@ type Server struct {
 	echoMode              string                                     // Input echo policy ("server", "local", "off")
 	clientBufferSize      int                                        // Per-client spot channel capacity
 	controlQueueSize      int                                        // Per-client control queue capacity
+	bulletinDedupe        *bulletinDedupeCache                       // Bounded duplicate suppression for WWV/WCY/announcements
 	readIdleTimeout       time.Duration                              // Read deadline for logged-in sessions (timeouts do not disconnect)
 	loginTimeout          time.Duration                              // Pre-login timeout before disconnect
 	maxPreloginSessions   int                                        // Hard cap on concurrent unauthenticated sessions
@@ -1700,6 +1701,8 @@ type ServerOptions struct {
 	WorkerQueue              int
 	ClientBuffer             int
 	ControlQueue             int
+	BulletinDedupeWindow     time.Duration
+	BulletinDedupeMaxEntries int
 	BroadcastBatchInterval   time.Duration
 	WriterBatchMaxBytes      int
 	WriterBatchWait          time.Duration
@@ -1782,6 +1785,7 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		keepaliveInterval:     time.Duration(config.KeepaliveSeconds) * time.Second,
 		clientBufferSize:      config.ClientBuffer,
 		controlQueueSize:      config.ControlQueue,
+		bulletinDedupe:        newBulletinDedupeCache(config.BulletinDedupeWindow, config.BulletinDedupeMaxEntries),
 		handshakeMode:         config.HandshakeMode,
 		transport:             config.Transport,
 		useZiutek:             useZiutek,
@@ -2266,9 +2270,29 @@ func (s *Server) broadcastBulletin(kind string, line string, applyFilter bool) {
 	if message == "" {
 		return
 	}
+	recipients := s.bulletinRecipients(kind, applyFilter)
+	if len(recipients) == 0 {
+		return
+	}
+	if s.bulletinDedupe != nil && !s.bulletinDedupe.allow(kind, message, s.now()) {
+		return
+	}
+	for _, client := range recipients {
+		s.enqueueBulletin(client, kind, message)
+	}
+}
+
+func (s *Server) bulletinRecipients(kind string, applyFilter bool) []*Client {
+	if s == nil {
+		return nil
+	}
 	s.clientsMutex.RLock()
 	defer s.clientsMutex.RUnlock()
+	recipients := make([]*Client, 0, len(s.clients))
 	for _, client := range s.clients {
+		if client == nil {
+			continue
+		}
 		if applyFilter {
 			client.filterMu.RLock()
 			allowed := client.filter.AllowsBulletin(kind)
@@ -2277,8 +2301,9 @@ func (s *Server) broadcastBulletin(kind string, line string, applyFilter bool) {
 				continue
 			}
 		}
-		s.enqueueBulletin(client, kind, message)
+		recipients = append(recipients, client)
 	}
+	return recipients
 }
 
 func (s *Server) enqueueBulletin(client *Client, kind, message string) {

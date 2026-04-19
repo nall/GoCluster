@@ -58,6 +58,20 @@ The shipped policy windows are:
 
 This is why `SLOW` suppresses more repeats from one region than `FAST` or `MED`: CQ zone is broader than a 2-character grid square.
 
+## Bulletin Dedupe
+
+WWV, WCY, and `TO ALL` announcement lines are control traffic, not spots, so they do not pass through the spot dedupe pipeline.
+
+The telnet server applies a separate all-source duplicate guard before those lines enter per-client control queues:
+
+- `telnet.bulletin_dedupe_window_seconds` sets the duplicate window; the shipped default is `600`.
+- `telnet.bulletin_dedupe_window_seconds: 0` disables bulletin dedupe.
+- `telnet.bulletin_dedupe_max_entries` bounds retained bulletin keys; the shipped default is `4096`.
+- The key is the normalized bulletin kind plus the exact line shown to users, after newline normalization.
+- Direct talk messages are not included.
+
+If a duplicate is suppressed, slow clients do not see another control-queue enqueue. Unique bulletins still use the normal control queue, where a full queue disconnects the client.
+
 ## Grid, Noise, And Nearby
 
 - `SET GRID` stores the user's Maidenhead grid for path reliability

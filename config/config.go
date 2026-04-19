@@ -222,6 +222,11 @@ type TelnetConfig struct {
 	ClientBuffer     int    `yaml:"client_buffer_size"`
 	// ControlQueueSize bounds per-client control output (bulletins, prompts, keepalives).
 	ControlQueueSize int `yaml:"control_queue_size"`
+	// BulletinDedupeWindowSeconds suppresses repeated WWV/WCY/announcement lines across all bulletin sources.
+	// Set to 0 to disable bulletin dedupe.
+	BulletinDedupeWindowSeconds int `yaml:"bulletin_dedupe_window_seconds"`
+	// BulletinDedupeMaxEntries bounds retained bulletin dedupe keys when bulletin dedupe is enabled.
+	BulletinDedupeMaxEntries int `yaml:"bulletin_dedupe_max_entries"`
 	// SkipHandshake retains the historical YAML key name while now accepting
 	// `full`, `minimal`, or `none`. Legacy booleans still map to `full`/`none`.
 	SkipHandshake TelnetHandshakeMode `yaml:"skip_handshake"`
@@ -1308,6 +1313,8 @@ type loadRawPresence struct {
 	hasFT2HardCapSeconds                            bool
 	hasUIColor                                      bool
 	hasUIClearScreen                                bool
+	hasTelnetBulletinDedupeWindow                   bool
+	hasTelnetBulletinDedupeMaxEntries               bool
 	hasLoggingDropDedupeWindow                      bool
 	hasReputationIPInfoPebbleLoadIPv4               bool
 	hasReputationIPInfoDeleteCSVAfterImport         bool
@@ -1357,6 +1364,8 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 		hasFT2HardCapSeconds:                            yamlKeyPresent(raw, "call_correction", "ft2_hard_cap_seconds"),
 		hasUIColor:                                      yamlKeyPresent(raw, "ui", "color"),
 		hasUIClearScreen:                                yamlKeyPresent(raw, "ui", "clear_screen"),
+		hasTelnetBulletinDedupeWindow:                   yamlKeyPresent(raw, "telnet", "bulletin_dedupe_window_seconds"),
+		hasTelnetBulletinDedupeMaxEntries:               yamlKeyPresent(raw, "telnet", "bulletin_dedupe_max_entries"),
 		hasLoggingDropDedupeWindow:                      yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
 		hasReputationIPInfoPebbleLoadIPv4:               yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4"),
 		hasReputationIPInfoDeleteCSVAfterImport:         yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import"),
@@ -1426,7 +1435,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	normalizeCallCacheConfig(&cfg)
-	if err := normalizeTelnetConfig(&cfg); err != nil {
+	if err := normalizeTelnetConfig(&cfg, presence); err != nil {
 		return nil, err
 	}
 	if err := normalizeFeedTransportConfig(&cfg); err != nil {
@@ -2309,7 +2318,7 @@ func normalizeCallCacheConfig(cfg *Config) {
 	}
 }
 
-func normalizeTelnetConfig(cfg *Config) error {
+func normalizeTelnetConfig(cfg *Config, presence loadRawPresence) error {
 	if cfg.Telnet.BroadcastQueue <= 0 {
 		cfg.Telnet.BroadcastQueue = 2048
 	}
@@ -2321,6 +2330,23 @@ func normalizeTelnetConfig(cfg *Config) error {
 	}
 	if cfg.Telnet.ControlQueueSize <= 0 {
 		cfg.Telnet.ControlQueueSize = 32
+	}
+	if cfg.Telnet.BulletinDedupeWindowSeconds < 0 {
+		return fmt.Errorf("invalid telnet.bulletin_dedupe_window_seconds %d (must be >= 0)", cfg.Telnet.BulletinDedupeWindowSeconds)
+	}
+	if cfg.Telnet.BulletinDedupeMaxEntries < 0 {
+		return fmt.Errorf("invalid telnet.bulletin_dedupe_max_entries %d (must be >= 0)", cfg.Telnet.BulletinDedupeMaxEntries)
+	}
+	if !presence.hasTelnetBulletinDedupeWindow {
+		cfg.Telnet.BulletinDedupeWindowSeconds = 600
+	}
+	if cfg.Telnet.BulletinDedupeWindowSeconds > 0 {
+		if !presence.hasTelnetBulletinDedupeMaxEntries {
+			cfg.Telnet.BulletinDedupeMaxEntries = 4096
+		}
+		if cfg.Telnet.BulletinDedupeMaxEntries < 1 {
+			return fmt.Errorf("invalid telnet.bulletin_dedupe_max_entries %d (must be >= 1 when bulletin dedupe is enabled)", cfg.Telnet.BulletinDedupeMaxEntries)
+		}
 	}
 	if cfg.Telnet.RejectWorkers <= 0 {
 		cfg.Telnet.RejectWorkers = 2
@@ -3067,6 +3093,9 @@ func (c *Config) Print() {
 		c.Telnet.RejectWorkers,
 		c.Telnet.RejectQueueSize,
 		c.Telnet.RejectWriteDeadlineMS)
+	fmt.Printf("Telnet bulletins: dedupe_window=%ds dedupe_max_entries=%d\n",
+		c.Telnet.BulletinDedupeWindowSeconds,
+		c.Telnet.BulletinDedupeMaxEntries)
 	fmt.Printf("Telnet Tier-A: prelogin_max=%d prelogin_timeout=%ds ip_rate=%.2f/s ip_burst=%d subnet_rate=%.2f/s subnet_burst=%d global_rate=%.2f/s global_burst=%d ip_concurrency=%d\n",
 		c.Telnet.MaxPreloginSessions,
 		c.Telnet.PreloginTimeoutSeconds,

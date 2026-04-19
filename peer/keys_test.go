@@ -33,3 +33,31 @@ func TestPC92KeyDiffersByRecordType(t *testing.T) {
 		t.Fatalf("expected different keys for record types, got %q", keyAdd)
 	}
 }
+
+func TestWWVKeyIgnoresHopValue(t *testing.T) {
+	a, err := ParseFrame("PC23^19-Apr-2026^1200Z^120^5^1^No storms^W1AW^NODE^H95^")
+	if err != nil {
+		t.Fatalf("ParseFrame(a): %v", err)
+	}
+	b, err := ParseFrame("PC23^19-Apr-2026^1200Z^120^5^1^No storms^W1AW^NODE^H94^")
+	if err != nil {
+		t.Fatalf("ParseFrame(b): %v", err)
+	}
+	if keyA, keyB := wwvKey(a), wwvKey(b); keyA != keyB {
+		t.Fatalf("expected equal WWV keys, got %q vs %q", keyA, keyB)
+	}
+}
+
+func TestPC93KeyIgnoresHopValue(t *testing.T) {
+	a, err := ParseFrame("PC93^IZ7AUH-6^79200^*^IZ7AUH-6^*^hello^H97^")
+	if err != nil {
+		t.Fatalf("ParseFrame(a): %v", err)
+	}
+	b, err := ParseFrame("PC93^IZ7AUH-6^79200^*^IZ7AUH-6^*^hello^H96^")
+	if err != nil {
+		t.Fatalf("ParseFrame(b): %v", err)
+	}
+	if keyA, keyB := pc93Key(a), pc93Key(b); keyA != keyB {
+		t.Fatalf("expected equal PC93 keys, got %q vs %q", keyA, keyB)
+	}
+}

@@ -30,3 +30,8 @@ Telnet message tokens (usable in `runtime.yaml`):
 Input behavior:
 - Human telnet input is normalized to uppercase as it is read; the echoed characters are uppercase as well.
 - Telnet IAC negotiation bytes (including subnegotiation) are stripped from input before validation.
+
+Bulletin behavior:
+- `telnet.bulletin_dedupe_window_seconds` suppresses identical WWV, WCY, and `TO ALL` announcement lines across all bulletin sources before they enter client control queues.
+- Set `telnet.bulletin_dedupe_window_seconds: 0` to disable bulletin dedupe.
+- `telnet.bulletin_dedupe_max_entries` is the hard cap on retained bulletin keys while dedupe is enabled.

@@ -276,6 +276,58 @@ func TestHandleFramePC92DuplicateSuppressedBeforeTopologyEnqueue(t *testing.T) {
 	}
 }
 
+func TestHandleFrameWWVDuplicateHopVariantSuppressed(t *testing.T) {
+	m := &Manager{
+		dedupe: newDedupeCache(time.Minute),
+	}
+	var delivered int
+	m.SetWWVBroadcast(func(kind, line string) {
+		delivered++
+	})
+
+	first, err := ParseFrame("PC23^19-Apr-2026^1200Z^120^5^1^No storms^W1AW^NODE^H95^")
+	if err != nil {
+		t.Fatalf("ParseFrame(first): %v", err)
+	}
+	second, err := ParseFrame("PC23^19-Apr-2026^1200Z^120^5^1^No storms^W1AW^NODE^H94^")
+	if err != nil {
+		t.Fatalf("ParseFrame(second): %v", err)
+	}
+
+	m.HandleFrame(first, &session{remoteCall: "SRC"})
+	m.HandleFrame(second, &session{remoteCall: "SRC"})
+
+	if delivered != 1 {
+		t.Fatalf("expected one WWV delivery after duplicate suppression, got %d", delivered)
+	}
+}
+
+func TestHandleFramePC93AnnouncementDuplicateHopVariantSuppressed(t *testing.T) {
+	m := &Manager{
+		dedupe: newDedupeCache(time.Minute),
+	}
+	var delivered int
+	m.SetAnnouncementBroadcast(func(line string) {
+		delivered++
+	})
+
+	first, err := ParseFrame("PC93^IZ7AUH-6^79200^*^IZ7AUH-6^*^hello^H97^")
+	if err != nil {
+		t.Fatalf("ParseFrame(first): %v", err)
+	}
+	second, err := ParseFrame("PC93^IZ7AUH-6^79200^*^IZ7AUH-6^*^hello^H96^")
+	if err != nil {
+		t.Fatalf("ParseFrame(second): %v", err)
+	}
+
+	m.HandleFrame(first, &session{remoteCall: "SRC"})
+	m.HandleFrame(second, &session{remoteCall: "SRC"})
+
+	if delivered != 1 {
+		t.Fatalf("expected one announcement delivery after duplicate suppression, got %d", delivered)
+	}
+}
+
 func TestPublishDXReceiveOnlyStillPublishesManualSpot(t *testing.T) {
 	dst := &session{
 		id:         "dst",

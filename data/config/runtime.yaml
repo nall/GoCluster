@@ -60,6 +60,8 @@ telnet:
   worker_queue_size: 1024          # Jobs queued per broadcast worker before dropping
   client_buffer_size: 1024         # Per-client spot backlog before a slow session drops spots
   control_queue_size: 32           # Per-client control backlog (bulletins/prompts/keepalives); full queue disconnects
+  bulletin_dedupe_window_seconds: 600 # Suppress identical WWV/WCY/TO ALL announcement lines across all bulletin sources (0 disables)
+  bulletin_dedupe_max_entries: 4096   # Hard cap on retained bulletin dedupe keys
   writer_batch_max_bytes: 16384    # Per-connection writer flush cap (bytes) for control-first micro-batching
   writer_batch_wait_ms: 5          # Max wait before flushing partial writer batch
   reject_workers: 2                # Async reject writers so accept loop never blocks on reject I/O

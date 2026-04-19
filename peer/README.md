@@ -64,6 +64,8 @@ If the control lane saturates:
 
 That is preferred over silently drifting until the remote side times out.
 
+WWV/WCY (`PC23`/`PC73`) and announcement (`PC93` to `ALL`/`*`) frames are parsed in the peer layer and then delivered to telnet as bulletins. Peer loop suppression keys use canonical payload fields, not raw hop-bearing wire text, so the same bulletin arriving with different hop values is treated as one peer event before telnet delivery.
+
 ## Operator View
 
 The main landing page now keeps only the high-level peering summary. The detailed forwarding and receive-only behavior belongs here because it is implementation-heavy and changes more often than the operator quickstart.

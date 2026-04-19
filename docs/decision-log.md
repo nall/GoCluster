@@ -72,3 +72,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0060 | Source-Aware FT Burst Clustering for Live Corroboration | Accepted | 2026-04-08 | main output pipeline, FT confidence, stats, docs | ADR-0059 (slot-anchor model) | - | `docs/decisions/ADR-0060-source-aware-ft-burst-clustering.md` |
 | ADR-0061 | YAML-Driven FT Corroboration Timing and Threshold Knobs | Accepted | 2026-04-08 | config, main output pipeline, FT confidence, docs | ADR-0060 (code-bound FT timing/threshold clause) | - | `docs/decisions/ADR-0061-ft-corroboration-yaml-knobs.md` |
 | ADR-0062 | Shared Ingest Flood Control With Required YAML Policy | Accepted | 2026-04-08 | config, ingest, dedupe, stats, docs | - | - | `docs/decisions/ADR-0062-shared-ingest-flood-control.md` |
+| ADR-0063 | Configurable Telnet Bulletin Dedupe | Accepted | 2026-04-19 | config, peer, telnet fan-out | - | - | `docs/decisions/ADR-0063-configurable-bulletin-dedupe.md` |

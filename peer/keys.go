@@ -53,17 +53,52 @@ func dxKey(f *Frame, s *spot.Spot) string {
 }
 
 // Purpose: Build a dedupe key for WWV/WCY frames.
-// Key aspects: Uses raw frame content.
+// Key aspects: Uses canonical payload content so hop-only route variants collapse.
 // Upstream: Peer dedupe caches.
 // Downstream: fmt.Sprintf.
 func wwvKey(f *Frame) string {
-	return fmt.Sprintf("wwv:%s:%s", f.Type, f.Raw)
+	return fmt.Sprintf("wwv:%s:%s", f.Type, canonicalPayloadKey(f))
 }
 
 // Purpose: Build a dedupe key for PC93 announcement frames.
-// Key aspects: Uses raw frame content.
+// Key aspects: Uses parsed message content so hop-only route variants collapse.
 // Upstream: Peer dedupe caches.
 // Downstream: fmt.Sprintf.
 func pc93Key(f *Frame) string {
-	return fmt.Sprintf("pc93:%s:%s", f.Type, f.Raw)
+	if msg, ok := parsePC93(f); ok {
+		return "pc93:" + f.Type + ":" + canonicalPC93MessageKey(msg)
+	}
+	return fmt.Sprintf("pc93:%s:%s", f.Type, canonicalPayloadKey(f))
+}
+
+func canonicalPC93MessageKey(msg pc93Message) string {
+	fields := []string{
+		msg.NodeCall,
+		msg.Timestamp,
+		msg.To,
+		msg.From,
+		msg.Via,
+		msg.Text,
+		msg.Onode,
+		msg.IP,
+	}
+	for i, field := range fields {
+		fields[i] = strings.TrimSpace(field)
+	}
+	return strings.Join(fields, "\x1f")
+}
+
+func canonicalPayloadKey(f *Frame) string {
+	if f == nil {
+		return "nil"
+	}
+	fields := f.payloadFields()
+	if len(fields) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		parts = append(parts, strings.TrimSpace(field))
+	}
+	return strings.Join(parts, "\x1f")
 }

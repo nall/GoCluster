@@ -137,6 +137,8 @@ Useful commands:
 - `SET DEDUPE FAST|MED|SLOW` stores your preference by callsign.
 - If you request a disabled policy, the server automatically chooses the nearest enabled policy and tells you what it picked.
 
+WWV, WCY, and `TO ALL` announcement bulletins have a separate server-wide duplicate guard because they are delivered as telnet control traffic rather than spots. The shipped `runtime.yaml` suppresses identical bulletin lines for `600s` across peer and relay sources; set `telnet.bulletin_dedupe_window_seconds: 0` to disable that behavior.
+
 ## NEARBY Filtering
 
 `NEARBY` is a quick local-area filter for operators who want spots near their own location without building manual continent, zone, DXCC, or grid lists.

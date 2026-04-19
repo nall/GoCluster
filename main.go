@@ -891,11 +891,13 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		var queueDrops, clientDrops, senderFailures uint64
 		var preloginActive int64
 		var preloginRejectGlobal, preloginRejectRate, preloginRejectConcurrency, preloginTimeouts uint64
+		var bulletinDedupe telnet.BulletinDedupeSnapshot
 		var clientCount int
 		var clientList []string
 		if telnetSrv != nil {
 			queueDrops, clientDrops, senderFailures = telnetSrv.BroadcastMetricSnapshot()
 			preloginActive, preloginRejectGlobal, preloginRejectRate, preloginRejectConcurrency, preloginTimeouts, _, _ = telnetSrv.PreloginMetricSnapshot()
+			bulletinDedupe = telnetSrv.BulletinDedupeSnapshot()
 			clientCount = telnetSrv.GetClientCount()
 			clientList = telnetSrv.ListClientCallsigns()
 		}
@@ -969,7 +971,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			"",
 			temporalLine,
 			pipelineLine, // 7
-			fmt.Sprintf("Telnet: %d clients. Drops: %d (Q) / %d (C) / %d (W). Prelogin: %d active / rejects %d (G) %d (R) %d (C) / %d (T)", clientCount, queueDrops, clientDrops, senderFailures, preloginActive, preloginRejectGlobal, preloginRejectRate, preloginRejectConcurrency, preloginTimeouts), // 8
+			fmt.Sprintf("Telnet: %d clients. Drops: %d (Q) / %d (C) / %d (W). Bulletins: %d accepted / %d suppressed / %d evicted / %d tracked. Prelogin: %d active / rejects %d (G) %d (R) %d (C) / %d (T)", clientCount, queueDrops, clientDrops, senderFailures, bulletinDedupe.Accepted, bulletinDedupe.Suppressed, bulletinDedupe.Evicted, bulletinDedupe.Tracked, preloginActive, preloginRejectGlobal, preloginRejectRate, preloginRejectConcurrency, preloginTimeouts), // 8
 		)
 
 		prevSourceCounts = sourceTotals
