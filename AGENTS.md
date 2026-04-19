@@ -32,6 +32,7 @@ When the user asks what existing code does and has not asked for changes:
 - Canonical skills location is `~/.codex/skills` (Windows typically `%USERPROFILE%\.codex\skills`).
 - Repo-managed skills may also exist under `codex-skills/`; prefer the installed version when both exist.
 - When the user asks why a path is slow and local profile data exists, prefer a profiling-specific skill over a general explanation skill.
+- When a task touches retained server-lifetime state, maps, caches, interners, pools, indexes, or cleanup/eviction behavior, use `go-retained-state-audit` before implementation if available.
 
 ## OBJECTIVITY AND INTEGRITY
 - Optimize for correctness over agreement.
@@ -60,6 +61,14 @@ Commercial-grade from the first draft. Do not write simple code that needs harde
 - Prefer cohesive helpers over monolithic routines, but do not fragment code so aggressively that control flow becomes harder to follow.
 - On hot paths, generic helper reuse is subordinate to runtime shape. If the path is dominated by single-item overflow or single-item correction, default to in-place single-victim logic unless measurements justify a more abstract design.
 - Any new shared helper introduced on a hot path must prove zero or near-zero allocation with targeted benchmarks before it is considered acceptable.
+- Bounded retained state is mandatory. Any new or modified server-lifetime `map`, `sync.Map`, heap/index, cache, pool, interner, retained slice, or side table must explicitly document and validate one of:
+  - a hard cardinality cap,
+  - a time/window expiry rule,
+  - ownership-coupled deletion,
+  - reference-counted reclamation,
+  - or a clear proof that its lifetime and cardinality are bounded by another structure.
+- Soft optimization caches are still resources. Interners, dedupe helpers, scratch caches, and memoization maps may not grow for process lifetime unless their maximum size and eviction/reset behavior are proven.
+- When deleting or evicting a primary object, review every secondary index/cache/intern table that can retain derived state. Primary bounds do not imply secondary bounds unless deletion coupling or cardinality coupling is explicit.
 
 ## CRITICAL CHECKLIST
 Apply this checklist before every change.
@@ -78,6 +87,12 @@ Apply this checklist before every change.
   - likely files/packages/functions impacted
   - invariants that must not break
   - top 3 failure modes if changed incorrectly
+- If retained state is touched, include a `Retained-State Audit` before code:
+  - list every long-lived map/cache/index/pool/interner/retained slice added or modified
+  - identify the owner, lifetime, maximum cardinality, and eviction/reclamation trigger for each
+  - identify secondary structures updated when primary entries are deleted or evicted
+  - define tests or checks that prove the bound under churn beyond the cap/window
+  - define production visibility for cardinality or explain why existing visibility is sufficient
 - Identify impacted contracts:
   - protocol/format/compatibility
   - ordering
@@ -128,6 +143,7 @@ Use these by default unless the task clearly does not touch the relevant area.
 - Mandatory concurrency check: `go test -race ./...` for any change touching concurrency, synchronization, queues, goroutine lifecycle, timers, cancellation, or long-lived connections
 - Parser/protocol changes: fuzz where applicable
 - Hot-path changes: benchmarks before/after and pprof when appropriate
+- Retained-state changes: add or update bound tests, churn/eviction tests, and delete-coupling tests. Add cardinality observability for new long-lived structures unless existing metrics/logs already prove the bound.
 - Never claim a checker ran unless it actually ran
 - For optimization work, do not call a change successful from microbenchmarks alone. Separate cold-start vs warm-runtime evidence, startup/load vs steady-state costs, `alloc_space` vs `inuse_space`, and repo-owned costs vs dependency/platform/runtime noise.
 - When discussing the “latest” profile or bundle, include absolute timestamps and process age/restart context when that affects interpretation.

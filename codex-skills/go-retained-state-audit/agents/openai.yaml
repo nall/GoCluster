@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Retained-State Audit"
+  short_description: "Audit Go lifetime maps, caches, interners, and indexes"
+  default_prompt: "Audit the Go retained-state changes, list every long-lived structure, prove its bound and eviction coupling, and define tests plus observability that prevent unbounded memory growth."
