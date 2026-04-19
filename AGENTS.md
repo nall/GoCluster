@@ -46,6 +46,8 @@ When the user asks what existing code does and has not asked for changes:
 ## QUALITY BAR
 Commercial-grade from the first draft. Do not write simple code that needs hardening later.
 
+- Prefer the smallest correct change that satisfies the approved scope, preserves bounded-resource contracts, and has validation proportional to risk.
+- Do not add speculative features, abstractions, or refactors that are not required by the approved scope.
 - Correctness over speed. No races, leaks, unbounded resources, or silent contract drift.
 - Use context cancellation plus explicit deadlines and idle/stall timeouts on all long-lived network I/O.
 - For non-trivial changes, define architecture before code: concurrency model, backpressure strategy, failure/recovery modes, resource bounds, and shutdown sequencing.

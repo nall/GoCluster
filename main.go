@@ -5076,7 +5076,7 @@ func maybeStartMapLogger(tracker *stats.Tracker, predictor *pathreliability.Pred
 				customSCP = customSCPStore.StatsSnapshot()
 			}
 
-			log.Printf("Map sizes: stats sources=%d source-modes=%d; dedup primary=%d secondary fast=%d med=%d slow=%d; path buckets=%d; custom_scp static=%d keys=%d spotters=%d load_oversized=%d overflow_pruned=%d stale_obs_pruned=%d stale_static_pruned=%d",
+			log.Printf("Map sizes: stats sources=%d source-modes=%d; dedup primary=%d secondary fast=%d med=%d slow=%d; path buckets=%d; custom_scp static=%d keys=%d spotters=%d interned=%d intern_refs=%d intern_release_misses=%d entry_expiry=%d static_expiry=%d load_oversized=%d overflow_pruned=%d stale_obs_pruned=%d stale_static_pruned=%d",
 				sourceCount,
 				sourceModeCount,
 				primarySize,
@@ -5087,6 +5087,11 @@ func maybeStartMapLogger(tracker *stats.Tracker, predictor *pathreliability.Pred
 				customSCP.StaticCalls,
 				customSCP.ObservationKeys,
 				customSCP.ObservationSpotters,
+				customSCP.InternedStrings,
+				customSCP.InternedRefs,
+				customSCP.InternReleaseMisses,
+				customSCP.EntryExpiryItems,
+				customSCP.StaticExpiryItems,
 				customSCP.OversizedKeysSeenOnLoad,
 				customSCP.OverflowObservationsPruned,
 				customSCP.StaleObservationsPruned,

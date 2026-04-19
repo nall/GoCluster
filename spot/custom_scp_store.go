@@ -122,6 +122,11 @@ type CustomSCPStatsSnapshot struct {
 	StaticCalls                int
 	ObservationKeys            int
 	ObservationSpotters        int
+	InternedStrings            int
+	InternedRefs               int
+	InternReleaseMisses        uint64
+	EntryExpiryItems           int
+	StaticExpiryItems          int
 	OversizedKeysSeenOnLoad    uint64
 	OverflowObservationsPruned uint64
 	StaleObservationsPruned    uint64
@@ -152,11 +157,79 @@ type CustomSCPStore struct {
 
 	observationSpotters int
 	diag                customSCPDiagnostics
-	interned            map[string]string
+	interner            customSCPInterner
 
 	quit      chan struct{}
 	cleanupMu sync.Mutex
 	db        *pebble.DB
+}
+
+type customSCPInternRef struct {
+	value string
+	refs  int
+}
+
+// customSCPInterner is owned by CustomSCPStore under s.mu. It retains only
+// strings that are reachable from current static membership, observation keys,
+// or retained spotters, so deleting an owner must release the matching ref.
+type customSCPInterner struct {
+	refs          map[string]customSCPInternRef
+	totalRefs     int
+	releaseMisses uint64
+}
+
+func (i *customSCPInterner) retain(value string) string {
+	if value == "" {
+		return value
+	}
+	if i.refs == nil {
+		i.refs = make(map[string]customSCPInternRef, 1024)
+	}
+	ref, ok := i.refs[value]
+	if ok {
+		ref.refs++
+		i.refs[value] = ref
+		i.totalRefs++
+		return ref.value
+	}
+	i.refs[value] = customSCPInternRef{value: value, refs: 1}
+	i.totalRefs++
+	return value
+}
+
+func (i *customSCPInterner) release(value string) {
+	if value == "" {
+		return
+	}
+	ref, ok := i.refs[value]
+	if !ok || ref.refs <= 0 {
+		i.releaseMisses++
+		return
+	}
+	i.totalRefs--
+	if ref.refs == 1 {
+		delete(i.refs, value)
+		return
+	}
+	ref.refs--
+	i.refs[value] = ref
+}
+
+func (i *customSCPInterner) canonical(value string) string {
+	if value == "" || i.refs == nil {
+		return value
+	}
+	if ref, ok := i.refs[value]; ok {
+		return ref.value
+	}
+	return value
+}
+
+func (i *customSCPInterner) distinct() int {
+	if i == nil {
+		return 0
+	}
+	return len(i.refs)
 }
 
 // OpenCustomSCPStore opens (or creates) a Pebble-backed custom SCP store.
@@ -200,7 +273,6 @@ func OpenCustomSCPStore(opts CustomSCPOptions) (*CustomSCPStore, error) {
 		entryExpiryItems:  make(map[customSCPKey]*customSCPEntryExpiryItem, 1024),
 		static:            make(map[string]int64, 1024),
 		staticExpiryItems: make(map[string]*customSCPStaticExpiryItem, 1024),
-		interned:          make(map[string]string, 2048),
 		db:                db,
 	}
 	if err := store.loadFromDB(); err != nil {
@@ -418,11 +490,7 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	call = s.internString(call)
-	band = s.internString(band)
-	bucket = s.internString(bucket)
-	spotter = s.internString(spotter)
-	s.static[call] = maxInt64(s.static[call], seenUnix)
+	call = s.retainStaticCallLocked(call, seenUnix)
 	s.upsertStaticExpiryLocked(call, s.static[call])
 
 	key := customSCPKey{call: call, band: band, bucket: bucket}
@@ -435,6 +503,11 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 		if len(s.entries) >= s.opts.MaxKeys {
 			return
 		}
+		key = customSCPKey{
+			call:   s.retainInternedStringLocked(call),
+			band:   s.retainInternedStringLocked(band),
+			bucket: s.retainInternedStringLocked(bucket),
+		}
 		entry = &customSCPEntry{spotters: make(map[string]customSCPSpotterObs, 4)}
 		s.entries[key] = entry
 	}
@@ -443,6 +516,7 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 	prev, exists := entry.spotters[spotter]
 	if !exists || seenUnix > prev.seenUnix {
 		if !exists {
+			spotter = s.retainInternedStringLocked(spotter)
 			s.observationSpotters++
 		}
 		entry.spotters[spotter] = customSCPSpotterObs{seenUnix: seenUnix, cellRes1: cellRes1}
@@ -500,6 +574,11 @@ func (s *CustomSCPStore) StatsSnapshot() CustomSCPStatsSnapshot {
 		StaticCalls:                len(s.static),
 		ObservationKeys:            len(s.entries),
 		ObservationSpotters:        s.observationSpotters,
+		InternedStrings:            s.interner.distinct(),
+		InternedRefs:               s.interner.totalRefs,
+		InternReleaseMisses:        s.interner.releaseMisses,
+		EntryExpiryItems:           len(s.entryExpiryItems),
+		StaticExpiryItems:          len(s.staticExpiryItems),
 		OversizedKeysSeenOnLoad:    s.diag.oversizedKeysSeenOnLoad,
 		OverflowObservationsPruned: s.diag.overflowObservationsPruned,
 		StaleObservationsPruned:    s.diag.staleObservationsPruned,
@@ -664,9 +743,10 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 		if !ok {
 			break
 		}
-		delete(s.static, call)
-		s.diag.staleStaticPruned++
-		staleStaticCalls = append(staleStaticCalls, call)
+		if s.deleteStaticLocked(call) {
+			s.diag.staleStaticPruned++
+			staleStaticCalls = append(staleStaticCalls, call)
+		}
 	}
 	for len(s.entries) > s.opts.MaxKeys {
 		s.evictOldestKeyLocked()
@@ -772,20 +852,20 @@ func (s *CustomSCPStore) loadFromDB() error {
 			pendingOverflow = false
 			return
 		}
-		internedKey := customSCPKey{
-			call:   s.internString(pendingKey.call),
-			band:   s.internString(pendingKey.band),
-			bucket: s.internString(pendingKey.bucket),
+		retainedKey := customSCPKey{
+			call:   s.retainInternedStringLocked(pendingKey.call),
+			band:   s.retainInternedStringLocked(pendingKey.band),
+			bucket: s.retainInternedStringLocked(pendingKey.bucket),
 		}
-		internedSpotters := make(map[string]customSCPSpotterObs, len(pendingEntry.spotters))
+		retainedSpotters := make(map[string]customSCPSpotterObs, len(pendingEntry.spotters))
 		for spotter, obs := range pendingEntry.spotters {
-			internedSpotters[s.internString(spotter)] = obs
+			retainedSpotters[s.retainInternedStringLocked(spotter)] = obs
 		}
-		pendingEntry.spotters = internedSpotters
-		s.entries[internedKey] = pendingEntry
-		s.active.Add(internedKey.call, internedKey.band)
-		s.observationSpotters += len(internedSpotters)
-		s.markEntryForCleanupLocked(internedKey, pendingEntry)
+		pendingEntry.spotters = retainedSpotters
+		s.entries[retainedKey] = pendingEntry
+		s.active.Add(retainedKey.call, retainedKey.band)
+		s.observationSpotters += len(retainedSpotters)
+		s.markEntryForCleanupLocked(retainedKey, pendingEntry)
 		pendingEntry = nil
 		pendingKey = customSCPKey{}
 		pendingOverflow = false
@@ -811,8 +891,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 				pendingDeletes++
 				continue
 			}
-			call = s.internString(call)
-			s.static[call] = seen
+			call = s.retainStaticCallLocked(call, seen)
 			s.upsertStaticExpiryLocked(call, seen)
 		case bytes.HasPrefix(k, customSCPObsPrefixBytes):
 			call, band, bucket, spotter, ok := parseObservationKeyBytes(k)
@@ -900,6 +979,38 @@ func (s *CustomSCPStore) evictOldestKeyLocked() {
 	s.deleteObservationPrefixLocked(victim)
 }
 
+func (s *CustomSCPStore) retainInternedStringLocked(value string) string {
+	if s == nil || value == "" {
+		return value
+	}
+	return s.interner.retain(value)
+}
+
+func (s *CustomSCPStore) releaseInternedStringLocked(value string) {
+	if s == nil || value == "" {
+		return
+	}
+	s.interner.release(value)
+}
+
+func (s *CustomSCPStore) retainStaticCallLocked(call string, seenUnix int64) string {
+	if s == nil || call == "" {
+		return call
+	}
+	if s.static == nil {
+		s.static = make(map[string]int64, 1024)
+	}
+	if current, ok := s.static[call]; ok {
+		if seenUnix > current {
+			s.static[call] = seenUnix
+		}
+		return s.interner.canonical(call)
+	}
+	retained := s.retainInternedStringLocked(call)
+	s.static[retained] = seenUnix
+	return retained
+}
+
 func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64, removed *[]string) int {
 	if entry == nil || len(entry.spotters) == 0 {
 		return 0
@@ -908,7 +1019,10 @@ func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64, r
 	for spotter, obs := range entry.spotters {
 		if obs.seenUnix < cutoff {
 			delete(entry.spotters, spotter)
-			s.observationSpotters--
+			if s.observationSpotters > 0 {
+				s.observationSpotters--
+			}
+			s.releaseInternedStringLocked(spotter)
 			removedCount++
 			if removed != nil {
 				*removed = append(*removed, spotter)
@@ -933,6 +1047,7 @@ func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry, removed *[]st
 		if s.observationSpotters > 0 {
 			s.observationSpotters--
 		}
+		s.releaseInternedStringLocked(spotter)
 		if removed != nil {
 			*removed = append(*removed, spotter)
 		}
@@ -1011,6 +1126,26 @@ func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
 		s.observationSpotters = 0
 	}
 	delete(s.entries, key)
+	for spotter := range entry.spotters {
+		s.releaseInternedStringLocked(spotter)
+	}
+	s.releaseInternedStringLocked(key.call)
+	s.releaseInternedStringLocked(key.band)
+	s.releaseInternedStringLocked(key.bucket)
+}
+
+func (s *CustomSCPStore) deleteStaticLocked(call string) bool {
+	if s == nil || call == "" {
+		return false
+	}
+	if _, ok := s.static[call]; !ok {
+		s.deleteStaticExpiryLocked(call)
+		return false
+	}
+	delete(s.static, call)
+	s.deleteStaticExpiryLocked(call)
+	s.releaseInternedStringLocked(call)
+	return true
 }
 
 func (s *CustomSCPStore) deleteObservationSpottersFromRequestLocked(req customSCPDeleteRequest, batch *pebble.Batch) int {
@@ -1258,20 +1393,6 @@ func parseObservationKeyBytes(key []byte) (call, band, bucket, spotter string, o
 	return call, band, bucket, spotter, true
 }
 
-func (s *CustomSCPStore) internString(value string) string {
-	if s == nil || value == "" {
-		return value
-	}
-	if s.interned == nil {
-		s.interned = make(map[string]string, 1024)
-	}
-	if interned, ok := s.interned[value]; ok {
-		return interned
-	}
-	s.interned[value] = value
-	return value
-}
-
 func customSCPEntryActive(entry *customSCPEntry) bool {
 	return entry != nil && len(entry.spotters) > 0
 }
@@ -1327,11 +1448,4 @@ func countCustomSCPUniqueCells(entry *customSCPEntry) int {
 		return len(overflow)
 	}
 	return used
-}
-
-func maxInt64(a, b int64) int64 {
-	if b > a {
-		return b
-	}
-	return a
 }

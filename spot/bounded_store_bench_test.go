@@ -29,23 +29,28 @@ func BenchmarkCustomSCPRecordOverflow(b *testing.B) {
 	}
 
 	store := &CustomSCPStore{
-		opts: sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: maxSpotters}),
-		entries: map[customSCPKey]*customSCPEntry{
-			customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}: entry,
-		},
+		opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: maxSpotters}),
+		entries:             make(map[customSCPKey]*customSCPEntry, 1),
+		entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
 		static:              make(map[string]int64, 1),
-		interned:            make(map[string]string, 8),
 		observationSpotters: maxSpotters,
 	}
+	store.mu.Lock()
+	retainCustomSCPTestStaticLocked(store, "K1BENCH", now.Unix())
+	retainCustomSCPTestEntryLocked(store, customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}, entry)
+	store.mu.Unlock()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		store.recordObservation("K1BENCH", "40m", "CW", newSpotter, 999, 0, false, now)
 		b.StopTimer()
+		store.mu.Lock()
 		delete(entry.spotters, newSpotter)
-		entry.spotters[oldestSpotter] = oldestObs
+		store.releaseInternedStringLocked(newSpotter)
+		entry.spotters[store.retainInternedStringLocked(oldestSpotter)] = oldestObs
 		entry.lastSeen = now.Add(-time.Second).Unix()
+		store.mu.Unlock()
 		b.StartTimer()
 	}
 }
@@ -164,7 +169,7 @@ func benchmarkCustomSCPCleanup(b *testing.B, totalEntries, expiredEntries int) {
 					"N0AAA": {seenUnix: seenAt.Unix(), cellRes1: 101},
 				},
 			}
-			store.entries[key] = entry
+			key = retainCustomSCPTestEntryLocked(store, key, entry)
 			store.observationSpotters++
 			store.markEntryForCleanupLocked(key, entry)
 		}
@@ -177,5 +182,23 @@ func benchmarkCustomSCPCleanup(b *testing.B, totalEntries, expiredEntries int) {
 		store := buildStore()
 		b.StartTimer()
 		store.cleanup(now)
+	}
+}
+
+func BenchmarkCustomSCPInternerChurn(b *testing.B) {
+	values := make([]string, 4096)
+	for i := range values {
+		values[i] = fmt.Sprintf("S%04d", i)
+	}
+	var interner customSCPInterner
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		value := interner.retain(values[i&(len(values)-1)])
+		interner.release(value)
+	}
+	if interner.totalRefs != 0 || len(interner.refs) != 0 || interner.releaseMisses != 0 {
+		b.Fatalf("interner did not fully release: refs=%d distinct=%d misses=%d", interner.totalRefs, len(interner.refs), interner.releaseMisses)
 	}
 }
