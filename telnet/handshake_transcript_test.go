@@ -1,6 +1,7 @@
 package telnet
 
 import (
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -139,6 +140,7 @@ func closeHandshakeTranscriptSession(t *testing.T, clientConn net.Conn, done <-c
 	}
 }
 
+//nolint:unparam // Timeout stays explicit because transcript tests are deadline-sensitive.
 func readUntilContains(t *testing.T, conn net.Conn, want string, timeout time.Duration) string {
 	t.Helper()
 	if timeout <= 0 {
@@ -161,10 +163,11 @@ func readUntilContains(t *testing.T, conn net.Conn, want string, timeout time.Du
 		if err == nil {
 			continue
 		}
-		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
 			continue
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		t.Fatalf("read transcript: %v", err)

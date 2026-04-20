@@ -68,7 +68,7 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 	}
 	skipResolverApply := false
 	var resolverEvidence spot.ResolverEvidence
-	hasResolverEvidence := false
+	var hasResolverEvidence bool
 	if temporalRelease != nil {
 		pending := temporalRelease.pending
 		resolverEvidence = pending.evidence

@@ -396,10 +396,18 @@ func main() {
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	exitCode := 0
+	defer func() {
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
+	}()
 	defer cancel()
 	for _, path := range rbnFiles {
 		if err := ctx.Err(); err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			exitCode = 1
+			return
 		}
 		rows, badRows, err := replayRBNFile(ctx, path, state, *evalNeg)
 		if err != nil {
@@ -408,7 +416,9 @@ func main() {
 				log.Printf("Skipping RBN input %q: %v", path, err)
 				continue
 			}
-			log.Fatal(err)
+			log.Print(err)
+			exitCode = 1
+			return
 		}
 		state.replay.RBNRows += rows
 		state.replay.SkippedBadRow += badRows
@@ -439,7 +449,11 @@ func replayRBNFile(ctx context.Context, path string, st *runState, evalNeg int) 
 	if err != nil {
 		return 0, 0, err
 	}
-	defer closeFn()
+	defer func() {
+		if err := closeFn(); err != nil {
+			log.Printf("close RBN input %s: %v", path, err)
+		}
+	}()
 
 	csvReader := csv.NewReader(reader)
 	csvReader.FieldsPerRecord = -1
@@ -451,7 +465,7 @@ func replayRBNFile(ctx context.Context, path string, st *runState, evalNeg int) 
 	}
 	header, err := parseRBNHeader(headerRow)
 	if err != nil {
-		return 0, 0, fmt.Errorf("%w: %v", errMissingRBNColumns, err)
+		return 0, 0, fmt.Errorf("%w: %w", errMissingRBNColumns, err)
 	}
 
 	var rows int64
@@ -1149,7 +1163,7 @@ func parseRBNRecord(record []string, h rbnHeader) (rbnRow, bool) {
 	if dxCall == "" || spotter == "" {
 		return rbnRow{}, false
 	}
-	report := 0
+	var report int
 	dbRaw := get(h.db)
 	if v, err := strconv.Atoi(dbRaw); err == nil {
 		report = v
@@ -1183,6 +1197,7 @@ func configureULS(cfg *config.Config) error {
 	return nil
 }
 
+//nolint:nilnil // A nil CTY database with nil error means CTY support is disabled.
 func loadCTY(cfg *config.Config) (*cty.CTYDatabase, error) {
 	if cfg == nil || !cfg.CTY.Enabled {
 		return nil, nil
@@ -1249,7 +1264,9 @@ func writeSummary(path string, report evalReport, method inferredMethod) {
 		report.NegativesSeen, report.NegativesSampled, report.FalsePositive, report.TrueNegative, report.PredictedAppliedTotal, report.PredictedOnUnlabeled,
 		report.RecallPercent, report.PrecisionPercentSampled,
 	)
-	_ = os.WriteFile(path, []byte(text), 0o644)
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		log.Printf("write %s: %v", path, err)
+	}
 }
 
 func mustWrite(path string, v any) {

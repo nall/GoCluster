@@ -49,7 +49,10 @@ func (h telnetStabilizerHeap) Swap(i, j int) {
 }
 
 func (h *telnetStabilizerHeap) Push(x any) {
-	item, _ := x.(*telnetStabilizerItem)
+	item, ok := x.(*telnetStabilizerItem)
+	if !ok {
+		return
+	}
 	*h = append(*h, item)
 }
 
@@ -257,9 +260,9 @@ func (s *telnetSpotStabilizer) run() {
 					break
 				}
 				itemAny := heap.Pop(&queue)
-				item, _ := itemAny.(*telnetStabilizerItem)
+				item, ok := itemAny.(*telnetStabilizerItem)
 				s.pending.Add(-1)
-				if item == nil || item.spot == nil {
+				if !ok || item == nil || item.spot == nil {
 					continue
 				}
 				select {

@@ -80,7 +80,6 @@ func TestHandleFrameRelaysInboundPC11AndPC61ToOtherPeers(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			src := &session{
 				id:         "src",
@@ -406,7 +405,6 @@ func TestHandleFrameSpotRelaySuppressedWhenForwardSpotsDisabled(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			src := &session{
 				id:         "src",

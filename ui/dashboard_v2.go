@@ -147,6 +147,7 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 		return nil
 	}
 
+	//nolint:gosec // Stop calls the retained cancel function; the returned dashboard owns that lifecycle.
 	ctx, cancel := context.WithCancel(context.Background())
 	app := tview.NewApplication().EnableMouse(cfg.V2.EnableMouse)
 	pages := tview.NewPages()
@@ -273,7 +274,7 @@ func NewDashboardV2(cfg config.UIConfig, enable bool) *DashboardV2 {
 	d.scheduler = newFrameScheduler(app, cfg.V2.TargetFPS, 100*time.Millisecond, metrics.ObserveRender)
 	d.scheduler.Start()
 
-	d.installKeybindings(cfg)
+	d.installKeybindings()
 	d.installRoot()
 
 	go func() {
@@ -293,7 +294,7 @@ func (d *DashboardV2) installRoot() {
 	d.showFirstAvailablePage()
 }
 
-func (d *DashboardV2) installKeybindings(cfg config.UIConfig) {
+func (d *DashboardV2) installKeybindings() {
 	d.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if d.helpShown {
 			if event.Key() == tcell.KeyEsc || event.Rune() == 'h' || event.Rune() == '?' {

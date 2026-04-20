@@ -40,21 +40,21 @@ func TestTemporalDecoderAppliesLateEvidence(t *testing.T) {
 			ObservedAt:  start,
 			Key:         key,
 			SubjectCall: "K1ABD",
-			Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABD", 2550, "K1ABC", 2450, 5000),
+			Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABD", 2550, "K1ABC", 2450),
 		},
 		{
 			ID:          2,
 			ObservedAt:  start.Add(1 * time.Second),
 			Key:         key,
 			SubjectCall: "K1ABD",
-			Selection:   testTemporalSelection(key, spot.ResolverStateConfident, "K1ABC", 4500, "K1ABD", 500, 5000),
+			Selection:   testTemporalSelection(key, spot.ResolverStateConfident, "K1ABC", 4500, "K1ABD", 500),
 		},
 		{
 			ID:          3,
 			ObservedAt:  start.Add(2 * time.Second),
 			Key:         key,
 			SubjectCall: "K1ABD",
-			Selection:   testTemporalSelection(key, spot.ResolverStateConfident, "K1ABC", 4600, "K1ABD", 400, 5000),
+			Selection:   testTemporalSelection(key, spot.ResolverStateConfident, "K1ABC", 4600, "K1ABD", 400),
 		},
 	}
 	for _, obs := range observations {
@@ -100,7 +100,7 @@ func TestTemporalDecoderDefersBeforeLag(t *testing.T) {
 		ObservedAt:  start,
 		Key:         key,
 		SubjectCall: "K1ABD",
-		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 3200, "K1ABD", 1800, 5000),
+		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 3200, "K1ABD", 1800),
 	}); !ok {
 		t.Fatalf("Observe() rejected reason=%s", reason)
 	}
@@ -139,7 +139,7 @@ func TestTemporalDecoderFallsBackAtMaxWaitWhenMarginLow(t *testing.T) {
 		ObservedAt:  start,
 		Key:         key,
 		SubjectCall: "K1ABC",
-		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500, 5000),
+		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500),
 	}); !ok {
 		t.Fatalf("Observe() rejected reason=%s", reason)
 	}
@@ -148,7 +148,7 @@ func TestTemporalDecoderFallsBackAtMaxWaitWhenMarginLow(t *testing.T) {
 		ObservedAt:  start.Add(1 * time.Second),
 		Key:         key,
 		SubjectCall: "K1ABC",
-		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500, 5000),
+		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500),
 	}); !ok {
 		t.Fatalf("Observe() rejected id=2 reason=%s", reason)
 	}
@@ -192,7 +192,7 @@ func TestTemporalDecoderDeterministicTieBreakUsesLexicalOrder(t *testing.T) {
 		ObservedAt:  start,
 		Key:         key,
 		SubjectCall: "K1ABD",
-		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500, 5000),
+		Selection:   testTemporalSelection(key, spot.ResolverStateProbable, "K1ABC", 2500, "K1ABD", 2500),
 	}); !ok {
 		t.Fatalf("Observe() rejected reason=%s", reason)
 	}
@@ -213,7 +213,6 @@ func testTemporalSelection(
 	winnerWeighted int,
 	runner string,
 	runnerWeighted int,
-	totalWeighted int,
 ) ResolverPrimarySelection {
 	winnerSupport := winnerWeighted / 1000
 	if winnerSupport <= 0 {
@@ -240,7 +239,7 @@ func testTemporalSelection(
 			TotalReporters:             totalSupport,
 			WinnerWeightedSupportMilli: winnerWeighted,
 			RunnerWeightedSupportMilli: runnerWeighted,
-			TotalWeightedSupportMilli:  totalWeighted,
+			TotalWeightedSupportMilli:  winnerWeighted + runnerWeighted,
 			CandidateRanks: []spot.ResolverCandidateSupport{
 				{
 					Call:                 winner,

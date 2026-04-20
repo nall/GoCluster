@@ -127,19 +127,19 @@ func formatIngestHealthLine(name string, snap ingestHealthSnapshot, idle bool, n
 	}
 	if snap.PayloadQueueCap > 0 {
 		b.WriteString(" payload_q=")
-		b.WriteString(fmt.Sprintf("%d/%d", snap.PayloadQueueLen, snap.PayloadQueueCap))
+		fmt.Fprintf(&b, "%d/%d", snap.PayloadQueueLen, snap.PayloadQueueCap)
 	}
 	if snap.MQTTQueueCap > 0 {
 		b.WriteString(" mqtt_q=")
-		b.WriteString(fmt.Sprintf("%d/%d", snap.MQTTQueueLen, snap.MQTTQueueCap))
+		fmt.Fprintf(&b, "%d/%d", snap.MQTTQueueLen, snap.MQTTQueueCap)
 	}
 	if snap.SpotQueueCap > 0 {
 		b.WriteString(" spot_q=")
-		b.WriteString(fmt.Sprintf("%d/%d", snap.SpotQueueLen, snap.SpotQueueCap))
+		fmt.Fprintf(&b, "%d/%d", snap.SpotQueueLen, snap.SpotQueueCap)
 	}
 	if snap.PathOnlyQueueCap > 0 {
 		b.WriteString(" path_only_q=")
-		b.WriteString(fmt.Sprintf("%d/%d", snap.PathOnlyQueueLen, snap.PathOnlyQueueCap))
+		fmt.Fprintf(&b, "%d/%d", snap.PathOnlyQueueLen, snap.PathOnlyQueueCap)
 	}
 	var dropParts []string
 	if snap.PayloadDrops > 0 {

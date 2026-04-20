@@ -512,6 +512,7 @@ func TestRunnerForResolverCallDeterministicRanking(t *testing.T) {
 	}
 }
 
+//nolint:unparam // Timeout stays explicit for resolver tests that may need different async wait budgets.
 func waitForResolverSnapshotState(t *testing.T, resolver *SignalResolver, key ResolverSignalKey, timeout time.Duration, predicate func(ResolverSnapshot) bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

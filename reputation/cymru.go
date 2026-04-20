@@ -167,7 +167,7 @@ func reverseIPv6(addr netip.Addr) string {
 	for i := len(ip) - 1; i >= 0; i-- {
 		lo := ip[i] & 0x0f
 		hi := ip[i] >> 4
-		b.WriteString(fmt.Sprintf("%x.%x.", lo, hi))
+		fmt.Fprintf(&b, "%x.%x.", lo, hi)
 	}
 	out := b.String()
 	return strings.TrimSuffix(out, ".")

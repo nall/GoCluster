@@ -67,11 +67,12 @@ const (
 func buildPeerRegistry(peers []config.PeeringPeer) ([]PeerEndpoint, map[string]PeerEndpoint, error) {
 	outbound := make([]PeerEndpoint, 0, len(peers))
 	inbound := make(map[string]PeerEndpoint)
-	for _, peerCfg := range peers {
+	for i := range peers {
+		peerCfg := &peers[i]
 		if !peerCfg.Enabled {
 			continue
 		}
-		endpoint, err := newPeerEndpoint(peerCfg)
+		endpoint, err := newPeerEndpoint(*peerCfg)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -2136,6 +2136,7 @@ func maybeApplyResolverCorrection(
 	)
 }
 
+//nolint:unparam // Reliability/model parameters preserve the runtime correction-call signature while temporal selection overrides reuse the same path.
 func maybeApplyResolverCorrectionWithSelectionOverride(
 	spotEntry *spot.Spot,
 	resolver *spot.SignalResolver,
@@ -4230,14 +4231,16 @@ func buildOverviewLines(
 	metaHitPct := percentValue(metaHits, metaLookups)
 	gridSizeLabel := humanize.Comma(gridCount)
 	metaSizeLabel := humanize.Comma(int64(metaCount))
-	cacheBars := []string{
+	recentSupportLines := formatRecentSupportByBandLines(recentBandStore, now, 0)
+	cacheBars := make([]string, 0, len(recentSupportLines)+4)
+	cacheBars = append(cacheBars,
 		fmt.Sprintf("[yellow]Grid cache[-]:  %s %s  |  [yellow]Meta[-]: %s %s",
 			formatPercentBarWithLabel(gridHitPct, 20, gridSizeLabel), formatPercentString(gridHitPct),
 			formatPercentBarWithLabel(metaHitPct, 20, metaSizeLabel), formatPercentString(metaHitPct)),
 		formatModeCacheLine(modeAssigner),
-	}
+	)
 	cacheBars = append(cacheBars, "")
-	cacheBars = append(cacheBars, formatRecentSupportByBandLines(recentBandStore, now, 0)...)
+	cacheBars = append(cacheBars, recentSupportLines...)
 	cacheBars = append(cacheBars, "")
 
 	ctyTime := "n/a"

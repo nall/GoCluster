@@ -139,7 +139,7 @@ func RestoreFromCheckpointDir(
 	}
 	if err := os.Rename(tempDir, dbPath); err != nil {
 		if hadExisting {
-			_ = os.Rename(backupDir, dbPath)
+			ignoreRestoreBestEffortError(os.Rename(backupDir, dbPath))
 		}
 		_ = os.RemoveAll(tempDir)
 		return fmt.Errorf("pebbleresilience: finalize restore dir: %w", err)
@@ -150,12 +150,18 @@ func RestoreFromCheckpointDir(
 		newCheckpoint := filepath.Join(dbPath, checkpointDir)
 		if _, err := os.Stat(backupCheckpoint); err == nil {
 			if _, err := os.Stat(newCheckpoint); os.IsNotExist(err) {
-				_ = os.Rename(backupCheckpoint, newCheckpoint)
+				ignoreRestoreBestEffortError(os.Rename(backupCheckpoint, newCheckpoint))
 			}
 		}
 		_ = os.RemoveAll(backupDir)
 	}
 	return nil
+}
+
+func ignoreRestoreBestEffortError(error) {
+	// Rollback and checkpoint carry-forward are best-effort after the primary
+	// restore decision. The caller receives the primary restore error when one
+	// exists, and checkpoint preservation can be retried by the next snapshot.
 }
 
 // CopyDirCtx recursively copies one directory into another and honors cancellation.

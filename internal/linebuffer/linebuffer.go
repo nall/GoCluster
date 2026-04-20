@@ -8,7 +8,8 @@ import "bytes"
 // '\r' removed. If the trailing remainder exceeds maxRemainder, it is emitted
 // as one line and the remainder is cleared to keep memory bounded.
 func AppendAndExtractLines(buf []byte, p []byte, maxRemainder int) (remaining []byte, lines []string) {
-	data := append(buf, p...)
+	buf = append(buf, p...)
+	data := buf
 	for {
 		idx := bytes.IndexByte(data, '\n')
 		if idx == -1 {

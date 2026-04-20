@@ -72,7 +72,10 @@ func (h ftConfidenceHeap) Swap(i, j int) {
 }
 
 func (h *ftConfidenceHeap) Push(x any) {
-	item, _ := x.(ftConfidenceItem)
+	item, ok := x.(ftConfidenceItem)
+	if !ok {
+		return
+	}
 	*h = append(*h, item)
 }
 
@@ -98,8 +101,9 @@ func popFTConfidenceDue(h *ftConfidenceHeap, now time.Time, force bool, scratch 
 			break
 		}
 		itemAny := heap.Pop(h)
-		item, _ := itemAny.(ftConfidenceItem)
-		out = append(out, item)
+		if item, ok := itemAny.(ftConfidenceItem); ok {
+			out = append(out, item)
+		}
 	}
 	return out
 }

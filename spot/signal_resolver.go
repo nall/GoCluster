@@ -692,7 +692,8 @@ func (r *SignalResolver) evaluateKey(st *resolverKeyState, now time.Time) {
 		}
 	}
 	candidateRanksScratch := st.candidateRanksScratch[:0]
-	for _, candidate := range ranked {
+	for i := range ranked {
+		candidate := &ranked[i]
 		candidateRanksScratch = append(candidateRanksScratch, ResolverCandidateSupport{
 			Call:                 candidate.call,
 			Support:              candidate.support,
@@ -958,7 +959,8 @@ func resolverConfusionAggregateScore(
 		return 0
 	}
 	score := 0.0
-	for _, observed := range cohort {
+	for i := range cohort {
+		observed := &cohort[i]
 		if strings.EqualFold(observed.call, candidate.call) {
 			continue
 		}
@@ -991,7 +993,8 @@ func totalUniqueResolverReporters(candidates []rankedResolverCandidate) int {
 		return 0
 	}
 	seen := make(map[string]struct{}, 64)
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		for reporter := range candidate.reporters {
 			seen[reporter] = struct{}{}
 		}
@@ -1025,7 +1028,8 @@ func resolverCandidateRanksAhead(left, right rankedResolverCandidate) bool {
 }
 
 func supportForResolverCall(candidates []rankedResolverCandidate, call string) int {
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		if candidate.call == call {
 			return candidate.support
 		}
@@ -1034,7 +1038,8 @@ func supportForResolverCall(candidates []rankedResolverCandidate, call string) i
 }
 
 func weightedSupportForResolverCall(candidates []rankedResolverCandidate, call string) int {
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		if candidate.call == call {
 			return candidate.weightedSupportMilli
 		}
@@ -1047,12 +1052,13 @@ func runnerForResolverCall(candidates []rankedResolverCandidate, winner string) 
 		runner rankedResolverCandidate
 		found  bool
 	)
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		if candidate.call == winner {
 			continue
 		}
-		if !found || resolverCandidateRanksAhead(candidate, runner) {
-			runner = candidate
+		if !found || resolverCandidateRanksAhead(*candidate, runner) {
+			runner = *candidate
 			found = true
 		}
 	}
@@ -1172,7 +1178,8 @@ func totalUniqueResolverReporterWeightMilli(candidates []rankedResolverCandidate
 	}
 	seen := make(map[string]struct{}, 64)
 	total := 0
-	for _, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		for reporter := range candidate.reporters {
 			if _, ok := seen[reporter]; ok {
 				continue

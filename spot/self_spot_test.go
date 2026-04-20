@@ -39,7 +39,6 @@ func TestIsLocalSelfSpot(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := IsLocalSelfSpot(tc.spot); got != tc.want {
 				t.Fatalf("IsLocalSelfSpot()=%v want %v", got, tc.want)

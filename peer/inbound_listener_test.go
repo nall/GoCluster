@@ -42,7 +42,7 @@ func TestInboundListenerRejectsPeerIPBeforePC18(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestInboundListenerRejectsPeerIPBeforePC18(t *testing.T) {
 		}
 	}()
 
-	conn, err := net.Dial("tcp", ln.Addr().String())
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

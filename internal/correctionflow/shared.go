@@ -322,7 +322,8 @@ func SelectResolverPrimarySnapshotForCall(resolver *spot.SignalResolver, key spo
 	}
 
 	candidateRanks := make([]spot.ResolverCandidateSupport, 0, len(ranked))
-	for _, candidate := range ranked {
+	for i := range ranked {
+		candidate := &ranked[i]
 		candidateRanks = append(candidateRanks, spot.ResolverCandidateSupport{
 			Call:                 candidate.call,
 			Support:              candidate.support,

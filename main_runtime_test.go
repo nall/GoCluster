@@ -97,7 +97,6 @@ func TestSelectArchivePeerSecondaryPolicy(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := selectArchivePeerSecondaryPolicy(tc.cfg, tc.fastWindow, tc.medWindow, tc.slowWindow)
 			if got != tc.want {

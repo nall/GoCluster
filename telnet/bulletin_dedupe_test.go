@@ -34,7 +34,6 @@ func TestBulletinDedupeSuppressesWWVWCYAndAnnouncements(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
 			server, client := newBulletinDedupeTestServer(now, 10*time.Minute, 8)

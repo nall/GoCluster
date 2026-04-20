@@ -28,7 +28,10 @@ func (h customSCPEntryExpiryHeap) Swap(i, j int) {
 }
 
 func (h *customSCPEntryExpiryHeap) Push(x any) {
-	item := x.(*customSCPEntryExpiryItem)
+	item, ok := x.(*customSCPEntryExpiryItem)
+	if !ok {
+		return
+	}
 	item.index = len(*h)
 	*h = append(*h, item)
 }
@@ -67,7 +70,10 @@ func (h customSCPStaticExpiryHeap) Swap(i, j int) {
 }
 
 func (h *customSCPStaticExpiryHeap) Push(x any) {
-	item := x.(*customSCPStaticExpiryItem)
+	item, ok := x.(*customSCPStaticExpiryItem)
+	if !ok {
+		return
+	}
 	item.index = len(*h)
 	*h = append(*h, item)
 }

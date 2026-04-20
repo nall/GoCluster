@@ -39,7 +39,10 @@ func (h replayTemporalHeap) Swap(i, j int) {
 }
 
 func (h *replayTemporalHeap) Push(x any) {
-	item, _ := x.(*replayTemporalItem)
+	item, ok := x.(*replayTemporalItem)
+	if !ok {
+		return
+	}
 	*h = append(*h, item)
 }
 
@@ -65,11 +68,9 @@ func popReplayTemporalDue(h *replayTemporalHeap, now time.Time) []*replayTempora
 			break
 		}
 		itemAny := heap.Pop(h)
-		item, _ := itemAny.(*replayTemporalItem)
-		if item == nil {
-			continue
+		if item, ok := itemAny.(*replayTemporalItem); ok && item != nil {
+			out = append(out, item)
 		}
-		out = append(out, item)
 	}
 	return out
 }

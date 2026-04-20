@@ -1478,8 +1478,8 @@ func (p *Processor) handleShowDXCC(args []string) string {
 	others := p.prefixIdx.siblings(db, info.ADIF, prefix)
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s -> ADIF %d | %s (%s) | Prefix: %s | CQ %d | ITU %d",
-		lookup, info.ADIF, country, continent, prefix, info.CQZone, info.ITUZone))
+	fmt.Fprintf(&b, "%s -> ADIF %d | %s (%s) | Prefix: %s | CQ %d | ITU %d",
+		lookup, info.ADIF, country, continent, prefix, info.CQZone, info.ITUZone)
 	if len(others) > 0 {
 		b.WriteString(" | Other: ")
 		b.WriteString(strings.Join(others, ", "))

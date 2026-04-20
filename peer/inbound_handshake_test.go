@@ -7,12 +7,12 @@ import (
 	"dxcluster/config"
 )
 
-func inboundPeer(remoteCall, family string) config.PeeringPeer {
+func inboundPeer(family string) config.PeeringPeer {
 	return config.PeeringPeer{
 		Enabled:        true,
 		Direction:      config.PeeringPeerDirectionInbound,
 		Family:         family,
-		RemoteCallsign: remoteCall,
+		RemoteCallsign: "REMOTE",
 	}
 }
 
@@ -55,7 +55,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("dxspider banner without pc20 still times out", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "dxspider banner without pc20 still times out",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyDXSpider)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyDXSpider)},
 			wantRegistered: false,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -72,7 +72,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("dxspider pc92 without pc20 still times out", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "dxspider pc92 without pc20 still times out",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyDXSpider)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyDXSpider)},
 			wantRegistered: false,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -90,7 +90,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("ccluster banner establishes without pc20", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "ccluster banner establishes without pc20",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyCCluster)},
 			wantRegistered: true,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -110,7 +110,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	})
 
 	t.Run("ccluster pc92 establishes without prior banner and uses peer login callsign", func(t *testing.T) {
-		peer := inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)
+		peer := inboundPeer(config.PeeringPeerFamilyCCluster)
 		peer.LoginCallsign = "LOCAL-9"
 		runInboundScenario(t, inboundScenario{
 			name:           "ccluster pc92 establishes without prior banner and uses peer login callsign",
@@ -137,7 +137,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("ccluster banner plus pc92 establishes and processes topology", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "ccluster banner plus pc92 establishes and processes topology",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyCCluster)},
 			wantRegistered: true,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -161,7 +161,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("late pc20 after ccluster pc92 establish gets pc22", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "late pc20 after ccluster pc92 establish gets pc22",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyCCluster)},
 			wantRegistered: true,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -186,7 +186,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("late pc20 after ccluster establish gets pc22", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "late pc20 after ccluster establish gets pc22",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyCCluster)},
 			wantRegistered: true,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -210,7 +210,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("dxspider configured peer rejects cc banner", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "dxspider configured peer rejects cc banner",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyDXSpider)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyDXSpider)},
 			wantRegistered: false,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -227,7 +227,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("ccluster configured peer rejects dxspider banner", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:           "ccluster configured peer rejects dxspider banner",
-			peers:          []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyCCluster)},
+			peers:          []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyCCluster)},
 			wantRegistered: false,
 			wantRemoteCall: "REMOTE",
 			wantPC9x:       true,
@@ -244,7 +244,7 @@ func TestInboundHandshakeConfiguredPeerBehavior(t *testing.T) {
 	t.Run("legacy startup flips to non-pc9x before completion", func(t *testing.T) {
 		runInboundScenario(t, inboundScenario{
 			name:             "legacy startup flips to non-pc9x before completion",
-			peers:            []config.PeeringPeer{inboundPeer("REMOTE", config.PeeringPeerFamilyDXSpider)},
+			peers:            []config.PeeringPeer{inboundPeer(config.PeeringPeerFamilyDXSpider)},
 			wantRegistered:   true,
 			wantRemoteCall:   "REMOTE",
 			wantPC9x:         false,

@@ -95,10 +95,9 @@ func requireCustomSCPEntryMissingSpotter(t *testing.T, entry *customSCPEntry, sp
 	}
 }
 
-func retainCustomSCPTestStaticLocked(store *CustomSCPStore, call string, seenUnix int64) string {
+func retainCustomSCPTestStaticLocked(store *CustomSCPStore, call string, seenUnix int64) {
 	retained := store.retainStaticCallLocked(call, seenUnix)
 	store.upsertStaticExpiryLocked(retained, store.static[retained])
-	return retained
 }
 
 func TestCustomSCPStoreCWAndRTTYSNRThresholds(t *testing.T) {

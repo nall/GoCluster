@@ -25,7 +25,6 @@ func TestShouldPublishLocalSpotForwardDisabledAllowsOnlyLocalDX(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
 			s.SourceType = tc.src
@@ -56,7 +55,6 @@ func TestShouldPublishLocalSpotForwardEnabledUsesPeerPublishPolicy(t *testing.T)
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
 			s.SourceType = tc.src
@@ -94,7 +92,6 @@ func TestShouldRelayDataFrame(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Manager{cfg: config.PeeringConfig{ForwardSpots: tc.forward}}
 			if got := m.shouldRelayDataFrame(tc.frame); got != tc.want {

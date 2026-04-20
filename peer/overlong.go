@@ -71,7 +71,7 @@ func appendOverlongSample(path, host, preview string, length int, reason string,
 		limit:   limit,
 		ts:      time.Now().UTC(),
 	}
-	recordOverlongDrop(sample.reason, sample.limit, sample.length)
+	recordOverlongDrop(sample.reason, sample.limit)
 	// Best-effort: drop if the queue is full so the read loop never blocks.
 	select {
 	case overlongCh <- sample:
@@ -124,13 +124,10 @@ func normalizeOverlongReason(reason string) string {
 	return reason
 }
 
-func recordOverlongDrop(reason string, limit int, length int) {
+func recordOverlongDrop(reason string, limit int) {
 	reason = normalizeOverlongReason(reason)
 	if limit < 0 {
 		limit = 0
-	}
-	if length < 0 {
-		length = 0
 	}
 	now := time.Now().UTC()
 
@@ -182,7 +179,12 @@ func rotateOverlongLog(path string, maxBytes int64, keep int) {
 	for i := keep - 1; i >= 1; i-- {
 		src := path + "." + strconv.Itoa(i)
 		dst := path + "." + strconv.Itoa(i+1)
-		_ = os.Rename(src, dst)
+		ignoreOverlongRotateError(os.Rename(src, dst))
 	}
-	_ = os.Rename(path, path+".1")
+	ignoreOverlongRotateError(os.Rename(path, path+".1"))
+}
+
+func ignoreOverlongRotateError(error) {
+	// Overlong sample rotation is diagnostic-only and must never block or
+	// fail peer read paths. Future samples can retry rotation.
 }

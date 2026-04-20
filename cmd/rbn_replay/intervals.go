@@ -149,11 +149,12 @@ func computeIntervalsAndGates(samples []resolverSample, queueSize int) (interval
 	gates.Overall.StateSplit = last.StateSplit
 
 	hits = make([]intervalRow, 0)
-	for _, r := range intervals {
+	for i := range intervals {
+		r := &intervals[i]
 		if r.QueueDepthRatio >= 0.25 ||
 			r.DQ >= 1 || r.DK >= 1 || r.DCcap >= 1 || r.DR >= 1 ||
 			r.DPC >= 1 || r.DPR >= 1 {
-			hits = append(hits, r)
+			hits = append(hits, *r)
 		}
 	}
 	gates.ThresholdHits.Count = len(hits)
@@ -185,7 +186,8 @@ func writeIntervalsCSV(path string, rows []intervalRow) error {
 	}); err != nil {
 		return err
 	}
-	for _, r := range rows {
+	for i := range rows {
+		r := &rows[i]
 		if err := w.Write([]string{
 			r.T0,
 			r.T1,

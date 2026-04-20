@@ -74,7 +74,6 @@ func TestFormatConfidenceSingleReporterOnlyUnknown(t *testing.T) {
 		{name: "majority very likely", percent: 51, totalReporters: 3, want: "V"},
 	}
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := formatConfidence(tc.percent, tc.totalReporters); got != tc.want {
 				t.Fatalf("formatConfidence(%d, %d) = %q, want %q", tc.percent, tc.totalReporters, got, tc.want)

@@ -14,6 +14,7 @@ Expected Go toolchain:
 - `go test`
 - `go vet`
 - `staticcheck`
+- `golangci-lint` pinned to the CI version in `.github/workflows/ci.yml`
 
 If a tool is missing locally, report that fact explicitly and treat it as a validation gap, not a silent success.
 
@@ -32,6 +33,7 @@ Default full sequence:
 2. `go test ./...`
 3. `go vet ./...`
 4. `staticcheck ./...`
+5. `golangci-lint run ./... --config=.golangci.yaml`
 
 Also required as applicable:
 - `go test -race ./...` for concurrency, queues, timers, cancellation, lifecycle, shutdown, or long-lived connections

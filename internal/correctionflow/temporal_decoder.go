@@ -267,14 +267,14 @@ func (d *TemporalDecoder) Evaluate(id uint64, now time.Time, force bool) Tempora
 
 	st := d.keyStates[req.key]
 	if st == nil {
-		decision.Action = d.fallbackActionLocked(req.key)
+		decision.Action = d.fallbackActionLocked()
 		decision.Reason = "missing_key_state"
 		delete(d.requests, req.id)
 		return decision
 	}
 	startIdx := findTemporalEventIndex(st.events, req.id)
 	if startIdx < 0 {
-		decision.Action = d.fallbackActionLocked(req.key)
+		decision.Action = d.fallbackActionLocked()
 		decision.Reason = "event_evicted"
 		delete(d.requests, req.id)
 		return decision
@@ -324,7 +324,7 @@ func (d *TemporalDecoder) Evaluate(id uint64, now time.Time, force bool) Tempora
 		}
 		return decision
 	}
-	decision.Action = d.fallbackActionLocked(req.key)
+	decision.Action = d.fallbackActionLocked()
 	decision.Reason = temporalGateReason(winner, bestScore, marginScore, d.cfg.MinScore, d.cfg.MinMarginScore)
 	delete(d.requests, req.id)
 	if !d.hasPendingKeyLocked(req.key) {
@@ -333,7 +333,7 @@ func (d *TemporalDecoder) Evaluate(id uint64, now time.Time, force bool) Tempora
 	return decision
 }
 
-func (d *TemporalDecoder) fallbackActionLocked(key spot.ResolverSignalKey) TemporalDecisionAction {
+func (d *TemporalDecoder) fallbackActionLocked() TemporalDecisionAction {
 	switch d.cfg.OverflowAction {
 	case "abstain":
 		return TemporalDecisionActionAbstain
@@ -489,8 +489,8 @@ func (d *TemporalDecoder) decodeWindowLocked(events []temporalEvent, fallbackSub
 		return "", 0, 0, 0
 	}
 	candidateSets := make([][]string, 0, len(events))
-	for _, ev := range events {
-		candidateSets = append(candidateSets, d.candidatesForEvent(ev, fallbackSubject))
+	for i := range events {
+		candidateSets = append(candidateSets, d.candidatesForEvent(events[i], fallbackSubject))
 	}
 	startCandidates := candidateSets[0]
 	if len(startCandidates) == 0 {

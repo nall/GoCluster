@@ -1076,6 +1076,7 @@ func (s *Server) logAdmissionReject(reason preloginRejectReason, addr string) {
 		key = "unknown"
 	}
 	s.admissionLogCounts[key]++
+	//nolint:gosec // math/rand is sufficient for non-security admission log sampling.
 	shouldSample := s.admissionLogSample > 0 && rand.Float64() <= s.admissionLogSample && s.admissionLogLines < s.admissionLogMaxLines
 	if shouldSample {
 		s.admissionLogLines++

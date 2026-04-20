@@ -60,7 +60,10 @@ func (h runtimeTemporalHeap) Swap(i, j int) {
 }
 
 func (h *runtimeTemporalHeap) Push(x any) {
-	item, _ := x.(*runtimeTemporalItem)
+	item, ok := x.(*runtimeTemporalItem)
+	if !ok {
+		return
+	}
 	*h = append(*h, item)
 }
 
@@ -86,11 +89,9 @@ func popRuntimeTemporalDue(h *runtimeTemporalHeap, now time.Time) []*runtimeTemp
 			break
 		}
 		itemAny := heap.Pop(h)
-		item, _ := itemAny.(*runtimeTemporalItem)
-		if item == nil {
-			continue
+		if item, ok := itemAny.(*runtimeTemporalItem); ok && item != nil {
+			out = append(out, item)
 		}
-		out = append(out, item)
 	}
 	return out
 }

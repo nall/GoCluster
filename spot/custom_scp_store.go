@@ -799,7 +799,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 		defer batch.Close()
 		pending := 0
 		for _, call := range staleStaticCalls {
-			_ = batch.Delete([]byte(customSCPMetaPrefix+call), nil)
+			ignoreCustomSCPDiskError(batch.Delete([]byte(customSCPMetaPrefix+call), nil))
 			pending++
 		}
 		for _, req := range overflowDeletes {
@@ -811,24 +811,24 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 			case strings.HasPrefix(key, customSCPMetaPrefix):
 				value := iter.Value()
 				if len(value) != 8 {
-					_ = batch.Delete(iter.Key(), nil)
+					ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 					pending++
 					continue
 				}
 				seen := int64(binary.BigEndian.Uint64(value))
 				if seen < staticCutoff {
-					_ = batch.Delete(iter.Key(), nil)
+					ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 					pending++
 				}
 			case strings.HasPrefix(key, customSCPObsPrefix):
 				value := iter.Value()
 				if len(value) != 10 {
-					_ = batch.Delete(iter.Key(), nil)
+					ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 					pending++
 				} else {
 					seen := int64(binary.BigEndian.Uint64(value[:8]))
 					if seen < observationCutoff {
-						_ = batch.Delete(iter.Key(), nil)
+						ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 						pending++
 					}
 				}
@@ -836,13 +836,13 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 				continue
 			}
 			if pending >= 512 {
-				_ = batch.Commit(pebble.Sync)
+				ignoreCustomSCPDiskError(batch.Commit(pebble.Sync))
 				batch.Reset()
 				pending = 0
 			}
 		}
 		if pending > 0 {
-			_ = batch.Commit(pebble.Sync)
+			ignoreCustomSCPDiskError(batch.Commit(pebble.Sync))
 		}
 	}
 }
@@ -909,7 +909,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 		switch {
 		case bytes.HasPrefix(k, customSCPMetaPrefixBytes):
 			if len(v) != 8 {
-				_ = batch.Delete(iter.Key(), nil)
+				ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 				pendingDeletes++
 				continue
 			}
@@ -919,7 +919,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 				continue
 			}
 			if seen < staticCutoff {
-				_ = batch.Delete(iter.Key(), nil)
+				ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 				s.diag.staleStaticPruned++
 				pendingDeletes++
 				continue
@@ -929,13 +929,13 @@ func (s *CustomSCPStore) loadFromDB() error {
 		case bytes.HasPrefix(k, customSCPObsPrefixBytes):
 			call, band, bucket, spotter, ok := parseObservationKeyBytes(k)
 			if !ok || len(v) != 10 {
-				_ = batch.Delete(iter.Key(), nil)
+				ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 				pendingDeletes++
 				continue
 			}
 			seen := int64(binary.BigEndian.Uint64(v[:8]))
 			if seen < observationCutoff {
-				_ = batch.Delete(iter.Key(), nil)
+				ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 				s.diag.staleObservationsPruned++
 				pendingDeletes++
 				continue
@@ -957,7 +957,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 			}
 		}
 		if pendingDeletes >= 512 {
-			_ = batch.Commit(pebble.NoSync)
+			ignoreCustomSCPDiskError(batch.Commit(pebble.NoSync))
 			batch.Reset()
 			pendingDeletes = 0
 		}
@@ -967,7 +967,7 @@ func (s *CustomSCPStore) loadFromDB() error {
 		return fmt.Errorf("custom_scp: load iterate: %w", err)
 	}
 	if pendingDeletes > 0 {
-		_ = batch.Commit(pebble.NoSync)
+		ignoreCustomSCPDiskError(batch.Commit(pebble.NoSync))
 	}
 	return nil
 }
@@ -978,7 +978,7 @@ func (s *CustomSCPStore) persistStaticLocked(call string, seenUnix int64) {
 	}
 	value := make([]byte, 8)
 	binary.BigEndian.PutUint64(value, uint64(seenUnix))
-	_ = s.db.Set([]byte(customSCPMetaPrefix+call), value, pebble.NoSync)
+	ignoreCustomSCPDiskError(s.db.Set([]byte(customSCPMetaPrefix+call), value, pebble.NoSync))
 }
 
 func (s *CustomSCPStore) persistObservationLocked(key customSCPKey, spotter string, obs customSCPSpotterObs) {
@@ -988,7 +988,7 @@ func (s *CustomSCPStore) persistObservationLocked(key customSCPKey, spotter stri
 	value := make([]byte, 10)
 	binary.BigEndian.PutUint64(value[:8], uint64(obs.seenUnix))
 	binary.BigEndian.PutUint16(value[8:10], obs.cellRes1)
-	_ = s.db.Set([]byte(observationKeyString(key, spotter)), value, pebble.NoSync)
+	ignoreCustomSCPDiskError(s.db.Set([]byte(observationKeyString(key, spotter)), value, pebble.NoSync))
 }
 
 func (s *CustomSCPStore) evictOldestKeyLocked() {
@@ -1124,6 +1124,11 @@ type customSCPDeleteRequest struct {
 	spotters []string
 }
 
+func ignoreCustomSCPDiskError(error) {
+	// The in-memory bounded view is authoritative. These disk operations are
+	// best-effort convergence; cleanup/load passes retry stale record removal.
+}
+
 func (s *CustomSCPStore) observationHorizonCutoffUnix(now time.Time) int64 {
 	return now.UTC().Add(-time.Duration(s.opts.HorizonDays) * 24 * time.Hour).Unix()
 }
@@ -1179,9 +1184,9 @@ func (s *CustomSCPStore) deleteObservationSpotterLocked(key customSCPKey, entry 
 	}
 	keyBytes := []byte(observationKeyString(key, spotter))
 	if batch != nil {
-		_ = batch.Delete(keyBytes, nil)
+		ignoreCustomSCPDiskError(batch.Delete(keyBytes, nil))
 	} else {
-		_ = s.db.Delete(keyBytes, pebble.NoSync)
+		ignoreCustomSCPDiskError(s.db.Delete(keyBytes, pebble.NoSync))
 	}
 	return true
 }
@@ -1226,9 +1231,9 @@ func (s *CustomSCPStore) deleteObservationPrefixLocked(key customSCPKey) {
 	batch := s.db.NewBatch()
 	defer batch.Close()
 	for iter.First(); iter.Valid(); iter.Next() {
-		_ = batch.Delete(iter.Key(), nil)
+		ignoreCustomSCPDiskError(batch.Delete(iter.Key(), nil))
 	}
-	_ = batch.Commit(pebble.NoSync)
+	ignoreCustomSCPDiskError(batch.Commit(pebble.NoSync))
 }
 
 func (s *CustomSCPStore) snrPasses(bucket string, report int, hasReport bool) bool {

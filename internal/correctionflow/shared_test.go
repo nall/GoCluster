@@ -21,7 +21,6 @@ func TestFormatConfidenceParity(t *testing.T) {
 		{name: "multiple reporters very likely", percent: 51, totalReporters: 2, want: "V"},
 	}
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := FormatConfidence(tc.percent, tc.totalReporters); got != tc.want {
 				t.Fatalf("FormatConfidence(%d, %d) = %q, want %q", tc.percent, tc.totalReporters, got, tc.want)
@@ -312,6 +311,7 @@ type selectionSnapshotExpectation struct {
 	MinWinnerSupport int
 }
 
+//nolint:unparam // Timeout remains explicit so future async resolver tests can tighten or widen it per scenario.
 func waitForSelectionSnapshots(t *testing.T, resolver *spot.SignalResolver, expected []selectionSnapshotExpectation, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

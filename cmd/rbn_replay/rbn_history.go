@@ -203,15 +203,13 @@ func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 		return strings.TrimSpace(record[idx])
 	}
 
-	tsRaw := get(c.col.date)
-	ts, err := time.ParseInLocation("2006-01-02 15:04:05", tsRaw, time.UTC)
-	if err != nil {
+	ts, ok := parseRBNHistoryTime(get(c.col.date))
+	if !ok {
 		return rbnHistoryRow{}, false, nil
 	}
 
-	freqRaw := get(c.col.freq)
-	freqKHz, err := strconv.ParseFloat(freqRaw, 64)
-	if err != nil || freqKHz <= 0 {
+	freqKHz, ok := parseRBNHistoryFrequency(get(c.col.freq))
+	if !ok {
 		return rbnHistoryRow{}, false, nil
 	}
 
@@ -246,4 +244,14 @@ func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 		Mode:     mode,
 		ReportDB: report,
 	}, true, nil
+}
+
+func parseRBNHistoryTime(raw string) (time.Time, bool) {
+	ts, err := time.ParseInLocation("2006-01-02 15:04:05", raw, time.UTC)
+	return ts, err == nil
+}
+
+func parseRBNHistoryFrequency(raw string) (float64, bool) {
+	freqKHz, err := strconv.ParseFloat(raw, 64)
+	return freqKHz, err == nil && freqKHz > 0
 }

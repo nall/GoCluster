@@ -204,7 +204,7 @@ func newInboundHarnessManager(t *testing.T, scenario inboundScenario) (*Manager,
 // runInboundScenario drives session.Run over net.Pipe so tests exercise the real
 // inbound handshake and post-handshake registration path without OS listener
 // noise. Each script step is deadline-bound to keep failure modes deterministic.
-func runInboundScenario(t *testing.T, scenario inboundScenario) inboundScenarioResult {
+func runInboundScenario(t *testing.T, scenario inboundScenario) {
 	t.Helper()
 
 	loginTimeout := scenario.loginTimeout
@@ -382,7 +382,6 @@ func runInboundScenario(t *testing.T, scenario inboundScenario) inboundScenarioR
 		t.Fatalf("%s: expected ingested spots=%d, got %d\ntranscript:\n%s", scenario.name, scenario.wantIngestedSpots, result.ingestedSpots, formatTranscript(result.transcript))
 	}
 
-	return result
 }
 
 func formatTranscript(events []transcriptEvent) string {

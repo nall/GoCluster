@@ -12,13 +12,15 @@ import (
 )
 
 func TestManagerStartDialsOutboundAndBothPeersOnly(t *testing.T) {
-	outboundLn, err := net.Listen("tcp", "127.0.0.1:0")
+	ctx := context.Background()
+
+	outboundLn, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen outbound: %v", err)
 	}
 	defer outboundLn.Close()
 
-	bothLn, err := net.Listen("tcp", "127.0.0.1:0")
+	bothLn, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen both: %v", err)
 	}

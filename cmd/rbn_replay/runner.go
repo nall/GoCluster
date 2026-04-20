@@ -209,7 +209,7 @@ func (r *replayRunner) configureExternalDependencies() error {
 	allowlistPath := strings.TrimSpace(cfg.FCCULS.AllowlistPath)
 	if allowlistPath != "" {
 		if _, err := os.Stat(allowlistPath); err != nil {
-			return fmt.Errorf("fcc_uls.allowlist_path missing/unreadable %s: %v", allowlistPath, err)
+			return fmt.Errorf("fcc_uls.allowlist_path missing/unreadable %s: %w", allowlistPath, err)
 		}
 		uls.SetAllowlistPath(allowlistPath)
 	} else {
@@ -222,7 +222,7 @@ func (r *replayRunner) configureExternalDependencies() error {
 			return fmt.Errorf("fcc_uls.enabled=true but fcc_uls.db_path is empty (config=%s)", cfg.LoadedFrom)
 		}
 		if _, err := os.Stat(dbPath); err != nil {
-			return fmt.Errorf("fcc_uls.db_path missing/unreadable %s: %v", dbPath, err)
+			return fmt.Errorf("fcc_uls.db_path missing/unreadable %s: %w", dbPath, err)
 		}
 		uls.SetLicenseDBPath(dbPath)
 	} else {
@@ -238,7 +238,7 @@ func (r *replayRunner) configureExternalDependencies() error {
 		return fmt.Errorf("cty.enabled=true but cty.file is empty (config=%s)", cfg.LoadedFrom)
 	}
 	if _, err := os.Stat(ctyPath); err != nil {
-		return fmt.Errorf("cty.file missing/unreadable %s: %v", ctyPath, err)
+		return fmt.Errorf("cty.file missing/unreadable %s: %w", ctyPath, err)
 	}
 	loaded, err := cty.LoadCTYDatabase(ctyPath)
 	if err != nil {
@@ -318,7 +318,7 @@ func (r *replayRunner) openRecentBandStore() error {
 	if cfg.CallCorrection.CustomSCP.Enabled {
 		replayCustomSCPPath := filepath.Join(r.outDir, "custom_scp_runtime")
 		if err := os.RemoveAll(replayCustomSCPPath); err != nil {
-			return fmt.Errorf("remove replay custom SCP path %s: %v", replayCustomSCPPath, err)
+			return fmt.Errorf("remove replay custom SCP path %s: %w", replayCustomSCPPath, err)
 		}
 		coreMinScore := cfg.CallCorrection.CustomSCP.ResolverMinScore
 		if cfg.CallCorrection.CustomSCP.StabilizerMinScore > coreMinScore {
@@ -401,7 +401,7 @@ func (r *replayRunner) replayDay() error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return fmt.Errorf("csv read: %v", err)
+			return fmt.Errorf("csv read: %w", err)
 		}
 		if err := r.processCSVRow(row, ok); err != nil {
 			return err
@@ -465,11 +465,7 @@ func (r *replayRunner) processCSVRow(row rbnHistoryRow, ok bool) error {
 			return fmt.Errorf("resolver enqueue failed at %s for key=%s", now.Format(time.RFC3339), resolverEvidence.Key.String())
 		}
 	}
-	held, err := r.maybeHoldTemporal(spotEntry, resolverEvidence, hasResolverEvidence, now)
-	if err != nil {
-		return err
-	}
-	if held {
+	if r.maybeHoldTemporal(spotEntry, resolverEvidence, hasResolverEvidence, now) {
 		return nil
 	}
 
@@ -497,9 +493,9 @@ func (r *replayRunner) maybeHoldTemporal(
 	resolverEvidence spot.ResolverEvidence,
 	hasResolverEvidence bool,
 	now time.Time,
-) (bool, error) {
+) bool {
 	if r.temporalDecoder == nil || !r.temporalDecoder.Enabled() || !hasResolverEvidence {
-		return false, nil
+		return false
 	}
 
 	subject := normalizedDXCall(spotEntry)
@@ -508,18 +504,19 @@ func (r *replayRunner) maybeHoldTemporal(
 		selection = correctionflow.SelectResolverPrimarySnapshotForCall(r.resolver, resolverEvidence.Key, r.cfg.CallCorrection, subject)
 	}
 	if !selection.SnapshotOK || !r.temporalDecoder.ShouldHoldSelection(selection) {
-		return false, nil
+		return false
 	}
 
 	id := r.temporalNextID
 	r.temporalNextID++
-	if accepted, reason := r.temporalDecoder.Observe(correctionflow.TemporalObservation{
+	accepted, reason := r.temporalDecoder.Observe(correctionflow.TemporalObservation{
 		ID:          id,
 		ObservedAt:  now,
 		Key:         resolverEvidence.Key,
 		SubjectCall: subject,
 		Selection:   selection,
-	}); accepted {
+	})
+	if accepted {
 		r.temporalPending[id] = replayTemporalPending{
 			id:          id,
 			spot:        spotEntry,
@@ -539,32 +536,31 @@ func (r *replayRunner) maybeHoldTemporal(
 		// Enqueue happened before temporal hold; advance resolver state for
 		// this observation now, then decide at lag release.
 		r.driver.Step(now)
-		return true, nil
-	} else {
-		overflowDecision := correctionflow.TemporalDecision{
-			ID:            id,
-			Reason:        reason,
-			CommitLatency: 0,
-		}
-		switch r.cfg.CallCorrection.TemporalDecoder.OverflowAction {
-		case "abstain":
-			overflowDecision.Action = correctionflow.TemporalDecisionActionAbstain
-			r.abMetrics.Temporal.ObserveDecision(overflowDecision)
-			spotEntry.Confidence = correctionflow.ResolverConfidenceGlyphForCall(selection.Snapshot, selection.SnapshotOK, subject)
-			r.processOutcome(spotEntry, replayResolverApplyOutcome{
-				Selection:  selection,
-				Confidence: replayConfidenceOutcome{Final: normalizeConfidenceGlyph(spotEntry.Confidence)},
-			}, now)
-			r.driver.Step(now)
-			return true, nil
-		case "bypass":
-			overflowDecision.Action = correctionflow.TemporalDecisionActionBypass
-		default:
-			overflowDecision.Action = correctionflow.TemporalDecisionActionFallbackResolver
-		}
-		r.abMetrics.Temporal.ObserveDecision(overflowDecision)
-		return false, nil
+		return true
 	}
+	overflowDecision := correctionflow.TemporalDecision{
+		ID:            id,
+		Reason:        reason,
+		CommitLatency: 0,
+	}
+	switch r.cfg.CallCorrection.TemporalDecoder.OverflowAction {
+	case "abstain":
+		overflowDecision.Action = correctionflow.TemporalDecisionActionAbstain
+		r.abMetrics.Temporal.ObserveDecision(overflowDecision)
+		spotEntry.Confidence = correctionflow.ResolverConfidenceGlyphForCall(selection.Snapshot, selection.SnapshotOK, subject)
+		r.processOutcome(spotEntry, replayResolverApplyOutcome{
+			Selection:  selection,
+			Confidence: replayConfidenceOutcome{Final: normalizeConfidenceGlyph(spotEntry.Confidence)},
+		}, now)
+		r.driver.Step(now)
+		return true
+	case "bypass":
+		overflowDecision.Action = correctionflow.TemporalDecisionActionBypass
+	default:
+		overflowDecision.Action = correctionflow.TemporalDecisionActionFallbackResolver
+	}
+	r.abMetrics.Temporal.ObserveDecision(overflowDecision)
+	return false
 }
 
 func (r *replayRunner) emitSample(ts time.Time) error {
@@ -699,7 +695,7 @@ func (r *replayRunner) drainTemporal(now time.Time, force bool) {
 
 func (r *replayRunner) finalize() error {
 	if err := r.runbookSamplesFile.Sync(); err != nil {
-		return fmt.Errorf("sync runbook samples file: %v", err)
+		return fmt.Errorf("sync runbook samples file: %w", err)
 	}
 
 	if len(r.samples) < 2 {

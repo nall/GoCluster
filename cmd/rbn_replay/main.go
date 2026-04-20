@@ -63,6 +63,7 @@ func loadSpotterReliability(cfg config.CallCorrectionConfig) (base spot.SpotterR
 	return base, cw, rtty, nil
 }
 
+//nolint:nilnil // A nil confusion model with nil error means the optional model is disabled.
 func loadConfusionModel(cfg config.CallCorrectionConfig) (*spot.ConfusionModel, error) {
 	if !cfg.ConfusionModelEnabled {
 		return nil, nil

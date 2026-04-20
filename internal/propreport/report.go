@@ -941,7 +941,7 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 func buildFinalReport(summary reportSummary) string {
 	var b strings.Builder
 	logName := filepath.Base(summary.LogFile)
-	b.WriteString(fmt.Sprintf("I reviewed the entire %s log (%s) and summarized per band, by hour how much evidence we have (active fine buckets) and how strong it is (weight distribution). All times are UTC from the log.\n\n", summary.DateUTC, logName))
+	fmt.Fprintf(&b, "I reviewed the entire %s log (%s) and summarized per band, by hour how much evidence we have (active fine buckets) and how strong it is (weight distribution). All times are UTC from the log.\n\n", summary.DateUTC, logName)
 	b.WriteString("How to read this\n\n")
 	b.WriteString("f_med = median count of active fine buckets for the hour (higher = more evidence).\n")
 	b.WriteString("ge10_med = median count of buckets with decayed weight ≥10 (strong evidence).\n")
