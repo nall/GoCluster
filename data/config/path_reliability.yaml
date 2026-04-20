@@ -36,7 +36,7 @@ glyph_symbols:
 
 # Clamp FT8-equivalent dB before converting to power; FT8 cannot decode below about -25 dB.
 clamp_min: -25
-clamp_max: 35
+clamp_max: 25
 
 # Decay half-life in seconds when no per-band override applies.
 default_half_life_seconds: 420
