@@ -93,7 +93,7 @@ The main operator-facing configuration lives in [`data/config`](data/config). Th
 
 ## Quick Start
 
-1. Install Go `1.25+`.
+1. Install Go `1.26+`.
 2. Review the config files in [`data/config`](data/config).
    At minimum, set your callsigns in `ingest.yaml` and your telnet port in `runtime.yaml`.
 3. Run:
