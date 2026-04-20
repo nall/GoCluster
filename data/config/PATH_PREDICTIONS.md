@@ -60,6 +60,12 @@ The half-life is band-specific because different bands change at different rates
 
 After about 3 half-lives (roughly 12-30 minutes depending on band), old data gets purged entirely to keep the predictions fresh.
 
+Separately, selected prediction evidence has a freshness gate. The shipped value
+is `max_prediction_age_half_life_multiplier: 1.25`, so selected evidence older
+than about 1.25 band half-lives is treated as insufficient before the final
+glyph is chosen. This is a hard cutoff: a strong old opening becomes a space
+rather than fading from `>` to `=` to `<` because of age alone.
+
 ### Your Noise Environment
 
 Your local noise floor dramatically affects what you can **receive**. The system adjusts the receive-path prediction based on the noise environment you've set (using the `SET NOISE` command).
@@ -92,11 +98,13 @@ When you see a glyph next to a spot, here's what happened behind the scenes:
 
 3. **Blend resolutions**: Fine and coarse data get combined. If you have strong local data (fine), it dominates. If not, regional data (coarse) fills in.
 
-4. **Merge directions**: Receive and transmit paths combine (60/40 split), with your noise penalty applied to the receive side.
+4. **Check freshness**: Selected receive/transmit evidence must be recent enough for the band. Stale selected evidence is discarded.
 
-5. **Check confidence**: If the combined data weight is below the minimum threshold (default 0.6), the system shows a space (insufficient data) instead of making an unreliable prediction.
+5. **Merge directions**: Receive and transmit paths combine (60/40 split), with your noise penalty applied to the receive side.
 
-6. **Map to glyph**: The final signal strength gets compared against mode-specific thresholds to pick the right symbol.
+6. **Check confidence**: If the combined data weight is below the minimum threshold (default 0.6), the system shows a space (insufficient data) instead of making an unreliable prediction.
+
+7. **Map to glyph**: The final signal strength gets compared against mode-specific thresholds to pick the right symbol.
 
 ## How to Use This Information
 
@@ -136,7 +144,7 @@ If you don't set it, the system assumes "quiet" and might show overly optimistic
 ### Band-Specific Behavior
 
 - **Low bands (160m/80m)**: Predictions change slowly. A `>` will probably stick around for 15-20 minutes.
-- **High bands (10m/6m)**: Predictions change rapidly. A `>` might become `<` in just a few minutes as conditions shift.
+- **High bands (10m/6m)**: Predictions change rapidly. A `>` can disappear within a few minutes if no fresh supporting evidence arrives.
 
 ## Configuration Options
 
@@ -144,6 +152,7 @@ The system is highly configurable (see [path_reliability.yaml](path_reliability.
 
 - **Glyph symbols**: Can be customized (default: `>=<-` and space)
 - **Half-life timings**: Per-band decay rates
+- **Freshness gate**: Maximum selected evidence age as a multiple of band half-life
 - **Noise penalties**: band-specific dB adjustments per environment type
 - **Mode thresholds**: What signal strength qualifies as high/medium/low for each mode
 - **Minimum weight**: How much data is needed before showing a prediction

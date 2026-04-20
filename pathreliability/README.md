@@ -71,6 +71,7 @@ The shipped config currently uses:
 - half-lives ranging from `600s` on `160m` and `80m` down to `240s` on `12m`, `10m`, and `6m`
 - `stale_after_half_life_multiplier: 3`
 - `stale_after_seconds: 1800` as the fallback purge window
+- `max_prediction_age_half_life_multiplier: 1.25` as a display/filter freshness gate
 
 ## Sample Selection And Merge
 
@@ -84,6 +85,16 @@ For each direction, `SelectSample(...)` chooses between fine and coarse evidence
 - if fine is below `min_fine_weight`, coarse wins
 - if fine is above `fine_only_weight`, fine wins outright
 - otherwise, fine and coarse are blended by weight
+
+When fine and coarse evidence are blended, the selected sample age is also a
+weighted effective age. A small fresh sample therefore cannot hide a large stale
+regional contribution.
+
+After sample selection, the predictor applies the freshness gate. If selected
+evidence is older than `ceil(band_half_life * max_prediction_age_half_life_multiplier)`,
+that direction is discarded before receive/transmit merge. A value of `0`
+disables this gate. Stale positive evidence returns `INSUFFICIENT`; it does not
+fade through weaker glyph tiers just because it got older.
 
 The shipped config currently uses:
 
@@ -125,7 +136,9 @@ Prediction returns either:
 - `UNLIKELY`
 - `INSUFFICIENT`
 
-`INSUFFICIENT` is returned when there is no usable sample or the merged effective weight stays below `min_effective_weight`.
+`INSUFFICIENT` is returned when there is no usable sample, selected evidence is
+too old for the freshness gate, or the merged effective weight stays below
+`min_effective_weight`.
 
 The shipped glyph symbols are:
 

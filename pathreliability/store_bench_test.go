@@ -37,3 +37,25 @@ func BenchmarkStoreRefreshStatsSnapshot(b *testing.B) {
 		store.RefreshStatsSnapshot(now)
 	}
 }
+
+func BenchmarkPredictFreshnessGate(b *testing.B) {
+	cfg := DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 300}
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 1.25
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := CellID(1)
+	dxCell := CellID(2)
+	userCoarse := CellID(3)
+	dxCoarse := CellID(4)
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -5, 10, now, false)
+	predictor.Update(BucketCombined, dxCell, userCell, dxCoarse, userCoarse, "20m", -7, 8, now, false)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
+	}
+}

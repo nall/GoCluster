@@ -12,27 +12,28 @@ import (
 
 // Config holds tuning knobs for path reliability aggregation and display.
 type Config struct {
-	Enabled                      bool                          `yaml:"enabled"`
-	AllowedBands                 []string                      `yaml:"allowed_bands"`
-	ClampMin                     float64                       `yaml:"clamp_min"`                        // FT8-equiv floor (dB)
-	ClampMax                     float64                       `yaml:"clamp_max"`                        // FT8-equiv ceiling (dB)
-	DefaultHalfLifeSec           int                           `yaml:"default_half_life_seconds"`        // fallback half-life when band not listed
-	BandHalfLifeSec              map[string]int                `yaml:"band_half_life_seconds"`           // per-band overrides
-	StaleAfterSeconds            int                           `yaml:"stale_after_seconds"`              // fallback purge when older than this
-	StaleAfterHalfLifeMultiplier float64                       `yaml:"stale_after_half_life_multiplier"` // stale = k * half-life (per band)
-	MinEffectiveWeight           float64                       `yaml:"min_effective_weight"`             // minimum decayed weight to report
-	MinFineWeight                float64                       `yaml:"min_fine_weight"`                  // minimum fine weight to blend with coarse
-	FineOnlyWeight               float64                       `yaml:"fine_only_weight"`                 // minimum fine weight to use fine only
-	ReverseHintDiscount          float64                       `yaml:"reverse_hint_discount"`            // multiplier when using reverse direction
-	MergeReceiveWeight           float64                       `yaml:"merge_receive_weight"`             // merge weight for DX->user
-	MergeTransmitWeight          float64                       `yaml:"merge_transmit_weight"`            // merge weight for user->DX
-	BeaconWeightCap              float64                       `yaml:"beacon_weight_cap"`                // cap per-beacon contribution
-	DisplayEnabled               bool                          `yaml:"display_enabled"`                  // toggle glyph rendering
-	ModeOffsets                  ModeOffsets                   `yaml:"mode_offsets"`                     // per-mode FT8-equiv offsets
-	ModeThresholds               map[string]GlyphThresholds    `yaml:"mode_thresholds"`                  // per-mode glyph thresholds in FT8-equiv dB
-	GlyphThresholds              GlyphThresholds               `yaml:"glyph_thresholds"`                 // fallback glyph thresholds in FT8-equiv dB
-	GlyphSymbols                 GlyphSymbols                  `yaml:"glyph_symbols"`                    // glyph mapping for high/medium/low/unlikely/insufficient
-	NoiseOffsetsByBand           map[string]map[string]float64 `yaml:"noise_offsets_by_band"`            // noise class -> band -> dB penalty
+	Enabled                            bool                          `yaml:"enabled"`
+	AllowedBands                       []string                      `yaml:"allowed_bands"`
+	ClampMin                           float64                       `yaml:"clamp_min"`                               // FT8-equiv floor (dB)
+	ClampMax                           float64                       `yaml:"clamp_max"`                               // FT8-equiv ceiling (dB)
+	DefaultHalfLifeSec                 int                           `yaml:"default_half_life_seconds"`               // fallback half-life when band not listed
+	BandHalfLifeSec                    map[string]int                `yaml:"band_half_life_seconds"`                  // per-band overrides
+	StaleAfterSeconds                  int                           `yaml:"stale_after_seconds"`                     // fallback purge when older than this
+	StaleAfterHalfLifeMultiplier       float64                       `yaml:"stale_after_half_life_multiplier"`        // stale = k * half-life (per band)
+	MaxPredictionAgeHalfLifeMultiplier float64                       `yaml:"max_prediction_age_half_life_multiplier"` // prediction age gate = k * half-life; 0 disables
+	MinEffectiveWeight                 float64                       `yaml:"min_effective_weight"`                    // minimum decayed weight to report
+	MinFineWeight                      float64                       `yaml:"min_fine_weight"`                         // minimum fine weight to blend with coarse
+	FineOnlyWeight                     float64                       `yaml:"fine_only_weight"`                        // minimum fine weight to use fine only
+	ReverseHintDiscount                float64                       `yaml:"reverse_hint_discount"`                   // multiplier when using reverse direction
+	MergeReceiveWeight                 float64                       `yaml:"merge_receive_weight"`                    // merge weight for DX->user
+	MergeTransmitWeight                float64                       `yaml:"merge_transmit_weight"`                   // merge weight for user->DX
+	BeaconWeightCap                    float64                       `yaml:"beacon_weight_cap"`                       // cap per-beacon contribution
+	DisplayEnabled                     bool                          `yaml:"display_enabled"`                         // toggle glyph rendering
+	ModeOffsets                        ModeOffsets                   `yaml:"mode_offsets"`                            // per-mode FT8-equiv offsets
+	ModeThresholds                     map[string]GlyphThresholds    `yaml:"mode_thresholds"`                         // per-mode glyph thresholds in FT8-equiv dB
+	GlyphThresholds                    GlyphThresholds               `yaml:"glyph_thresholds"`                        // fallback glyph thresholds in FT8-equiv dB
+	GlyphSymbols                       GlyphSymbols                  `yaml:"glyph_symbols"`                           // glyph mapping for high/medium/low/unlikely/insufficient
+	NoiseOffsetsByBand                 map[string]map[string]float64 `yaml:"noise_offsets_by_band"`                   // noise class -> band -> dB penalty
 
 	modeThresholdsPower  map[string]GlyphThresholdsPower
 	glyphThresholdsPower GlyphThresholdsPower
@@ -164,22 +165,23 @@ func (s *GlyphSymbols) UnmarshalYAML(value *yaml.Node) error {
 // DefaultConfig returns a safe, enabled configuration.
 func DefaultConfig() Config {
 	cfg := Config{
-		Enabled:                      true,
-		AllowedBands:                 []string{"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"},
-		ClampMin:                     -25,
-		ClampMax:                     15,
-		DefaultHalfLifeSec:           300,
-		BandHalfLifeSec:              map[string]int{},
-		StaleAfterSeconds:            1800,
-		StaleAfterHalfLifeMultiplier: 5,
-		MinEffectiveWeight:           1.0,
-		MinFineWeight:                5.0,
-		FineOnlyWeight:               20.0,
-		ReverseHintDiscount:          0.5,
-		MergeReceiveWeight:           0.6,
-		MergeTransmitWeight:          0.4,
-		BeaconWeightCap:              1.0,
-		DisplayEnabled:               true,
+		Enabled:                            true,
+		AllowedBands:                       []string{"160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m"},
+		ClampMin:                           -25,
+		ClampMax:                           15,
+		DefaultHalfLifeSec:                 300,
+		BandHalfLifeSec:                    map[string]int{},
+		StaleAfterSeconds:                  1800,
+		StaleAfterHalfLifeMultiplier:       5,
+		MaxPredictionAgeHalfLifeMultiplier: 1.25,
+		MinEffectiveWeight:                 1.0,
+		MinFineWeight:                      5.0,
+		FineOnlyWeight:                     20.0,
+		ReverseHintDiscount:                0.5,
+		MergeReceiveWeight:                 0.6,
+		MergeTransmitWeight:                0.4,
+		BeaconWeightCap:                    1.0,
+		DisplayEnabled:                     true,
 		ModeOffsets: ModeOffsets{
 			FT4:  -3,
 			CW:   -7,
@@ -240,6 +242,9 @@ func (c *Config) normalize() {
 	}
 	if c.StaleAfterHalfLifeMultiplier <= 0 {
 		c.StaleAfterHalfLifeMultiplier = def.StaleAfterHalfLifeMultiplier
+	}
+	if c.MaxPredictionAgeHalfLifeMultiplier < 0 {
+		c.MaxPredictionAgeHalfLifeMultiplier = 0
 	}
 	if c.MinEffectiveWeight <= 0 {
 		c.MinEffectiveWeight = def.MinEffectiveWeight

@@ -71,6 +71,26 @@ func TestDefaultNoiseOffsetsByBand(t *testing.T) {
 	}
 }
 
+func TestDefaultMaxPredictionAgeMultiplier(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.MaxPredictionAgeHalfLifeMultiplier != 1.25 {
+		t.Fatalf("default max prediction age multiplier = %v, want 1.25", cfg.MaxPredictionAgeHalfLifeMultiplier)
+	}
+}
+
+func TestLoadFileNegativeMaxPredictionAgeMultiplierDisablesGate(t *testing.T) {
+	path := writeTempConfig(t, `
+max_prediction_age_half_life_multiplier: -1
+`)
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.MaxPredictionAgeHalfLifeMultiplier != 0 {
+		t.Fatalf("negative max prediction age multiplier normalized to %v, want 0", cfg.MaxPredictionAgeHalfLifeMultiplier)
+	}
+}
+
 func TestLoadFileNoiseOffsetsByBandNormalizesAndFillsDefaults(t *testing.T) {
 	path := writeTempConfig(t, `
 noise_offsets_by_band:

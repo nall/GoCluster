@@ -244,6 +244,7 @@ type Server struct {
 	pathPredInsufficient  atomic.Uint64                              // Predictions with insufficient data
 	pathPredNoSample      atomic.Uint64                              // Insufficient predictions with no samples
 	pathPredLowWeight     atomic.Uint64                              // Insufficient predictions below min weight
+	pathPredStale         atomic.Uint64                              // Insufficient predictions with stale selected evidence
 	pathPredOverrideR     atomic.Uint64                              // R overrides applied
 	pathPredOverrideG     atomic.Uint64                              // G overrides applied
 }
@@ -2672,6 +2673,7 @@ type pathPredictionStats struct {
 	Insufficient uint64
 	NoSample     uint64
 	LowWeight    uint64
+	Stale        uint64
 	OverrideR    uint64
 	OverrideG    uint64
 }
@@ -2689,10 +2691,19 @@ func (s *Server) recordPathPrediction(res pathreliability.Result, userDerived, d
 		s.pathPredCombined.Add(1)
 	default:
 		s.pathPredInsufficient.Add(1)
-		if res.Weight > 0 {
+		switch res.InsufficientReason {
+		case pathreliability.InsufficientStale:
+			s.pathPredStale.Add(1)
+		case pathreliability.InsufficientLowWeight:
 			s.pathPredLowWeight.Add(1)
-		} else {
+		case pathreliability.InsufficientNoSample:
 			s.pathPredNoSample.Add(1)
+		default:
+			if res.Weight > 0 {
+				s.pathPredLowWeight.Add(1)
+			} else {
+				s.pathPredNoSample.Add(1)
+			}
 		}
 	}
 }
@@ -2708,6 +2719,7 @@ func (s *Server) PathPredictionStatsSnapshot() pathPredictionStats {
 		Insufficient: s.pathPredInsufficient.Swap(0),
 		NoSample:     s.pathPredNoSample.Swap(0),
 		LowWeight:    s.pathPredLowWeight.Swap(0),
+		Stale:        s.pathPredStale.Swap(0),
 		OverrideR:    s.pathPredOverrideR.Swap(0),
 		OverrideG:    s.pathPredOverrideG.Swap(0),
 	}
@@ -3348,7 +3360,7 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 	if strings.TrimSpace(mode) == "" {
 		mode = sp.Mode
 	}
-	now := time.Now().UTC()
+	now := s.now()
 	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
 	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
 	s.recordPathPrediction(res, state.gridDerived, sp.DXMetadata.GridDerived)
@@ -3424,7 +3436,7 @@ func (s *Server) pathClassForClient(client *Client, sp *spot.Spot) string {
 	if mode == "" {
 		mode = strings.TrimSpace(sp.Mode)
 	}
-	now := time.Now().UTC()
+	now := s.now()
 	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
 	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
 	if res.Source == pathreliability.SourceInsufficient {

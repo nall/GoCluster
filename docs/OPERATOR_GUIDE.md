@@ -32,7 +32,7 @@ This server aggregates real-time spotting data and publishes a single per-band p
 
 ## Health Signals (logs)
 Every 5 minutes, the server logs:
-- `Path predictions (5m)` — combined vs insufficient, and no‑sample vs low‑weight.
+- `Path predictions (5m)` — combined vs insufficient, including no‑sample, low‑weight, and stale selected evidence.
 - `Path buckets (5m)` — per‑band bucket counts.
 - `Path weight dist (5m)` — per‑band weight histogram.
 Stats ticker adds:

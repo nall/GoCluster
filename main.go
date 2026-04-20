@@ -1576,13 +1576,14 @@ func startPathPredictionLogger(ctx context.Context, logMux *logFanout, srv *teln
 				stats := srv.PathPredictionStatsSnapshot()
 				if stats.Total > 0 {
 					fileOnly(fmt.Sprintf(
-						"Path predictions (5m): total=%s derived=%s combined=%s insufficient=%s no_sample=%s low_weight=%s override_r=%s override_g=%s",
+						"Path predictions (5m): total=%s derived=%s combined=%s insufficient=%s no_sample=%s low_weight=%s stale=%s override_r=%s override_g=%s",
 						humanize.Comma(int64(stats.Total)),
 						humanize.Comma(int64(stats.Derived)),
 						humanize.Comma(int64(stats.Combined)),
 						humanize.Comma(int64(stats.Insufficient)),
 						humanize.Comma(int64(stats.NoSample)),
 						humanize.Comma(int64(stats.LowWeight)),
+						humanize.Comma(int64(stats.Stale)),
 						humanize.Comma(int64(stats.OverrideR)),
 						humanize.Comma(int64(stats.OverrideG)),
 					))

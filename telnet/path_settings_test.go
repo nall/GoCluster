@@ -86,3 +86,47 @@ func TestPathPredictionUsesBandSpecificNoisePenalty(t *testing.T) {
 		t.Fatalf("expected 6m PATH class high, got %q", got)
 	}
 }
+
+func TestPathPredictionStaleEvidenceIsInsufficientForDisplayAndFilter(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := pathreliability.DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
+	cfg.StaleAfterHalfLifeMultiplier = 100
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
+	predictor := pathreliability.NewPredictor(cfg, []string{"20m"})
+
+	userCell := pathreliability.EncodeCell("FN31")
+	dxCell := pathreliability.EncodeCell("FN32")
+	userCoarse := pathreliability.EncodeCoarseCell("FN31")
+	dxCoarse := pathreliability.EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+	predictor.Update(pathreliability.BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", 25, 10, now.Add(-20*time.Second), false)
+
+	server := &Server{
+		pathPredictor: predictor,
+		pathDisplay:   true,
+		noiseModel:    cfg.NoiseModel(),
+		nowFn:         func() time.Time { return now },
+	}
+	client := &Client{
+		grid:           "FN31",
+		gridCell:       userCell,
+		gridCoarseCell: userCoarse,
+		noiseClass:     "QUIET",
+	}
+	sp := spot.NewSpot("DX1AA", "DE1AA", 14074, "FT8")
+	sp.BandNorm = "20m"
+	sp.DXMetadata.Grid = "FN32"
+
+	if got := server.pathGlyphsForClient(client, sp); got != cfg.GlyphSymbols.Insufficient {
+		t.Fatalf("expected stale display glyph to be insufficient %q, got %q", cfg.GlyphSymbols.Insufficient, got)
+	}
+	if got := server.pathClassForClient(client, sp); got != filter.PathClassInsufficient {
+		t.Fatalf("expected stale PATH class insufficient, got %q", got)
+	}
+	stats := server.PathPredictionStatsSnapshot()
+	if stats.Stale != 1 || stats.NoSample != 0 || stats.LowWeight != 0 {
+		t.Fatalf("expected stale stats only, got %+v", stats)
+	}
+}

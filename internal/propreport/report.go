@@ -104,6 +104,7 @@ type predictionHour struct {
 	AvgInsufficient float64 `json:"avg_insufficient"`
 	AvgNoSample     float64 `json:"avg_no_sample"`
 	AvgLowWeight    float64 `json:"avg_low_weight"`
+	AvgStale        float64 `json:"avg_stale"`
 }
 
 type sourceMixHour struct {
@@ -132,19 +133,21 @@ type ge10Variance struct {
 }
 
 type modelContext struct {
-	ClampMin                     float64                       `json:"clamp_min"`
-	ClampMax                     float64                       `json:"clamp_max"`
-	DefaultHalfLifeSec           int                           `json:"default_half_life_seconds"`
-	BandHalfLifeSec              map[string]int                `json:"band_half_life_seconds"`
-	StaleAfterSeconds            int                           `json:"stale_after_seconds"`
-	StaleAfterHalfLifeMultiplier float64                       `json:"stale_after_half_life_multiplier"`
-	StaleAfterByBand             map[string]int                `json:"stale_after_by_band_seconds"`
-	MinEffectiveWeight           float64                       `json:"min_effective_weight"`
-	MinFineWeight                float64                       `json:"min_fine_weight"`
-	ReverseHintDiscount          float64                       `json:"reverse_hint_discount"`
-	MergeReceiveWeight           float64                       `json:"merge_receive_weight"`
-	MergeTransmitWeight          float64                       `json:"merge_transmit_weight"`
-	NoiseOffsetsByBand           map[string]map[string]float64 `json:"noise_offsets_by_band"`
+	ClampMin                           float64                       `json:"clamp_min"`
+	ClampMax                           float64                       `json:"clamp_max"`
+	DefaultHalfLifeSec                 int                           `json:"default_half_life_seconds"`
+	BandHalfLifeSec                    map[string]int                `json:"band_half_life_seconds"`
+	StaleAfterSeconds                  int                           `json:"stale_after_seconds"`
+	StaleAfterHalfLifeMultiplier       float64                       `json:"stale_after_half_life_multiplier"`
+	StaleAfterByBand                   map[string]int                `json:"stale_after_by_band_seconds"`
+	MaxPredictionAgeHalfLifeMultiplier float64                       `json:"max_prediction_age_half_life_multiplier"`
+	MaxPredictionAgeByBand             map[string]int                `json:"max_prediction_age_by_band_seconds"`
+	MinEffectiveWeight                 float64                       `json:"min_effective_weight"`
+	MinFineWeight                      float64                       `json:"min_fine_weight"`
+	ReverseHintDiscount                float64                       `json:"reverse_hint_discount"`
+	MergeReceiveWeight                 float64                       `json:"merge_receive_weight"`
+	MergeTransmitWeight                float64                       `json:"merge_transmit_weight"`
+	NoiseOffsetsByBand                 map[string]map[string]float64 `json:"noise_offsets_by_band"`
 }
 
 type openAIConfig struct {
@@ -168,6 +171,7 @@ type predTotals struct {
 	Insufficient int
 	NoSample     int
 	LowWeight    int
+	Stale        int
 }
 
 var (
@@ -182,7 +186,7 @@ var (
 	ansiRe        = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	bandBuckets   = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)\s+f=([\d,]+)\s+c=([\d,]+)`)
 	bandWeights   = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)\s+t=([\d,]+)\s+<1=([\d,]+)\s+1-2=([\d,]+)\s+2-3=([\d,]+)\s+3-5=([\d,]+)\s+5-10=([\d,]+)\s+>=10=([\d,]+)`)
-	predsFields   = regexp.MustCompile(`total=(\d+).*derived=(\d+).*combined=(\d+).*insufficient=(\d+).*no_sample=(\d+).*low_weight=(\d+)`)
+	predsFields   = regexp.MustCompile(`\b(total|derived|combined|insufficient|no_sample|low_weight|stale)=([\d,]+)`)
 	sourceFields  = regexp.MustCompile(`([A-Za-z\-]+)=([\d,]+)`)
 	hourField     = regexp.MustCompile(`hour=(\d{2})`)
 	bandCounts    = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)=([\d,]+)`)
@@ -242,6 +246,33 @@ func parseInt(val string) int {
 		return 0
 	}
 	return out
+}
+
+func parsePredictionTotals(line string) (predTotals, bool) {
+	matches := predsFields.FindAllStringSubmatch(line, -1)
+	if len(matches) == 0 {
+		return predTotals{}, false
+	}
+	values := make(map[string]int, len(matches))
+	for _, match := range matches {
+		if len(match) != 3 {
+			continue
+		}
+		values[match[1]] = parseInt(match[2])
+	}
+	for _, required := range []string{"total", "combined", "insufficient", "no_sample", "low_weight"} {
+		if _, ok := values[required]; !ok {
+			return predTotals{}, false
+		}
+	}
+	return predTotals{
+		Total:        values["total"],
+		Combined:     values["combined"],
+		Insufficient: values["insufficient"],
+		NoSample:     values["no_sample"],
+		LowWeight:    values["low_weight"],
+		Stale:        values["stale"],
+	}, true
 }
 
 func parseHour(ts string, line string) (int, bool) {
@@ -409,6 +440,7 @@ func loadOpenAIConfig(path string) (openAIConfig, error) {
 
 func buildModelContext(cfg pathreliability.Config, bands []string) modelContext {
 	staleByBand := make(map[string]int, len(bands))
+	maxAgeByBand := make(map[string]int, len(bands))
 	for _, band := range bands {
 		halfLife := cfg.DefaultHalfLifeSec
 		if v, ok := cfg.BandHalfLifeSec[band]; ok && v > 0 {
@@ -419,21 +451,28 @@ func buildModelContext(cfg pathreliability.Config, bands []string) modelContext 
 			stale = int(math.Round(cfg.StaleAfterHalfLifeMultiplier * float64(halfLife)))
 		}
 		staleByBand[band] = stale
+		if cfg.MaxPredictionAgeHalfLifeMultiplier > 0 && halfLife > 0 {
+			maxAgeByBand[band] = int(math.Ceil(cfg.MaxPredictionAgeHalfLifeMultiplier * float64(halfLife)))
+		} else {
+			maxAgeByBand[band] = 0
+		}
 	}
 	return modelContext{
-		ClampMin:                     cfg.ClampMin,
-		ClampMax:                     cfg.ClampMax,
-		DefaultHalfLifeSec:           cfg.DefaultHalfLifeSec,
-		BandHalfLifeSec:              cfg.BandHalfLifeSec,
-		StaleAfterSeconds:            cfg.StaleAfterSeconds,
-		StaleAfterHalfLifeMultiplier: cfg.StaleAfterHalfLifeMultiplier,
-		StaleAfterByBand:             staleByBand,
-		MinEffectiveWeight:           cfg.MinEffectiveWeight,
-		MinFineWeight:                cfg.MinFineWeight,
-		ReverseHintDiscount:          cfg.ReverseHintDiscount,
-		MergeReceiveWeight:           cfg.MergeReceiveWeight,
-		MergeTransmitWeight:          cfg.MergeTransmitWeight,
-		NoiseOffsetsByBand:           cloneNestedFloatMap(cfg.NoiseOffsetsByBand),
+		ClampMin:                           cfg.ClampMin,
+		ClampMax:                           cfg.ClampMax,
+		DefaultHalfLifeSec:                 cfg.DefaultHalfLifeSec,
+		BandHalfLifeSec:                    cfg.BandHalfLifeSec,
+		StaleAfterSeconds:                  cfg.StaleAfterSeconds,
+		StaleAfterHalfLifeMultiplier:       cfg.StaleAfterHalfLifeMultiplier,
+		StaleAfterByBand:                   staleByBand,
+		MaxPredictionAgeHalfLifeMultiplier: cfg.MaxPredictionAgeHalfLifeMultiplier,
+		MaxPredictionAgeByBand:             maxAgeByBand,
+		MinEffectiveWeight:                 cfg.MinEffectiveWeight,
+		MinFineWeight:                      cfg.MinFineWeight,
+		ReverseHintDiscount:                cfg.ReverseHintDiscount,
+		MergeReceiveWeight:                 cfg.MergeReceiveWeight,
+		MergeTransmitWeight:                cfg.MergeTransmitWeight,
+		NoiseOffsetsByBand:                 cloneNestedFloatMap(cfg.NoiseOffsetsByBand),
 	}
 }
 
@@ -553,15 +592,9 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 		}
 		if m := predsRe.FindStringSubmatch(entry); len(m) == 2 {
 			ts := m[1]
-			fields := predsFields.FindStringSubmatch(entry)
-			if len(fields) == 7 {
-				predByTS[ts] = predTotals{
-					Total:        parseInt(fields[1]),
-					Combined:     parseInt(fields[3]),
-					Insufficient: parseInt(fields[4]),
-					NoSample:     parseInt(fields[5]),
-					LowWeight:    parseInt(fields[6]),
-				}
+			totals, ok := parsePredictionTotals(entry)
+			if ok {
+				predByTS[ts] = totals
 			}
 		}
 		if m := sourceMixRe.FindStringSubmatch(entry); len(m) == 2 {
@@ -816,13 +849,14 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 		if len(rows) == 0 {
 			continue
 		}
-		var total, combined, insufficient, noSample, lowWeight int
+		var total, combined, insufficient, noSample, lowWeight, stale int
 		for _, r := range rows {
 			total += r.Total
 			combined += r.Combined
 			insufficient += r.Insufficient
 			noSample += r.NoSample
 			lowWeight += r.LowWeight
+			stale += r.Stale
 		}
 		count := len(rows)
 		predSummary = append(predSummary, predictionHour{
@@ -833,6 +867,7 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 			AvgInsufficient: float64(insufficient) / float64(count),
 			AvgNoSample:     float64(noSample) / float64(count),
 			AvgLowWeight:    float64(lowWeight) / float64(count),
+			AvgStale:        float64(stale) / float64(count),
 		})
 	}
 
@@ -1014,13 +1049,18 @@ func writeModelContext(b *strings.Builder, ctx modelContext, bands []bandSummary
 	fmt.Fprintf(b, "Min effective weight: %.2f. Min fine weight: %.2f. Reverse hint discount: %.2f.\n",
 		ctx.MinEffectiveWeight, ctx.MinFineWeight, ctx.ReverseHintDiscount)
 	fmt.Fprintf(b, "Merge weights: receive %.2f / transmit %.2f.\n", ctx.MergeReceiveWeight, ctx.MergeTransmitWeight)
+	if ctx.MaxPredictionAgeHalfLifeMultiplier > 0 {
+		fmt.Fprintf(b, "Prediction freshness gate: %.2fx half-life; older selected evidence is treated as insufficient.\n", ctx.MaxPredictionAgeHalfLifeMultiplier)
+	} else {
+		b.WriteString("Prediction freshness gate: disabled.\n")
+	}
 	if len(ctx.NoiseOffsetsByBand) > 0 {
 		b.WriteString("Noise offsets by band (dB): ")
 		b.WriteString(formatNoiseOffsetsByBand(ctx.NoiseOffsetsByBand))
 		b.WriteString(".\n")
 	}
 	if len(bands) > 0 {
-		b.WriteString("Per-band half-life/stale (seconds): ")
+		b.WriteString("Per-band half-life/stale/max-age (seconds): ")
 		parts := make([]string, 0, len(bands))
 		for i := range bands {
 			band := &bands[i]
@@ -1032,7 +1072,8 @@ func writeModelContext(b *strings.Builder, ctx modelContext, bands []bandSummary
 			if v, ok := ctx.StaleAfterByBand[band.Band]; ok && v > 0 {
 				stale = v
 			}
-			parts = append(parts, fmt.Sprintf("%s hl=%d stale=%d", band.Band, hl, stale))
+			maxAge := ctx.MaxPredictionAgeByBand[band.Band]
+			parts = append(parts, fmt.Sprintf("%s hl=%d stale=%d max_age=%d", band.Band, hl, stale, maxAge))
 		}
 		b.WriteString(strings.Join(parts, "; "))
 		b.WriteString(".\n")
@@ -1252,6 +1293,7 @@ func predictionActivitySummary(hours []predictionHour) string {
 	minTotal := hours[0].AvgTotal
 	var maxHour, minHour string
 	var lowSample []string
+	var staleSample []string
 	for _, h := range hours {
 		if h.AvgTotal > maxTotal {
 			maxTotal = h.AvgTotal
@@ -1264,11 +1306,17 @@ func predictionActivitySummary(hours []predictionHour) string {
 		if h.AvgInsufficient >= h.AvgCombined {
 			lowSample = append(lowSample, h.Hour)
 		}
+		if h.AvgStale > 0 {
+			staleSample = append(staleSample, h.Hour)
+		}
 	}
 	s := fmt.Sprintf("Peak prediction volume occurs around %s (avg_total %.1f), with the lowest activity around %s (avg_total %.1f).",
 		maxHour, maxTotal, minHour, minTotal)
 	if len(lowSample) > 0 {
 		s += fmt.Sprintf(" Hours dominated by insufficient samples: %s.", strings.Join(lowSample, ", "))
+	}
+	if len(staleSample) > 0 {
+		s += fmt.Sprintf(" Hours with stale selected evidence: %s.", strings.Join(staleSample, ", "))
 	}
 	return s
 }

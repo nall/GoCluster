@@ -118,15 +118,31 @@ func SelectSample(fine Sample, coarse Sample, minFineWeight float64, fineOnlyWei
 	if sum <= 0 {
 		return Sample{}
 	}
-	age := fine.AgeSec
-	if coarseCandidate.AgeSec < age {
-		age = coarseCandidate.AgeSec
-	}
 	return Sample{
 		Value:  (fine.Value*fine.Weight + coarseCandidate.Value*coarseCandidate.Weight) / sum,
 		Weight: sum,
-		AgeSec: age,
+		AgeSec: weightedSampleAge(fine, coarseCandidate),
 	}
+}
+
+func weightedSampleAge(left Sample, right Sample) int64 {
+	total := left.Weight + right.Weight
+	if total <= 0 {
+		return 0
+	}
+	leftAge := left.AgeSec
+	if leftAge < 0 {
+		leftAge = 0
+	}
+	rightAge := right.AgeSec
+	if rightAge < 0 {
+		rightAge = 0
+	}
+	age := (float64(leftAge)*left.Weight + float64(rightAge)*right.Weight) / total
+	if age <= 0 {
+		return 0
+	}
+	return int64(math.Ceil(age))
 }
 
 func (c Config) powerFromDB(db float64) float64 {

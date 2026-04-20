@@ -74,3 +74,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0062 | Shared Ingest Flood Control With Required YAML Policy | Accepted | 2026-04-08 | config, ingest, dedupe, stats, docs | - | - | `docs/decisions/ADR-0062-shared-ingest-flood-control.md` |
 | ADR-0063 | Configurable Telnet Bulletin Dedupe | Accepted | 2026-04-19 | config, peer, telnet fan-out | - | - | `docs/decisions/ADR-0063-configurable-bulletin-dedupe.md` |
 | ADR-0064 | Band-Specific Path Noise Penalties | Accepted | 2026-04-20 | pathreliability, telnet, config | - | - | `docs/decisions/ADR-0064-band-specific-path-noise-penalties.md` |
+| ADR-0065 | Path Reliability Freshness Gate | Accepted | 2026-04-20 | pathreliability, telnet, reports, config | - | - | `docs/decisions/ADR-0065-path-reliability-freshness-gate.md` |

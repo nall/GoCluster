@@ -1,6 +1,9 @@
 package pathreliability
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Predictor coordinates store access and presentation mapping.
 type Predictor struct {
@@ -53,12 +56,39 @@ const (
 	SourceCombined
 )
 
+// InsufficientReason describes why a prediction returned the insufficient glyph.
+type InsufficientReason uint8
+
+const (
+	InsufficientNone InsufficientReason = iota
+	InsufficientNoSample
+	InsufficientLowWeight
+	InsufficientStale
+)
+
+func (r InsufficientReason) String() string {
+	switch r {
+	case InsufficientNone:
+		return "none"
+	case InsufficientNoSample:
+		return "no_sample"
+	case InsufficientLowWeight:
+		return "low_weight"
+	case InsufficientStale:
+		return "stale"
+	default:
+		return "unknown"
+	}
+}
+
 // Result carries merged glyph and diagnostics.
 type Result struct {
-	Glyph  string
-	Value  float64 // power
-	Weight float64
-	Source PredictionSource
+	Glyph              string
+	Value              float64 // power
+	Weight             float64
+	AgeSec             int64
+	Source             PredictionSource
+	InsufficientReason InsufficientReason
 }
 
 // Predict returns a single merged glyph for the path.
@@ -72,28 +102,34 @@ func (p *Predictor) Predict(userCell, dxCell CellID, userCoarse, dxCoarse CellID
 	}
 
 	modeKey := normalizeMode(mode)
-	makeResult := func(power, weight float64, source PredictionSource) Result {
-		return Result{Glyph: GlyphForPower(power, modeKey, p.cfg), Value: power, Weight: weight, Source: source}
+	makeResult := func(power, weight float64, ageSec int64, source PredictionSource) Result {
+		return Result{Glyph: GlyphForPower(power, modeKey, p.cfg), Value: power, Weight: weight, AgeSec: ageSec, Source: source}
 	}
-	makeInsufficient := func(power, weight float64) Result {
-		return Result{Glyph: insufficient, Value: power, Weight: weight, Source: SourceInsufficient}
+	makeInsufficient := func(power, weight float64, ageSec int64, reason InsufficientReason) Result {
+		return Result{Glyph: insufficient, Value: power, Weight: weight, AgeSec: ageSec, Source: SourceInsufficient, InsufficientReason: reason}
 	}
 
-	mergedPower, mergedWeight, ok := p.mergeFromStore(p.combined, userCell, dxCell, userCoarse, dxCoarse, band, noisePenalty, now)
+	mergedPower, mergedWeight, mergedAge, reason, ok := p.mergeFromStore(p.combined, userCell, dxCell, userCoarse, dxCoarse, band, noisePenalty, now)
 	if ok && mergedWeight >= p.cfg.MinEffectiveWeight {
-		return makeResult(mergedPower, mergedWeight, SourceCombined)
+		return makeResult(mergedPower, mergedWeight, mergedAge, SourceCombined)
 	}
 	if ok {
-		return makeInsufficient(mergedPower, mergedWeight)
+		if reason == InsufficientNone {
+			reason = InsufficientLowWeight
+		}
+		return makeInsufficient(mergedPower, mergedWeight, mergedAge, reason)
 	}
-	return makeInsufficient(0, 0)
+	if reason == InsufficientNone {
+		reason = InsufficientNoSample
+	}
+	return makeInsufficient(0, 0, 0, reason)
 }
 
-func mergeSamples(receive Sample, transmit Sample, cfg Config, noisePenalty float64) (float64, float64, bool) {
+func mergeSamples(receive Sample, transmit Sample, cfg Config, noisePenalty float64) (float64, float64, int64, bool) {
 	hasReceive := receive.Weight > 0
 	hasTransmit := transmit.Weight > 0
 	if !hasReceive && !hasTransmit {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	receivePower := receive.Value
 	if hasReceive && noisePenalty > 0 {
@@ -102,17 +138,17 @@ func mergeSamples(receive Sample, transmit Sample, cfg Config, noisePenalty floa
 	if hasReceive && hasTransmit {
 		mergedPower := cfg.MergeReceiveWeight*receivePower + cfg.MergeTransmitWeight*transmit.Value
 		mergedWeight := cfg.MergeReceiveWeight*receive.Weight + cfg.MergeTransmitWeight*transmit.Weight
-		return mergedPower, mergedWeight, true
+		return mergedPower, mergedWeight, weightedSampleAge(receive, transmit), true
 	}
 	if hasReceive {
-		return receivePower, receive.Weight * cfg.ReverseHintDiscount, true
+		return receivePower, receive.Weight * cfg.ReverseHintDiscount, receive.AgeSec, true
 	}
-	return transmit.Value, transmit.Weight * cfg.ReverseHintDiscount, true
+	return transmit.Value, transmit.Weight * cfg.ReverseHintDiscount, transmit.AgeSec, true
 }
 
-func (p *Predictor) mergeFromStore(store *Store, userCell, dxCell CellID, userCoarse, dxCoarse CellID, band string, noisePenalty float64, now time.Time) (float64, float64, bool) {
+func (p *Predictor) mergeFromStore(store *Store, userCell, dxCell CellID, userCoarse, dxCoarse CellID, band string, noisePenalty float64, now time.Time) (float64, float64, int64, InsufficientReason, bool) {
 	if store == nil {
-		return 0, 0, false
+		return 0, 0, 0, InsufficientNoSample, false
 	}
 	// Receive (DX->user): receiver=user, sender=dx.
 	rFine, rCoarse := store.Lookup(userCell, dxCell, userCoarse, dxCoarse, band, now)
@@ -122,7 +158,51 @@ func (p *Predictor) mergeFromStore(store *Store, userCell, dxCell CellID, userCo
 	tFine, tCoarse := store.Lookup(dxCell, userCell, dxCoarse, userCoarse, band, now)
 	transmit := SelectSample(tFine, tCoarse, p.cfg.MinFineWeight, p.cfg.FineOnlyWeight)
 
-	return mergeSamples(receive, transmit, p.cfg, noisePenalty)
+	receive, transmit, staleDropped := p.applyFreshnessGate(store, band, receive, transmit)
+	power, weight, ageSec, ok := mergeSamples(receive, transmit, p.cfg, noisePenalty)
+	reason := InsufficientNone
+	if staleDropped {
+		reason = InsufficientStale
+	}
+	if !ok {
+		if reason == InsufficientNone {
+			reason = InsufficientNoSample
+		}
+		return 0, 0, 0, reason, false
+	}
+	return power, weight, ageSec, reason, true
+}
+
+func (p *Predictor) applyFreshnessGate(store *Store, band string, receive Sample, transmit Sample) (Sample, Sample, bool) {
+	maxAge := p.maxPredictionAgeSeconds(store, band)
+	if maxAge <= 0 {
+		return receive, transmit, false
+	}
+	staleDropped := false
+	if receive.Weight > 0 && receive.AgeSec > maxAge {
+		receive = Sample{}
+		staleDropped = true
+	}
+	if transmit.Weight > 0 && transmit.AgeSec > maxAge {
+		transmit = Sample{}
+		staleDropped = true
+	}
+	return receive, transmit, staleDropped
+}
+
+func (p *Predictor) maxPredictionAgeSeconds(store *Store, band string) int64 {
+	if p == nil || store == nil || p.cfg.MaxPredictionAgeHalfLifeMultiplier <= 0 {
+		return 0
+	}
+	halfLife := store.bandIndex.HalfLifeSeconds(band, p.cfg)
+	if halfLife <= 0 {
+		return 0
+	}
+	seconds := math.Ceil(float64(halfLife) * p.cfg.MaxPredictionAgeHalfLifeMultiplier)
+	if seconds < 1 {
+		return 1
+	}
+	return int64(seconds)
 }
 
 // PurgeStale runs a stale purge and returns removed count.

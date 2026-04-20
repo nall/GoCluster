@@ -68,7 +68,7 @@ func TestMergeSamplesWeighted(t *testing.T) {
 	cfg := DefaultConfig()
 	receive := Sample{Value: cfg.powerFromDB(-10), Weight: 10}
 	transmit := Sample{Value: cfg.powerFromDB(-5), Weight: 4}
-	mergedPower, mergedWeight, ok := mergeSamples(receive, transmit, cfg, 0)
+	mergedPower, mergedWeight, mergedAge, ok := mergeSamples(receive, transmit, cfg, 0)
 	if !ok {
 		t.Fatalf("expected merge ok")
 	}
@@ -78,6 +78,9 @@ func TestMergeSamplesWeighted(t *testing.T) {
 	mergedDB := powerToDB(mergedPower)
 	if mergedDB >= -7 || mergedDB <= -11 {
 		t.Fatalf("unexpected merged dB: %v", mergedDB)
+	}
+	if mergedAge != 0 {
+		t.Fatalf("expected merged age 0, got %d", mergedAge)
 	}
 }
 
@@ -98,6 +101,9 @@ func TestSelectSampleMinFineWeight(t *testing.T) {
 	}
 	if got.Weight != fine.Weight+coarse.Weight {
 		t.Fatalf("expected blended weight %v, got %v", fine.Weight+coarse.Weight, got.Weight)
+	}
+	if got.AgeSec != 17 {
+		t.Fatalf("expected blended effective age 17, got %d", got.AgeSec)
 	}
 
 	fine = Sample{Value: -18, Weight: 2, AgeSec: 5}
@@ -131,6 +137,119 @@ func TestPredictUsesInsufficientGlyph(t *testing.T) {
 	}
 	if res.Source != SourceInsufficient {
 		t.Fatalf("expected insufficient source, got %v", res.Source)
+	}
+	if res.InsufficientReason != InsufficientNoSample {
+		t.Fatalf("expected no-sample insufficient reason, got %v", res.InsufficientReason)
+	}
+}
+
+func TestPredictStaleEvidenceInsufficient(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
+	cfg.StaleAfterHalfLifeMultiplier = 100
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", 25, 10, now, false)
+
+	fresh := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now.Add(10*time.Second))
+	if fresh.Source != SourceCombined {
+		t.Fatalf("expected age at cutoff to remain combined, got source=%v reason=%v", fresh.Source, fresh.InsufficientReason)
+	}
+	if fresh.AgeSec != 10 {
+		t.Fatalf("expected fresh result age 10, got %d", fresh.AgeSec)
+	}
+
+	stale := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now.Add(11*time.Second))
+	if stale.Source != SourceInsufficient {
+		t.Fatalf("expected stale prediction to become insufficient, got %v", stale.Source)
+	}
+	if stale.InsufficientReason != InsufficientStale {
+		t.Fatalf("expected stale reason, got %v", stale.InsufficientReason)
+	}
+}
+
+func TestPredictMaxAgeMultiplierZeroPreservesOldBehavior(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
+	cfg.StaleAfterHalfLifeMultiplier = 100
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 0
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", 25, 10, now, false)
+
+	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now.Add(30*time.Second))
+	if res.Source != SourceCombined {
+		t.Fatalf("expected disabled freshness gate to preserve combined result, got source=%v reason=%v", res.Source, res.InsufficientReason)
+	}
+}
+
+func TestPredictDropsOnlyStaleDirection(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
+	cfg.StaleAfterHalfLifeMultiplier = 100
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", 25, 10, now.Add(-20*time.Second), false)
+	predictor.Update(BucketCombined, dxCell, userCell, dxCoarse, userCoarse, "20m", 10, 1, now, false)
+
+	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
+	if res.Source != SourceCombined {
+		t.Fatalf("expected fresh transmit direction to classify, got source=%v reason=%v", res.Source, res.InsufficientReason)
+	}
+	if res.AgeSec != 0 {
+		t.Fatalf("expected result age from fresh surviving direction, got %d", res.AgeSec)
+	}
+}
+
+func TestPredictStaleDropLowFreshWeightReportsStale(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
+	cfg.StaleAfterHalfLifeMultiplier = 100
+	cfg.MinEffectiveWeight = 0.6
+	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", 25, 10, now.Add(-20*time.Second), false)
+	predictor.Update(BucketCombined, dxCell, userCell, dxCoarse, userCoarse, "20m", 10, 0.1, now, false)
+
+	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
+	if res.Source != SourceInsufficient {
+		t.Fatalf("expected insufficient result, got %v", res.Source)
+	}
+	if res.InsufficientReason != InsufficientStale {
+		t.Fatalf("expected stale reason after dropping stale evidence, got %v", res.InsufficientReason)
+	}
+	if res.Weight <= 0 {
+		t.Fatalf("expected surviving fresh low weight to be reported, got %v", res.Weight)
 	}
 }
 
