@@ -663,6 +663,46 @@ func TestCustomSCPStatsSnapshotReportsRetainedStateCardinality(t *testing.T) {
 	assertCustomSCPInternerInvariant(t, store)
 }
 
+func TestCustomSCPStoreStaticCallCountUsesStaticHorizon(t *testing.T) {
+	opts := CustomSCPOptions{
+		Path:                   filepath.Join(t.TempDir(), "scp"),
+		HorizonDays:            60,
+		StaticHorizonDays:      395,
+		MaxSpottersPerKey:      4,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	}
+	store, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	store.recordObservation("K1DUP", "40m", "CW", "N0AAA", 101, 0, false, now.Add(-10*24*time.Hour))
+	store.recordObservation("K1DUP", "20m", "CW", "N0BBB", 102, 0, false, now.Add(-9*24*time.Hour))
+	store.recordObservation("K1FRESH", "40m", "CW", "N0CCC", 103, 0, false, now.Add(-8*24*time.Hour))
+	store.mu.Lock()
+	retainCustomSCPTestStaticLocked(store, "K1STALE", now.Add(-396*24*time.Hour).Unix())
+	store.mu.Unlock()
+
+	if got := store.StaticCallCount(now); got != 2 {
+		t.Fatalf("expected two horizon-valid static calls, got %d", got)
+	}
+	if got := store.ActiveCallCount(now); got != 2 {
+		t.Fatalf("expected recent active count to remain observation-horizon based, got %d", got)
+	}
+	if stats := store.StatsSnapshot(); stats.StaticCalls != 3 {
+		t.Fatalf("expected retained static diagnostic count to include stale entry until cleanup, got %+v", stats)
+	}
+	assertCustomSCPInternerInvariant(t, store)
+}
+
 func TestCustomSCPTrimSpottersLockedDoesNotRefreshLastSeen(t *testing.T) {
 	store := &CustomSCPStore{
 		opts: sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: 1}),

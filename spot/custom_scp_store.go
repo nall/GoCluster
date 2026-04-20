@@ -574,6 +574,28 @@ func (s *CustomSCPStore) StaticContains(call string) bool {
 	return seen >= s.staticHorizonCutoffUnix(time.Now().UTC())
 }
 
+// StaticCallCount returns the number of static custom-SCP calls that are still
+// valid within the configured static horizon. It intentionally does not mutate
+// or prune retained state; cleanup owns reclamation.
+func (s *CustomSCPStore) StaticCallCount(now time.Time) int {
+	if s == nil {
+		return 0
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	cutoff := s.staticHorizonCutoffUnix(now.UTC())
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	total := 0
+	for _, seen := range s.static {
+		if seen >= cutoff {
+			total++
+		}
+	}
+	return total
+}
+
 // StatsSnapshot reports current custom-SCP cardinalities and bounded cleanup
 // counters for opt-in diagnostics.
 func (s *CustomSCPStore) StatsSnapshot() CustomSCPStatsSnapshot {

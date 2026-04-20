@@ -2577,6 +2577,76 @@ func TestBuildOverviewLinesIncludesRecentSupportByBand(t *testing.T) {
 		if strings.Contains(line, "Evidence policy") {
 			t.Fatalf("did not expect evidence policy line in overview lines, got %v", lines)
 		}
+		if strings.Contains(line, "Custom SCP calls") {
+			t.Fatalf("did not expect custom SCP static count for legacy recent-band store, got %v", lines)
+		}
+	}
+}
+
+func TestFormatRecentSupportByBandLinesIncludesCustomSCPStaticCalls(t *testing.T) {
+	store, err := spot.OpenCustomSCPStore(spot.CustomSCPOptions{
+		Path:                   filepath.Join(t.TempDir(), "scp"),
+		HorizonDays:            60,
+		StaticHorizonDays:      395,
+		MaxSpottersPerKey:      4,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	})
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	now := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
+	record := func(call, band, spotter string, minutesAgo int) {
+		store.RecordSpot(&spot.Spot{
+			DXCall:     call,
+			DXCallNorm: call,
+			DECall:     spotter,
+			DECallNorm: spotter,
+			DEGridNorm: "FN20",
+			Frequency:  7020,
+			Band:       band,
+			BandNorm:   band,
+			Mode:       "CW",
+			ModeNorm:   "CW",
+			HasReport:  true,
+			Report:     12,
+			Time:       now.Add(-time.Duration(minutesAgo) * time.Minute),
+			Confidence: "V",
+		})
+	}
+	record("K1ABC", "40m", "W1AAA", 10)
+	record("K1ABC", "20m", "W2BBB", 5)
+	record("N0XYZ", "40m", "W3CCC", 6)
+
+	lines := formatRecentSupportByBandLines(store, now, 0)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "[yellow]Custom SCP calls[-]: 2") {
+		t.Fatalf("expected custom SCP static count line, got %v", lines)
+	}
+	if !strings.Contains(joined, "[yellow]Recent support[-]: 2") {
+		t.Fatalf("expected recent support active count line, got %v", lines)
+	}
+	if !strings.Contains(joined, "[yellow]40m[-]: 2") || !strings.Contains(joined, "[yellow]20m[-]: 1") {
+		t.Fatalf("expected recent per-band support rows, got %v", lines)
+	}
+	customIdx, recentIdx := -1, -1
+	for i, line := range lines {
+		if strings.Contains(line, "Custom SCP calls") {
+			customIdx = i
+		}
+		if strings.Contains(line, "Recent support") {
+			recentIdx = i
+		}
+	}
+	if customIdx < 0 || recentIdx < 0 || customIdx >= recentIdx {
+		t.Fatalf("expected custom SCP count before recent support, got %v", lines)
 	}
 }
 
