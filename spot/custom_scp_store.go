@@ -77,7 +77,7 @@ type customSCPSpotterObs struct {
 }
 
 type customSCPEntry struct {
-	spotters       map[string]customSCPSpotterObs
+	spotters       []customSCPSpotterEntry
 	lastSeen       int64
 	oldestSeenUnix int64
 }
@@ -508,18 +508,30 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 			band:   s.retainInternedStringLocked(band),
 			bucket: s.retainInternedStringLocked(bucket),
 		}
-		entry = &customSCPEntry{spotters: make(map[string]customSCPSpotterObs, 4)}
+		entry = &customSCPEntry{spotters: makeCustomSCPSpotters(s.opts.MaxSpottersPerKey)}
 		s.entries[key] = entry
 	}
 	var removed []string
 	s.pruneEntryLocked(entry, cutoff, &removed)
-	prev, exists := entry.spotters[spotter]
-	if !exists || seenUnix > prev.seenUnix {
-		if !exists {
-			spotter = s.retainInternedStringLocked(spotter)
-			s.observationSpotters++
-		}
-		entry.spotters[spotter] = customSCPSpotterObs{seenUnix: seenUnix, cellRes1: cellRes1}
+	obs := customSCPSpotterObs{seenUnix: seenUnix, cellRes1: cellRes1}
+	persistSpotter := spotter
+	updated := false
+	idx, exists := findSpotterIndex(entry.spotters, spotter)
+	if !exists {
+		persistSpotter = s.retainInternedStringLocked(spotter)
+		entry.spotters = insertCustomSCPSpotter(
+			entry.spotters,
+			idx,
+			customSCPSpotterEntry{spotter: persistSpotter, seenUnix: obs.seenUnix, cellRes1: obs.cellRes1},
+			s.opts.MaxSpottersPerKey,
+		)
+		s.observationSpotters++
+		updated = true
+	} else if seenUnix > entry.spotters[idx].seenUnix {
+		entry.spotters[idx].seenUnix = obs.seenUnix
+		entry.spotters[idx].cellRes1 = obs.cellRes1
+		persistSpotter = entry.spotters[idx].spotter
+		updated = true
 	}
 	if seenUnix > entry.lastSeen {
 		entry.lastSeen = seenUnix
@@ -538,7 +550,7 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 		s.active.Add(key.call, key.band)
 	}
 	s.persistStaticLocked(call, s.static[call])
-	if obs, ok := entry.spotters[spotter]; ok {
+	if obs, ok := entrySpotterObs(entry, persistSpotter); updated && ok {
 		s.persistObservationLocked(key, spotter, obs)
 	}
 	s.deleteObservationSpottersLocked(key, entry, removed, nil)
@@ -857,14 +869,13 @@ func (s *CustomSCPStore) loadFromDB() error {
 			band:   s.retainInternedStringLocked(pendingKey.band),
 			bucket: s.retainInternedStringLocked(pendingKey.bucket),
 		}
-		retainedSpotters := make(map[string]customSCPSpotterObs, len(pendingEntry.spotters))
-		for spotter, obs := range pendingEntry.spotters {
-			retainedSpotters[s.retainInternedStringLocked(spotter)] = obs
+		pendingEntry.spotters = compactCustomSCPSpotters(pendingEntry.spotters)
+		for i := range pendingEntry.spotters {
+			pendingEntry.spotters[i].spotter = s.retainInternedStringLocked(pendingEntry.spotters[i].spotter)
 		}
-		pendingEntry.spotters = retainedSpotters
 		s.entries[retainedKey] = pendingEntry
 		s.active.Add(retainedKey.call, retainedKey.band)
-		s.observationSpotters += len(retainedSpotters)
+		s.observationSpotters += len(pendingEntry.spotters)
 		s.markEntryForCleanupLocked(retainedKey, pendingEntry)
 		pendingEntry = nil
 		pendingKey = customSCPKey{}
@@ -911,14 +922,11 @@ func (s *CustomSCPStore) loadFromDB() error {
 			if pendingEntry == nil || key != pendingKey {
 				flushPending()
 				pendingKey = key
-				pendingEntry = &customSCPEntry{spotters: make(map[string]customSCPSpotterObs, 4)}
+				pendingEntry = &customSCPEntry{spotters: makeCustomSCPSpotters(s.opts.MaxSpottersPerKey)}
 				pendingOverflow = false
 			}
 			cell := binary.BigEndian.Uint16(v[8:10])
-			prev, exists := pendingEntry.spotters[spotter]
-			if !exists || seen > prev.seenUnix {
-				pendingEntry.spotters[spotter] = customSCPSpotterObs{seenUnix: seen, cellRes1: cell}
-			}
+			entryUpsertSpotter(pendingEntry, spotter, customSCPSpotterObs{seenUnix: seen, cellRes1: cell}, s.opts.MaxSpottersPerKey)
 			if seen > pendingEntry.lastSeen {
 				pendingEntry.lastSeen = seen
 			}
@@ -1016,18 +1024,28 @@ func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64, r
 		return 0
 	}
 	removedCount := 0
-	for spotter, obs := range entry.spotters {
-		if obs.seenUnix < cutoff {
-			delete(entry.spotters, spotter)
+	write := 0
+	for _, spotter := range entry.spotters {
+		if spotter.seenUnix < cutoff {
 			if s.observationSpotters > 0 {
 				s.observationSpotters--
 			}
-			s.releaseInternedStringLocked(spotter)
+			s.releaseInternedStringLocked(spotter.spotter)
 			removedCount++
 			if removed != nil {
-				*removed = append(*removed, spotter)
+				*removed = append(*removed, spotter.spotter)
 			}
+			continue
 		}
+		entry.spotters[write] = spotter
+		write++
+	}
+	for i := write; i < len(entry.spotters); i++ {
+		entry.spotters[i] = customSCPSpotterEntry{}
+	}
+	entry.spotters = entry.spotters[:write]
+	if len(entry.spotters) == 0 {
+		entry.spotters = nil
 	}
 	s.refreshEntryAgesLocked(entry)
 	return removedCount
@@ -1039,43 +1057,21 @@ func (s *CustomSCPStore) trimSpottersLocked(entry *customSCPEntry, removed *[]st
 	}
 	trimmed := 0
 	for len(entry.spotters) > s.opts.MaxSpottersPerKey {
-		spotter, _, ok := oldestCustomSCPSpotter(entry)
+		idx, ok := oldestCustomSCPSpotterIndex(entry)
 		if !ok {
 			break
 		}
-		delete(entry.spotters, spotter)
+		spotter := entryDeleteSpotterAt(entry, idx)
 		if s.observationSpotters > 0 {
 			s.observationSpotters--
 		}
-		s.releaseInternedStringLocked(spotter)
+		s.releaseInternedStringLocked(spotter.spotter)
 		if removed != nil {
-			*removed = append(*removed, spotter)
+			*removed = append(*removed, spotter.spotter)
 		}
 		trimmed++
 	}
 	return trimmed
-}
-
-// oldestCustomSCPSpotter returns the deterministic overflow victim for one
-// bounded custom-SCP entry. Ties are lexical on spotter so eviction remains
-// stable across runs.
-func oldestCustomSCPSpotter(entry *customSCPEntry) (string, customSCPSpotterObs, bool) {
-	if entry == nil || len(entry.spotters) == 0 {
-		return "", customSCPSpotterObs{}, false
-	}
-	var (
-		victimKey string
-		victimObs customSCPSpotterObs
-		set       bool
-	)
-	for spotter, obs := range entry.spotters {
-		if !set || obs.seenUnix < victimObs.seenUnix || (obs.seenUnix == victimObs.seenUnix && spotter < victimKey) {
-			victimKey = spotter
-			victimObs = obs
-			set = true
-		}
-	}
-	return victimKey, victimObs, set
 }
 
 func (s *CustomSCPStore) trimPendingEntryOnLoadLocked(key customSCPKey, entry *customSCPEntry, pendingOverflow *bool, batch *pebble.Batch) int {
@@ -1088,13 +1084,13 @@ func (s *CustomSCPStore) trimPendingEntryOnLoadLocked(key customSCPKey, entry *c
 			*pendingOverflow = true
 			s.diag.oversizedKeysSeenOnLoad++
 		}
-		spotter, _, ok := oldestCustomSCPSpotter(entry)
+		idx, ok := oldestCustomSCPSpotterIndex(entry)
 		if !ok {
 			break
 		}
-		delete(entry.spotters, spotter)
+		spotter := entryDeleteSpotterAt(entry, idx)
 		s.diag.overflowObservationsPruned++
-		if s.deleteObservationSpotterLocked(key, nil, spotter, batch) {
+		if s.deleteObservationSpotterLocked(key, nil, spotter.spotter, batch) {
 			deleted++
 		}
 	}
@@ -1126,8 +1122,8 @@ func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
 		s.observationSpotters = 0
 	}
 	delete(s.entries, key)
-	for spotter := range entry.spotters {
-		s.releaseInternedStringLocked(spotter)
+	for _, spotter := range entry.spotters {
+		s.releaseInternedStringLocked(spotter.spotter)
 	}
 	s.releaseInternedStringLocked(key.call)
 	s.releaseInternedStringLocked(key.band)
@@ -1156,10 +1152,8 @@ func (s *CustomSCPStore) deleteObservationSpotterLocked(key customSCPKey, entry 
 	if s == nil || s.db == nil || spotter == "" {
 		return false
 	}
-	if entry != nil {
-		if _, ok := entry.spotters[spotter]; ok {
-			return false
-		}
+	if entryHasSpotter(entry, spotter) {
+		return false
 	}
 	keyBytes := []byte(observationKeyString(key, spotter))
 	if batch != nil {
@@ -1180,10 +1174,8 @@ func (s *CustomSCPStore) deleteObservationSpottersLocked(key customSCPKey, entry
 		if spotter == "" {
 			continue
 		}
-		if entry != nil {
-			if _, ok := entry.spotters[spotter]; ok {
-				continue
-			}
+		if entryHasSpotter(entry, spotter) {
+			continue
 		}
 		if _, ok := uniq[spotter]; ok {
 			continue
@@ -1414,8 +1406,8 @@ func countCustomSCPUniqueCells(entry *customSCPEntry) int {
 	var cells [customSCPDefaultMaxSpotters]uint16
 	used := 0
 	var overflow map[uint16]struct{}
-	for _, obs := range entry.spotters {
-		cell := obs.cellRes1
+	for _, spotter := range entry.spotters {
+		cell := spotter.cellRes1
 		if cell == 0 {
 			continue
 		}

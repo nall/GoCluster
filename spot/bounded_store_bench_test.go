@@ -17,15 +17,15 @@ func BenchmarkCustomSCPRecordOverflow(b *testing.B) {
 		cellRes1: 100,
 	}
 	entry := &customSCPEntry{
-		spotters: make(map[string]customSCPSpotterObs, maxSpotters+1),
+		spotters: makeCustomSCPSpotters(maxSpotters),
 		lastSeen: now.Add(-time.Second).Unix(),
 	}
 	for i := 0; i < maxSpotters; i++ {
 		spotter := fmt.Sprintf("N%03d", i)
-		entry.spotters[spotter] = customSCPSpotterObs{
+		entryUpsertSpotter(entry, spotter, customSCPSpotterObs{
 			seenUnix: now.Add(time.Duration(i-maxSpotters) * time.Second).Unix(),
 			cellRes1: uint16(100 + i),
-		}
+		}, maxSpotters)
 	}
 
 	store := &CustomSCPStore{
@@ -46,12 +46,44 @@ func BenchmarkCustomSCPRecordOverflow(b *testing.B) {
 		store.recordObservation("K1BENCH", "40m", "CW", newSpotter, 999, 0, false, now)
 		b.StopTimer()
 		store.mu.Lock()
-		delete(entry.spotters, newSpotter)
-		store.releaseInternedStringLocked(newSpotter)
-		entry.spotters[store.retainInternedStringLocked(oldestSpotter)] = oldestObs
+		if removed, ok := entryDeleteSpotter(entry, newSpotter); ok {
+			store.releaseInternedStringLocked(removed.spotter)
+		}
+		entryUpsertSpotter(entry, store.retainInternedStringLocked(oldestSpotter), oldestObs, store.opts.MaxSpottersPerKey)
 		entry.lastSeen = now.Add(-time.Second).Unix()
 		store.mu.Unlock()
 		b.StartTimer()
+	}
+}
+
+func BenchmarkCustomSCPRecordExistingSpotterUpdate(b *testing.B) {
+	now := time.Now().UTC()
+	entry := &customSCPEntry{
+		spotters: makeCustomSCPSpotters(4),
+		lastSeen: now.Add(-time.Second).Unix(),
+	}
+	entryUpsertSpotter(entry, "N0AAA", customSCPSpotterObs{
+		seenUnix: now.Add(-time.Second).Unix(),
+		cellRes1: 101,
+	}, 4)
+
+	store := &CustomSCPStore{
+		opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: 4}),
+		entries:             make(map[customSCPKey]*customSCPEntry, 1),
+		entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
+		static:              make(map[string]int64, 1),
+		observationSpotters: 1,
+	}
+	store.mu.Lock()
+	retainCustomSCPTestStaticLocked(store, "K1BENCH", now.Unix())
+	retainCustomSCPTestEntryLocked(store, customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}, entry)
+	store.markEntryForCleanupLocked(customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}, entry)
+	store.mu.Unlock()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		store.recordObservation("K1BENCH", "40m", "CW", "N0AAA", 202, 0, false, now.Add(time.Duration(i+1)*time.Second))
 	}
 }
 
@@ -103,7 +135,7 @@ func BenchmarkCustomSCPLoadOversizedKey(b *testing.B) {
 	}
 	key := customSCPKey{call: "K1LOAD", band: "40m", bucket: "cw"}
 	entry := &customSCPEntry{
-		spotters: make(map[string]customSCPSpotterObs, maxSpotters+1),
+		spotters: makeCustomSCPSpotters(maxSpotters),
 		lastSeen: now.Unix(),
 	}
 	oldestSpotter := "L000"
@@ -113,10 +145,10 @@ func BenchmarkCustomSCPLoadOversizedKey(b *testing.B) {
 	}
 	for i := 0; i <= maxSpotters; i++ {
 		spotter := fmt.Sprintf("L%03d", i)
-		entry.spotters[spotter] = customSCPSpotterObs{
+		entryUpsertSpotter(entry, spotter, customSCPSpotterObs{
 			seenUnix: now.Add(time.Duration(i-maxSpotters) * time.Second).Unix(),
 			cellRes1: uint16(200 + i),
-		}
+		}, maxSpotters)
 	}
 
 	b.ReportAllocs()
@@ -125,8 +157,46 @@ func BenchmarkCustomSCPLoadOversizedKey(b *testing.B) {
 		pendingOverflow := false
 		store.trimPendingEntryOnLoadLocked(key, entry, &pendingOverflow, nil)
 		b.StopTimer()
-		entry.spotters[oldestSpotter] = oldestObs
+		entryUpsertSpotter(entry, oldestSpotter, oldestObs, store.opts.MaxSpottersPerKey)
 		b.StartTimer()
+	}
+}
+
+func BenchmarkCustomSCPSnapshotSupport(b *testing.B) {
+	for _, spotters := range []int{1, 4, 8, 16, 32} {
+		b.Run(fmt.Sprintf("spotters_%02d", spotters), func(b *testing.B) {
+			now := time.Now().UTC()
+			entry := &customSCPEntry{
+				spotters: makeCustomSCPSpotters(spotters),
+				lastSeen: now.Unix(),
+			}
+			for i := 0; i < spotters; i++ {
+				entryUpsertSpotter(entry, fmt.Sprintf("N%03d", i), customSCPSpotterObs{
+					seenUnix: now.Add(time.Duration(i) * time.Second).Unix(),
+					cellRes1: uint16(100 + i),
+				}, spotters)
+			}
+			store := &CustomSCPStore{
+				opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: spotters}),
+				entries:             make(map[customSCPKey]*customSCPEntry, 1),
+				entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
+				observationSpotters: spotters,
+			}
+			key := customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}
+			store.mu.Lock()
+			retainCustomSCPTestEntryLocked(store, key, entry)
+			store.markEntryForCleanupLocked(key, entry)
+			store.mu.Unlock()
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				snapshot := store.snapshotFor("K1BENCH", "40m", "CW", now)
+				if snapshot.uniqueSpotters != spotters {
+					b.Fatalf("expected %d spotters, got %+v", spotters, snapshot)
+				}
+			}
+		})
 	}
 }
 
@@ -165,9 +235,9 @@ func benchmarkCustomSCPCleanup(b *testing.B, totalEntries, expiredEntries int) {
 				bucket: "cw",
 			}
 			entry := &customSCPEntry{
-				spotters: map[string]customSCPSpotterObs{
+				spotters: customSCPTestSpotters(map[string]customSCPSpotterObs{
 					"N0AAA": {seenUnix: seenAt.Unix(), cellRes1: 101},
-				},
+				}),
 			}
 			key = retainCustomSCPTestEntryLocked(store, key, entry)
 			store.observationSpotters++

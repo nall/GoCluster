@@ -92,12 +92,12 @@ func (s *CustomSCPStore) refreshEntryAgesLocked(entry *customSCPEntry) {
 	}
 	latest := int64(0)
 	oldest := int64(0)
-	for _, obs := range entry.spotters {
-		if obs.seenUnix > latest {
-			latest = obs.seenUnix
+	for _, spotter := range entry.spotters {
+		if spotter.seenUnix > latest {
+			latest = spotter.seenUnix
 		}
-		if oldest == 0 || obs.seenUnix < oldest {
-			oldest = obs.seenUnix
+		if oldest == 0 || spotter.seenUnix < oldest {
+			oldest = spotter.seenUnix
 		}
 	}
 	entry.lastSeen = latest
