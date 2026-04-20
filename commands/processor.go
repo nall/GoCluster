@@ -344,7 +344,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 
 	setNoiseLines := helpEntryLines(
 		"SET NOISE - Set your noise class for glyphs.",
-		[]string{"SET NOISE <QUIET|RURAL|SUBURBAN|URBAN>"},
+		[]string{"SET NOISE <QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL>"},
 		nil,
 		[]string{
 			"Default is QUIET when unset.",

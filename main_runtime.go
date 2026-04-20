@@ -945,7 +945,7 @@ func (r *clusterRuntime) buildTelnetServerOptions() telnet.ServerOptions {
 		ReputationGate:           r.repGate,
 		PathPredictor:            r.pathPredictor,
 		PathDisplayEnabled:       r.pathCfg.DisplayEnabled,
-		NoiseOffsets:             r.pathCfg.NoiseOffsets,
+		NoiseModel:               r.pathCfg.NoiseModel(),
 		GridLookup:               r.gridLookup,
 		CTYLookup:                r.ctyLookup,
 		DedupeFastEnabled:        r.secondaryFast != nil,

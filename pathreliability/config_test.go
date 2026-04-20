@@ -46,3 +46,112 @@ glyph_symbols:
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestDefaultNoiseOffsetsByBand(t *testing.T) {
+	cfg := DefaultConfig()
+	model := cfg.NoiseModel()
+	cases := []struct {
+		class   string
+		band    string
+		penalty float64
+	}{
+		{"QUIET", "160m", 0},
+		{"RURAL", "160m", 6},
+		{"RURAL", "6m", 0},
+		{"SUBURBAN", "40m", 11},
+		{"URBAN", "160m", 22},
+		{"URBAN", "6m", 3},
+		{"INDUSTRIAL", "160m", 28},
+		{"INDUSTRIAL", "6m", 5},
+	}
+	for _, tc := range cases {
+		if got := model.Penalty(tc.class, tc.band); got != tc.penalty {
+			t.Fatalf("Penalty(%s, %s) = %v, want %v", tc.class, tc.band, got, tc.penalty)
+		}
+	}
+}
+
+func TestLoadFileNoiseOffsetsByBandNormalizesAndFillsDefaults(t *testing.T) {
+	path := writeTempConfig(t, `
+noise_offsets_by_band:
+  quiet:
+    160M: 0
+  rural:
+    160M: -3
+  suburban:
+    20M: 8
+  urban:
+    20M: 12
+  industrial:
+    6M: 6
+`)
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	model := cfg.NoiseModel()
+	if !model.HasClass("quiet") {
+		t.Fatalf("expected quiet class to be valid")
+	}
+	if got := model.Penalty("RURAL", "160m"); got != 0 {
+		t.Fatalf("expected negative rural override to clamp to 0, got %v", got)
+	}
+	if got := model.Penalty("SUBURBAN", "20m"); got != 8 {
+		t.Fatalf("expected suburban 20m override, got %v", got)
+	}
+	if got := model.Penalty("URBAN", "6m"); got != 3 {
+		t.Fatalf("expected missing urban 6m to fill from defaults, got %v", got)
+	}
+	if got := model.Penalty("INDUSTRIAL", "6m"); got != 6 {
+		t.Fatalf("expected industrial 6m override, got %v", got)
+	}
+}
+
+func TestLoadFileRejectsLegacyNoiseOffsets(t *testing.T) {
+	path := writeTempConfig(t, `
+noise_offsets:
+  quiet: 0
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected legacy noise_offsets to fail")
+	}
+	if !strings.Contains(err.Error(), "noise_offsets is no longer supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileRejectsMissingNoiseClass(t *testing.T) {
+	path := writeTempConfig(t, `
+noise_offsets_by_band:
+  quiet:
+    20m: 0
+  rural:
+    20m: 3
+  suburban:
+    20m: 7
+  urban:
+    20m: 11
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected missing industrial class to fail")
+	}
+	if !strings.Contains(err.Error(), "missing required class INDUSTRIAL") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileRejectsMalformedNoiseOffsetsByBand(t *testing.T) {
+	path := writeTempConfig(t, `
+noise_offsets_by_band:
+  quiet: 0
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected malformed noise_offsets_by_band to fail")
+	}
+	if !strings.Contains(err.Error(), "noise_offsets_by_band") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

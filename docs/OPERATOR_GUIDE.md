@@ -14,7 +14,7 @@ This server aggregates real-time spotting data and publishes a single per-band p
 
 ## Operator Commands (telnet)
 - `SET GRID <grid>`: set your location (4–6 chars).
-- `SET NOISE <QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL>`: adjusts local noise penalty.
+- `SET NOISE <QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL>`: adjusts the band-specific local receive-noise penalty.
 - `SET SOLAR 15|30|60|OFF`: opt‑in cadence for solar summaries (wall‑clock aligned).
 
 ## What the Glyphs Mean

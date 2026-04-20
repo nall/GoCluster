@@ -96,13 +96,24 @@ The shipped config currently uses:
 
 If only one direction exists, the predictor still uses it, but discounts the effective weight with `reverse_hint_discount`.
 
-Noise is applied only to the DX-to-user side in the power domain. The shipped penalties are:
+Noise is applied only to the DX-to-user side in the power domain. The shipped
+table uses P.372-17-informed operational receive penalties: low bands retain
+strong local-noise penalties, while 10m and 6m are tapered because absolute
+external noise falls and receiver/system noise matters more near VHF.
 
-- `QUIET: 0`
-- `RURAL: 4`
-- `SUBURBAN: 12`
-- `URBAN: 17`
-- `INDUSTRIAL: 20`
+| Band | Quiet | Rural | Suburban | Urban | Industrial |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 160m | 0 | 6 | 14 | 22 | 28 |
+| 80m | 0 | 5 | 13 | 20 | 26 |
+| 60m | 0 | 5 | 12 | 19 | 24 |
+| 40m | 0 | 4 | 11 | 17 | 22 |
+| 30m | 0 | 3 | 9 | 14 | 18 |
+| 20m | 0 | 3 | 7 | 11 | 15 |
+| 17m | 0 | 2 | 6 | 9 | 12 |
+| 15m | 0 | 2 | 5 | 8 | 11 |
+| 12m | 0 | 1 | 4 | 6 | 9 |
+| 10m | 0 | 1 | 3 | 5 | 7 |
+| 6m | 0 | 0 | 2 | 3 | 5 |
 
 ## Class Mapping
 

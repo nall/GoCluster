@@ -12,31 +12,32 @@ import (
 
 // Config holds tuning knobs for path reliability aggregation and display.
 type Config struct {
-	Enabled                      bool                       `yaml:"enabled"`
-	AllowedBands                 []string                   `yaml:"allowed_bands"`
-	ClampMin                     float64                    `yaml:"clamp_min"`                        // FT8-equiv floor (dB)
-	ClampMax                     float64                    `yaml:"clamp_max"`                        // FT8-equiv ceiling (dB)
-	DefaultHalfLifeSec           int                        `yaml:"default_half_life_seconds"`        // fallback half-life when band not listed
-	BandHalfLifeSec              map[string]int             `yaml:"band_half_life_seconds"`           // per-band overrides
-	StaleAfterSeconds            int                        `yaml:"stale_after_seconds"`              // fallback purge when older than this
-	StaleAfterHalfLifeMultiplier float64                    `yaml:"stale_after_half_life_multiplier"` // stale = k * half-life (per band)
-	MinEffectiveWeight           float64                    `yaml:"min_effective_weight"`             // minimum decayed weight to report
-	MinFineWeight                float64                    `yaml:"min_fine_weight"`                  // minimum fine weight to blend with coarse
-	FineOnlyWeight               float64                    `yaml:"fine_only_weight"`                 // minimum fine weight to use fine only
-	ReverseHintDiscount          float64                    `yaml:"reverse_hint_discount"`            // multiplier when using reverse direction
-	MergeReceiveWeight           float64                    `yaml:"merge_receive_weight"`             // merge weight for DX->user
-	MergeTransmitWeight          float64                    `yaml:"merge_transmit_weight"`            // merge weight for user->DX
-	BeaconWeightCap              float64                    `yaml:"beacon_weight_cap"`                // cap per-beacon contribution
-	DisplayEnabled               bool                       `yaml:"display_enabled"`                  // toggle glyph rendering
-	ModeOffsets                  ModeOffsets                `yaml:"mode_offsets"`                     // per-mode FT8-equiv offsets
-	ModeThresholds               map[string]GlyphThresholds `yaml:"mode_thresholds"`                  // per-mode glyph thresholds in FT8-equiv dB
-	GlyphThresholds              GlyphThresholds            `yaml:"glyph_thresholds"`                 // fallback glyph thresholds in FT8-equiv dB
-	GlyphSymbols                 GlyphSymbols               `yaml:"glyph_symbols"`                    // glyph mapping for high/medium/low/unlikely/insufficient
-	NoiseOffsets                 map[string]float64         `yaml:"noise_offsets"`                    // noise class -> dB penalty
+	Enabled                      bool                          `yaml:"enabled"`
+	AllowedBands                 []string                      `yaml:"allowed_bands"`
+	ClampMin                     float64                       `yaml:"clamp_min"`                        // FT8-equiv floor (dB)
+	ClampMax                     float64                       `yaml:"clamp_max"`                        // FT8-equiv ceiling (dB)
+	DefaultHalfLifeSec           int                           `yaml:"default_half_life_seconds"`        // fallback half-life when band not listed
+	BandHalfLifeSec              map[string]int                `yaml:"band_half_life_seconds"`           // per-band overrides
+	StaleAfterSeconds            int                           `yaml:"stale_after_seconds"`              // fallback purge when older than this
+	StaleAfterHalfLifeMultiplier float64                       `yaml:"stale_after_half_life_multiplier"` // stale = k * half-life (per band)
+	MinEffectiveWeight           float64                       `yaml:"min_effective_weight"`             // minimum decayed weight to report
+	MinFineWeight                float64                       `yaml:"min_fine_weight"`                  // minimum fine weight to blend with coarse
+	FineOnlyWeight               float64                       `yaml:"fine_only_weight"`                 // minimum fine weight to use fine only
+	ReverseHintDiscount          float64                       `yaml:"reverse_hint_discount"`            // multiplier when using reverse direction
+	MergeReceiveWeight           float64                       `yaml:"merge_receive_weight"`             // merge weight for DX->user
+	MergeTransmitWeight          float64                       `yaml:"merge_transmit_weight"`            // merge weight for user->DX
+	BeaconWeightCap              float64                       `yaml:"beacon_weight_cap"`                // cap per-beacon contribution
+	DisplayEnabled               bool                          `yaml:"display_enabled"`                  // toggle glyph rendering
+	ModeOffsets                  ModeOffsets                   `yaml:"mode_offsets"`                     // per-mode FT8-equiv offsets
+	ModeThresholds               map[string]GlyphThresholds    `yaml:"mode_thresholds"`                  // per-mode glyph thresholds in FT8-equiv dB
+	GlyphThresholds              GlyphThresholds               `yaml:"glyph_thresholds"`                 // fallback glyph thresholds in FT8-equiv dB
+	GlyphSymbols                 GlyphSymbols                  `yaml:"glyph_symbols"`                    // glyph mapping for high/medium/low/unlikely/insufficient
+	NoiseOffsetsByBand           map[string]map[string]float64 `yaml:"noise_offsets_by_band"`            // noise class -> band -> dB penalty
 
 	modeThresholdsPower  map[string]GlyphThresholdsPower
 	glyphThresholdsPower GlyphThresholdsPower
 	noisePenaltyDivisors map[float64]float64
+	noiseModel           NoiseModel
 	powerLUT             []float64
 	powerLUTMinDB        float64
 	powerLUTStepDB       float64
@@ -212,13 +213,7 @@ func DefaultConfig() Config {
 			Unlikely:     "!",
 			Insufficient: "?",
 		},
-		NoiseOffsets: map[string]float64{
-			"QUIET":      0,
-			"RURAL":      6,
-			"SUBURBAN":   9,
-			"URBAN":      12,
-			"INDUSTRIAL": 21,
-		},
+		NoiseOffsetsByBand: defaultNoiseOffsetsByBand(),
 	}
 	cfg.buildCaches()
 	return cfg
@@ -339,21 +334,7 @@ func (c *Config) normalize() {
 	if c.GlyphSymbols.Insufficient == "" {
 		c.GlyphSymbols.Insufficient = def.GlyphSymbols.Insufficient
 	}
-	if c.NoiseOffsets == nil {
-		c.NoiseOffsets = map[string]float64{}
-	}
-	// Ensure canonical noise keys exist.
-	for k, v := range def.NoiseOffsets {
-		if _, ok := c.NoiseOffsets[k]; !ok {
-			c.NoiseOffsets[k] = v
-		}
-	}
-	// Normalize noise keys to uppercase for lookup stability.
-	normalized := make(map[string]float64, len(c.NoiseOffsets))
-	for k, v := range c.NoiseOffsets {
-		normalized[strutil.NormalizeUpper(k)] = v
-	}
-	c.NoiseOffsets = normalized
+	c.NoiseOffsetsByBand = normalizeNoiseOffsetsByBand(c.NoiseOffsetsByBand, def.NoiseOffsetsByBand)
 	c.buildCaches()
 }
 
@@ -382,13 +363,13 @@ func (c *Config) buildCaches() {
 	c.powerLUT = lut
 	c.powerLUTMinDB = minDB
 
-	c.noisePenaltyDivisors = make(map[float64]float64, len(c.NoiseOffsets))
-	for _, penalty := range c.NoiseOffsets {
-		if penalty <= 0 {
-			continue
+	c.noiseModel = newNoiseModel(c.NoiseOffsetsByBand)
+	c.noisePenaltyDivisors = make(map[float64]float64, c.noiseModel.uniquePenaltyCount())
+	c.noiseModel.visitPenalties(func(penalty float64) {
+		if penalty > 0 {
+			c.noisePenaltyDivisors[penalty] = dbToPower(penalty)
 		}
-		c.noisePenaltyDivisors[penalty] = dbToPower(penalty)
-	}
+	})
 
 	c.glyphThresholdsPower = thresholdsPower(c.GlyphThresholds)
 	c.modeThresholdsPower = make(map[string]GlyphThresholdsPower, len(c.ModeThresholds))
@@ -448,6 +429,14 @@ func validateGlyphSymbol(symbol string) error {
 	return nil
 }
 
+// NoiseModel returns the normalized receive-side noise penalty model.
+func (c Config) NoiseModel() NoiseModel {
+	if !c.noiseModel.empty() {
+		return c.noiseModel
+	}
+	return newNoiseModel(normalizeNoiseOffsetsByBand(c.NoiseOffsetsByBand, defaultNoiseOffsetsByBand()))
+}
+
 // LoadFile loads YAML config and applies defaults.
 func LoadFile(path string) (Config, error) {
 	cfg := DefaultConfig()
@@ -458,8 +447,15 @@ func LoadFile(path string) (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+	providedNoise, hasNoiseByBand, err := decodeNoiseOffsetsByBand(bs)
+	if err != nil {
+		return cfg, err
+	}
 	if err := yaml.Unmarshal(bs, &cfg); err != nil {
 		return cfg, err
+	}
+	if hasNoiseByBand {
+		cfg.NoiseOffsetsByBand = mergeProvidedNoiseOffsetsByBand(providedNoise, defaultNoiseOffsetsByBand())
 	}
 	cfg.normalize()
 	return cfg, nil

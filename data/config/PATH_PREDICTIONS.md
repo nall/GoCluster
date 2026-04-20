@@ -62,13 +62,23 @@ After about 3 half-lives (roughly 12-30 minutes depending on band), old data get
 
 ### Your Noise Environment
 
-Your local noise floor dramatically affects what you can **receive**. The system adjusts the receive-path prediction based on the noise environment you've set (using the `SET NOISE` command):
+Your local noise floor dramatically affects what you can **receive**. The system adjusts the receive-path prediction based on the noise environment you've set (using the `SET NOISE` command).
 
-- **Quiet** (rural QTH, low noise): No penalty - you'll hear weak signals
-- **Rural**: 4 dB penalty - slightly elevated noise
-- **Suburban**: 12 dB penalty - typical residential QRM
-- **Urban**: 17 dB penalty - significant city noise
-- **Industrial**: 20 dB penalty - extreme noise environment
+The adjustment is band-specific. Low bands get stronger local-noise corrections, while 10m and 6m are intentionally tapered because absolute external noise falls sharply and receiver/system noise matters more near VHF:
+
+| Band | Quiet | Rural | Suburban | Urban | Industrial |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 160m | 0 | 6 | 14 | 22 | 28 |
+| 80m | 0 | 5 | 13 | 20 | 26 |
+| 60m | 0 | 5 | 12 | 19 | 24 |
+| 40m | 0 | 4 | 11 | 17 | 22 |
+| 30m | 0 | 3 | 9 | 14 | 18 |
+| 20m | 0 | 3 | 7 | 11 | 15 |
+| 17m | 0 | 2 | 6 | 9 | 12 |
+| 15m | 0 | 2 | 5 | 8 | 11 |
+| 12m | 0 | 1 | 4 | 6 | 9 |
+| 10m | 0 | 1 | 3 | 5 | 7 |
+| 6m | 0 | 0 | 2 | 3 | 5 |
 
 This noise adjustment only affects the receive direction. Your transmit effectiveness doesn't change based on local noise.
 
@@ -134,7 +144,7 @@ The system is highly configurable (see [path_reliability.yaml](path_reliability.
 
 - **Glyph symbols**: Can be customized (default: `>=<-` and space)
 - **Half-life timings**: Per-band decay rates
-- **Noise penalties**: dB adjustments per environment type
+- **Noise penalties**: band-specific dB adjustments per environment type
 - **Mode thresholds**: What signal strength qualifies as high/medium/low for each mode
 - **Minimum weight**: How much data is needed before showing a prediction
 

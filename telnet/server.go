@@ -226,7 +226,7 @@ type Server struct {
 	pathPredictor         *pathreliability.Predictor                 // Optional path reliability predictor
 	pathDisplay           bool                                       // Toggle glyph rendering
 	solarWeather          *solarweather.Manager                      // Optional solar/geomagnetic override evaluator
-	noiseOffsets          map[string]float64                         // Noise class lookup
+	noiseModel            pathreliability.NoiseModel                 // Noise class and band lookup
 	gridLookup            func(string) (string, bool, bool)          // Optional grid lookup from store
 	nowFn                 func() time.Time                           // Optional clock injection for deterministic tests
 	admissionGeoLookupFn  func(string, time.Time) (string, string)   // Optional prelogin geo-key lookup override for tests
@@ -278,7 +278,6 @@ type Client struct {
 	gridCell       pathreliability.CellID // Cached cell for path reliability
 	gridCoarseCell pathreliability.CellID // Cached coarse (res-1) cell for nearby filtering
 	noiseClass     string                 // Noise class token (e.g., QUIET, URBAN)
-	noisePenalty   float64                // dB penalty applied DX->user
 	skipNextEOL    bool                   // Consume a single LF/NUL after CR (RFC 854 compliance)
 	dedupePolicy   atomic.Uint32          // Secondary dedupe policy (fast/med/slow)
 	diagEnabled    atomic.Bool            // Diagnostic comment override enabled
@@ -438,7 +437,6 @@ type pathState struct {
 	gridCell       pathreliability.CellID
 	gridCoarseCell pathreliability.CellID
 	noiseClass     string
-	noisePenalty   float64
 }
 
 func (c *Client) pathSnapshot() pathState {
@@ -452,7 +450,6 @@ func (c *Client) pathSnapshot() pathState {
 		gridCell:       c.gridCell,
 		gridCoarseCell: c.gridCoarseCell,
 		noiseClass:     c.noiseClass,
-		noisePenalty:   c.noisePenalty,
 	}
 	c.pathMu.RUnlock()
 	return state
@@ -1399,13 +1396,11 @@ func (s *Server) handlePathSettingsCommand(client *Client, line string) (string,
 			return "Usage: SET NOISE <QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL>\n", true
 		}
 		class := strutil.NormalizeUpper(upper[2])
-		penalty := s.noisePenaltyForClass(class)
-		if class == "" || (penalty == 0 && class != "QUIET" && class != "RURAL" && class != "SUBURBAN" && class != "URBAN" && class != "INDUSTRIAL") {
+		if class == "" || !s.noiseClassKnown(class) {
 			return "Unknown noise class. Use QUIET, RURAL, SUBURBAN, URBAN, or INDUSTRIAL.\n", true
 		}
 		client.pathMu.Lock()
 		client.noiseClass = class
-		client.noisePenalty = penalty
 		client.pathMu.Unlock()
 		if err := client.saveFilter(); err != nil {
 			return fmt.Sprintf("Noise class set to %s (warning: failed to persist: %v)\n", class, err), true
@@ -1741,7 +1736,7 @@ type ServerOptions struct {
 	PathPredictor            *pathreliability.Predictor
 	PathDisplayEnabled       bool
 	SolarWeather             *solarweather.Manager
-	NoiseOffsets             map[string]float64
+	NoiseModel               pathreliability.NoiseModel
 	GridLookup               func(string) (string, bool, bool)
 	CTYLookup                func() *cty.CTYDatabase
 	DedupeFastEnabled        bool
@@ -1826,7 +1821,7 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		pathPredictor:         opts.PathPredictor,
 		pathDisplay:           opts.PathDisplayEnabled,
 		solarWeather:          opts.SolarWeather,
-		noiseOffsets:          opts.NoiseOffsets,
+		noiseModel:            config.NoiseModel,
 		gridLookup:            opts.GridLookup,
 		dedupeFastEnabled:     config.DedupeFastEnabled,
 		dedupeMedEnabled:      config.DedupeMedEnabled,
@@ -1986,8 +1981,8 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 	if config.PathPredictor == nil {
 		config.PathDisplayEnabled = false
 	}
-	if config.NoiseOffsets == nil {
-		config.NoiseOffsets = map[string]float64{}
+	if config.NoiseModel.Empty() {
+		config.NoiseModel = pathreliability.DefaultConfig().NoiseModel()
 	}
 	if strings.TrimSpace(config.NearbyLoginWarning) == "" {
 		config.NearbyLoginWarning = nearbyLoginWarningMsg
@@ -2852,7 +2847,6 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		gridCell:       pathreliability.InvalidCell,
 		gridCoarseCell: pathreliability.InvalidCell,
 		noiseClass:     "QUIET",
-		noisePenalty:   0,
 		// Echo policy is configured explicitly so we can support local echo even
 		// when clients toggle their own modes.
 		echoInput: s.echoMode == telnetEchoServer,
@@ -2958,7 +2952,6 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		client.gridCell = pathreliability.EncodeCell(client.grid)
 		client.gridCoarseCell = pathreliability.EncodeCoarseCell(client.grid)
 		client.noiseClass = strutil.NormalizeUpper(record.NoiseClass)
-		client.noisePenalty = s.noisePenaltyForClass(client.noiseClass)
 		client.setSolarSummaryMinutes(record.SolarSummaryMinutes, loginTime)
 		if created {
 			log.Printf("Created default filter for %s", client.callsign)
@@ -2974,7 +2967,6 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		client.gridCoarseCell = pathreliability.InvalidCell
 		client.gridDerived = false
 		client.noiseClass = "QUIET"
-		client.noisePenalty = s.noisePenaltyForClass(client.noiseClass)
 		log.Printf("Warning: failed to load user record for %s: %v", client.callsign, err)
 		if err := client.saveFilter(); err != nil {
 			log.Printf("Warning: failed to save user record for %s: %v", client.callsign, err)
@@ -2993,7 +2985,6 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 	// Normalize noise defaults when absent.
 	if strings.TrimSpace(client.noiseClass) == "" {
 		client.noiseClass = "QUIET"
-		client.noisePenalty = s.noisePenaltyForClass(client.noiseClass)
 	}
 
 	nearbyWarning, nearbyChanged := applyNearbyLoginState(client, s.nearbyLoginWarning)
@@ -3266,15 +3257,18 @@ func formatGreeting(tmpl string, data templateData) string {
 	return applyTemplateTokens(tmpl, data)
 }
 
-func (s *Server) noisePenaltyForClass(class string) float64 {
+func (s *Server) noiseClassKnown(class string) bool {
+	if s == nil {
+		return false
+	}
+	return s.noiseModel.HasClass(class)
+}
+
+func (s *Server) noisePenaltyForClassBand(class string, band string) float64 {
 	if s == nil {
 		return 0
 	}
-	key := strutil.NormalizeUpper(class)
-	if val, ok := s.noiseOffsets[key]; ok {
-		return val
-	}
-	return 0
+	return s.noiseModel.Penalty(class, band)
 }
 
 // formatSpotForClient renders a spot with optional reliability glyphs.
@@ -3322,7 +3316,6 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 	state := client.pathSnapshot()
 	userCell := state.gridCell
 	grid := strings.TrimSpace(state.grid)
-	noisePenalty := state.noisePenalty
 	if userCell == pathreliability.InvalidCell && grid != "" {
 		cell := pathreliability.EncodeCell(grid)
 		if cell != pathreliability.InvalidCell {
@@ -3350,15 +3343,13 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 	userCoarse := pathreliability.EncodeCoarseCell(grid)
 	dxCoarse := pathreliability.EncodeCoarseCell(sp.DXMetadata.Grid)
 
-	band := sp.BandNorm
-	if strings.TrimSpace(band) == "" {
-		band = sp.Band
-	}
+	band := pathPredictionBand(sp)
 	mode := sp.ModeNorm
 	if strings.TrimSpace(mode) == "" {
 		mode = sp.Mode
 	}
 	now := time.Now().UTC()
+	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
 	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
 	s.recordPathPrediction(res, state.gridDerived, sp.DXMetadata.GridDerived)
 	if res.Source == pathreliability.SourceInsufficient {
@@ -3400,7 +3391,6 @@ func (s *Server) pathClassForClient(client *Client, sp *spot.Spot) string {
 	state := client.pathSnapshot()
 	userCell := state.gridCell
 	grid := strings.TrimSpace(state.grid)
-	noisePenalty := state.noisePenalty
 	if userCell == pathreliability.InvalidCell && grid != "" {
 		cell := pathreliability.EncodeCell(grid)
 		if cell != pathreliability.InvalidCell {
@@ -3428,6 +3418,25 @@ func (s *Server) pathClassForClient(client *Client, sp *spot.Spot) string {
 	userCoarse := pathreliability.EncodeCoarseCell(grid)
 	dxCoarse := pathreliability.EncodeCoarseCell(sp.DXMetadata.Grid)
 
+	band := pathPredictionBand(sp)
+
+	mode := strings.TrimSpace(sp.ModeNorm)
+	if mode == "" {
+		mode = strings.TrimSpace(sp.Mode)
+	}
+	now := time.Now().UTC()
+	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
+	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
+	if res.Source == pathreliability.SourceInsufficient {
+		return filter.PathClassInsufficient
+	}
+	return pathreliability.ClassForPower(res.Value, mode, cfg)
+}
+
+func pathPredictionBand(sp *spot.Spot) string {
+	if sp == nil {
+		return ""
+	}
 	band := strings.TrimSpace(sp.BandNorm)
 	if band == "" {
 		band = strings.TrimSpace(sp.Band)
@@ -3435,18 +3444,7 @@ func (s *Server) pathClassForClient(client *Client, sp *spot.Spot) string {
 	if band == "" {
 		band = spot.FreqToBand(sp.Frequency)
 	}
-	band = strings.TrimSpace(spot.NormalizeBand(band))
-
-	mode := strings.TrimSpace(sp.ModeNorm)
-	if mode == "" {
-		mode = strings.TrimSpace(sp.Mode)
-	}
-	now := time.Now().UTC()
-	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
-	if res.Source == pathreliability.SourceInsufficient {
-		return filter.PathClassInsufficient
-	}
-	return pathreliability.ClassForPower(res.Value, mode, cfg)
+	return strings.TrimSpace(spot.NormalizeBand(band))
 }
 
 func diagTagForSpot(client *Client, sp *spot.Spot) string {

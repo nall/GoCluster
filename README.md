@@ -217,7 +217,7 @@ At a high level, the cluster:
 2. converts those reports onto a common FT8-like signal scale
 3. groups them by coarse and fine geographic cells derived from Maidenhead grids
 4. combines recent DX-to-you and you-to-DX evidence with decay over time
-5. applies your selected noise class on the receive side
+5. applies your selected noise class on the receive side using a band-specific penalty
 6. maps the result to `HIGH`, `MEDIUM`, `LOW`, `UNLIKELY`, or `INSUFFICIENT`
 
 What the classes mean to an operator:
@@ -231,7 +231,9 @@ What the classes mean to an operator:
 Important operational notes:
 
 - You need `SET GRID` for path hints to be useful.
-- `SET NOISE` changes the receive-side penalty used in the calculation.
+- `SET NOISE` changes the receive-side penalty used in the calculation. The
+  penalty is band-specific: low bands get stronger local-noise corrections than
+  10m and 6m.
 - If grids are missing, evidence is stale or too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.
 - `PATH` filters work on the class names, not on the glyph characters.
 
