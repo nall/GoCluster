@@ -4613,13 +4613,16 @@ func formatRecentSupportByBandLines(store spot.RecentSupportStore, now time.Time
 	if store == nil {
 		return lines
 	}
-	if customSCP, ok := store.(*spot.CustomSCPStore); ok && customSCP != nil {
-		lines = append([]string{
-			fmt.Sprintf("[yellow]Custom SCP calls[-]: %s", humanize.Comma(int64(customSCP.StaticCallCount(now)))),
-		}, lines...)
-	}
 	total := store.ActiveCallCount(now)
-	lines[len(lines)-1] = fmt.Sprintf("[yellow]Recent support[-]: %s", humanize.Comma(int64(total)))
+	if customSCP, ok := store.(*spot.CustomSCPStore); ok && customSCP != nil {
+		staticTotal := customSCP.StaticCallCount(now)
+		lines[len(lines)-1] = fmt.Sprintf("[yellow]Custom SCP[-]: %s (R) / %s (S)",
+			humanize.Comma(int64(total)),
+			humanize.Comma(int64(staticTotal)),
+		)
+	} else {
+		lines[len(lines)-1] = fmt.Sprintf("[yellow]Recent support[-]: %s", humanize.Comma(int64(total)))
+	}
 
 	counts := store.ActiveCallCountsByBand(now)
 	if len(counts) == 0 {
@@ -4660,6 +4663,7 @@ func formatRecentSupportByBandLines(store spot.RecentSupportStore, now time.Time
 	if maxBands > 0 && len(entries) > maxBands {
 		entries = entries[:maxBands]
 	}
+	lines = append(lines, "")
 
 	const colsPerRow = 5
 	maxBand := 0

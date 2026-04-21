@@ -2627,26 +2627,28 @@ func TestFormatRecentSupportByBandLinesIncludesCustomSCPStaticCalls(t *testing.T
 
 	lines := formatRecentSupportByBandLines(store, now, 0)
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "[yellow]Custom SCP calls[-]: 2") {
-		t.Fatalf("expected custom SCP static count line, got %v", lines)
-	}
-	if !strings.Contains(joined, "[yellow]Recent support[-]: 2") {
-		t.Fatalf("expected recent support active count line, got %v", lines)
+	if !strings.Contains(joined, "[yellow]Custom SCP[-]: 2 (R) / 2 (S)") {
+		t.Fatalf("expected combined custom SCP recent/static count line, got %v", lines)
 	}
 	if !strings.Contains(joined, "[yellow]40m[-]: 2") || !strings.Contains(joined, "[yellow]20m[-]: 1") {
 		t.Fatalf("expected recent per-band support rows, got %v", lines)
 	}
-	customIdx, recentIdx := -1, -1
+	customIdx := -1
 	for i, line := range lines {
-		if strings.Contains(line, "Custom SCP calls") {
+		if strings.Contains(line, "Custom SCP[-]") {
 			customIdx = i
 		}
-		if strings.Contains(line, "Recent support") {
-			recentIdx = i
-		}
 	}
-	if customIdx < 0 || recentIdx < 0 || customIdx >= recentIdx {
-		t.Fatalf("expected custom SCP count before recent support, got %v", lines)
+	if customIdx != 0 {
+		t.Fatalf("expected custom SCP summary before per-band rows, got %v", lines)
+	}
+	if len(lines) < 3 || strings.TrimSpace(lines[1]) != "" {
+		t.Fatalf("expected blank spacer between custom SCP summary and per-band rows, got %v", lines)
+	}
+	for _, forbidden := range []string{"Custom SCP calls", "Recent support"} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("did not expect old custom SCP label %q, got %v", forbidden, lines)
+		}
 	}
 }
 

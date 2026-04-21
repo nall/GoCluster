@@ -41,7 +41,7 @@ const (
 		"[lightgray]Temporal[-]: --"
 	placeholderCaches = "[lightgray]Grid cache[-]:  [[white:white]   [black:white]326,629[-:-]   [-:-]░░░░] 98.5%  |  [lightgray]Meta[-]: [[white:white]  [black:white] 5,479[-:-]  [-:-]] 99.5%\n" +
 		"\n" +
-		"[lightgray]Known calls[-]: --\n" +
+		"[lightgray]Custom SCP[-]: -- (R) / -- (S)\n" +
 		"[lightgray]160m[-]: --  [lightgray]80m[-]: --  [lightgray]40m[-]: --  [lightgray]20m[-]: --\n" +
 		"\n" +
 		"[lightgray]CTY[-]: --  [lightgray]FCC[-]: --  [lightgray]Skew[-]: --"
