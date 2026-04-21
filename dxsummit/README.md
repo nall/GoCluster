@@ -4,7 +4,8 @@ This package owns the optional DXSummit HTTP polling feed.
 
 ## Runtime Contract
 
-- Disabled by default under `dxsummit.enabled: false`.
+- Loader defaults keep the feed disabled when `dxsummit.enabled` is omitted.
+- The checked-in `data/config/ingest.yaml` block is operator-editable runtime configuration; its explicit values override loader defaults for this checkout.
 - When enabled, one goroutine polls `api/v1/spots`; requests do not overlap.
 - Each request is bounded by `request_timeout_ms` and `max_response_bytes`.
 - The output queue is capped by `spot_channel_size`; full queues drop the newest DXSummit row and increment health counters.
@@ -17,7 +18,14 @@ Normal request shape:
 GET {base_url}?limit={max_records_per_poll}&from_time={now-lookback_seconds}&to_time={now}&include=HF,VHF,UHF&refresh={unix_ms}
 ```
 
-Startup is seed-only by default. With `startup_backfill_seconds: 0`, the first successful poll establishes the high-water ID and emits no spots. A positive startup backfill emits only rows newer than that startup window after high-water filtering.
+Loader-default startup behavior is seed-only. With `startup_backfill_seconds: 0`, the first successful poll establishes the high-water ID and emits no spots. A positive startup backfill emits only rows newer than that startup window after high-water filtering.
+
+## Operator Visibility
+
+- The console dashboard counts DXSummit as one enabled ingest source when `dxsummit.enabled` is true.
+- `DXSUMMIT` is shown as connected after a recent successful poll. Seed-only startup counts as connected after the first successful poll even if no spots are emitted.
+- Enabled but failed, disconnected, or stale polling appears as an offline DXSummit source instead of disappearing from the source row.
+- Health snapshots expose queue length/capacity, queue drops, parse/request errors, oversized responses, duplicate rows, emitted spots, truncation warnings, last status, last error, and the high-water ID.
 
 ## Spot Semantics
 

@@ -219,6 +219,9 @@ func (c *Client) run(ctx context.Context) {
 
 	seeded := false
 	for {
+		// The polling goroutine owns request sequencing. Each iteration finishes
+		// the current request before waiting on the ticker, so DXSummit polls
+		// cannot overlap even when the endpoint is slow.
 		if !seeded {
 			if c.poll(ctx, true) {
 				seeded = true
@@ -235,6 +238,10 @@ func (c *Client) run(ctx context.Context) {
 	}
 }
 
+// poll performs one bounded API request, advances the O(1) high-water cursor,
+// and emits accepted rows oldest-to-newest. A successful fetch marks the source
+// connected before emission, because seed-only startup can be healthy while
+// intentionally producing no spots.
 func (c *Client) poll(ctx context.Context, startup bool) bool {
 	now := c.nowUTC()
 	records, err := c.fetch(ctx, now)
@@ -261,6 +268,9 @@ func (c *Client) poll(ctx context.Context, startup bool) bool {
 		startupCutoff = now.Add(-time.Duration(c.cfg.StartupBackfillSeconds) * time.Second)
 	}
 	for _, record := range records {
+		// Keep only the highest DXSummit row ID. This avoids an unbounded seen-ID
+		// map; rows at or below the prior high-water mark are treated as duplicates
+		// within the configured lookback window.
 		if record.ID > maxID {
 			maxID = record.ID
 		}
@@ -302,6 +312,8 @@ func (c *Client) fetch(ctx context.Context, now time.Time) ([]rawSpot, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(c.cfg.RequestTimeoutMS)*time.Millisecond)
 	defer cancel()
 
+	// Always send both endpoints of the time window. DXSummit may return a full
+	// limited page when only from_time is supplied, which can hide recent rows.
 	end := now.UTC()
 	start := end.Add(-time.Duration(c.cfg.LookbackSeconds) * time.Second)
 	uri, err := c.requestURL(start, end)
@@ -321,6 +333,8 @@ func (c *Client) fetch(ctx context.Context, now time.Time) ([]rawSpot, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("dxsummit: HTTP status %d", resp.StatusCode)
 	}
+	// Cap the response body before JSON decoding so a bad or changed upstream
+	// response cannot grow process memory beyond max_response_bytes.
 	limit := c.cfg.MaxResponseBytes
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
@@ -357,6 +371,9 @@ func (c *Client) requestURL(start, end time.Time) (string, error) {
 	return parsed.String(), nil
 }
 
+// parseRecord maps one DXSummit JSON row into the shared spot model. DXSummit
+// coordinates are deliberately ignored here; grids can still be filled later by
+// the existing CTY/grid-cache enrichment path from callsign-derived metadata.
 func parseRecord(record rawSpot) (*spot.Spot, error) {
 	if record.ID == 0 {
 		return nil, errors.New("dxsummit: missing id")
@@ -416,6 +433,9 @@ func parseAPITime(value string) (time.Time, error) {
 	return ts.UTC(), nil
 }
 
+// normalizeSpotterCall returns both the display callsign and the base lookup
+// callsign. A final "-@" marker is DXSummit source provenance and is preserved
+// for display/archive output, but embedded or malformed "@" forms are rejected.
 func normalizeSpotterCall(raw string) (display string, base string, ok bool) {
 	trimmed := strings.ToUpper(strings.TrimSpace(raw))
 	if trimmed == "" {
@@ -438,6 +458,9 @@ func normalizeSpotterCall(raw string) (display string, base string, ok bool) {
 	return base, base, true
 }
 
+// emit never blocks the polling goroutine. When the bounded output channel is
+// full, the newest DXSummit row is dropped and counted so other ingest sources
+// and shutdown are not held behind this feed.
 func (c *Client) emit(sp *spot.Spot) {
 	if sp == nil {
 		return

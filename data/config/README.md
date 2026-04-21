@@ -37,11 +37,14 @@ Bulletin behavior:
 - `telnet.bulletin_dedupe_max_entries` is the hard cap on retained bulletin keys while dedupe is enabled.
 
 DXSummit ingest:
-- `dxsummit.enabled` defaults to `false`. When enabled, one HTTP polling goroutine reads `dxsummit.base_url` and forwards accepted rows into the shared ingest pipeline as human `UPSTREAM` spots with `SourceNode=DXSUMMIT`.
-- `dxsummit.poll_interval_seconds` controls poll cadence. The shipped default is `30`.
+- `dxsummit.enabled` loader default is `false` when omitted. The checked-in `ingest.yaml` block is the operator-editable runtime config for this checkout; its explicit values override loader defaults.
+- When enabled, one HTTP polling goroutine reads `dxsummit.base_url` and forwards accepted rows into the shared ingest pipeline as human `UPSTREAM` spots with `SourceNode=DXSUMMIT`.
+- `dxsummit.poll_interval_seconds` controls poll cadence. The loader default is `30` when omitted; use the effective YAML value to know what this node will run.
 - `dxsummit.max_records_per_poll` maps directly to the DXSummit `limit` query parameter. The shipped default is `500`; valid range is `1..10000`.
 - Normal polls use `from_time=now-lookback_seconds`, `to_time=now`, `limit=max_records_per_poll`, and `include=HF,VHF,UHF`.
 - `dxsummit.include_bands` is limited to `HF`, `VHF`, and `UHF`.
 - `dxsummit.startup_backfill_seconds: 0` means seed-only startup: the initial page sets the high-water cursor and emits no historical rows.
 - `dxsummit.spot_channel_size` and `dxsummit.max_response_bytes` bound retained queue and response memory.
+- DXSummit spotter calls ending in `-@` preserve that marker for display/archive provenance, while metadata and license lookups use the base callsign without the marker.
 - DXSummit latitude/longitude fields are not used to populate grids. Existing CTY and grid-cache enrichment may fill grids later from callsign-derived data.
+- The console dashboard counts DXSummit in `Ingest Sources` only when `dxsummit.enabled` is true. It shows `DXSUMMIT` connected after a recent successful poll, including seed-only startup polls that emit no spots.
