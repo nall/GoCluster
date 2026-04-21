@@ -10,15 +10,17 @@ import (
 func TestShouldPublishLocalSpotForwardDisabledAllowsOnlyLocalDX(t *testing.T) {
 	m := &Manager{cfg: config.PeeringConfig{ForwardSpots: false}}
 	tests := []struct {
-		name string
-		src  spot.SourceType
-		test bool
-		want bool
+		name       string
+		src        spot.SourceType
+		sourceNode string
+		test       bool
+		want       bool
 	}{
 		{name: "manual allowed", src: spot.SourceManual, want: true},
 		{name: "manual test spotter blocked", src: spot.SourceManual, test: true, want: false},
 		{name: "peer blocked", src: spot.SourcePeer, want: false},
 		{name: "upstream blocked", src: spot.SourceUpstream, want: false},
+		{name: "dxsummit upstream blocked", src: spot.SourceUpstream, sourceNode: "DXSUMMIT", want: false},
 		{name: "rbn blocked", src: spot.SourceRBN, want: false},
 		{name: "ft8 blocked", src: spot.SourceFT8, want: false},
 		{name: "pskreporter blocked", src: spot.SourcePSKReporter, want: false},
@@ -28,6 +30,7 @@ func TestShouldPublishLocalSpotForwardDisabledAllowsOnlyLocalDX(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
 			s.SourceType = tc.src
+			s.SourceNode = tc.sourceNode
 			s.IsTestSpotter = tc.test
 			if got := m.ShouldPublishLocalSpot(s); got != tc.want {
 				t.Fatalf("ShouldPublishLocalSpot(%s,test=%v)=%v want %v", tc.src, tc.test, got, tc.want)
@@ -39,14 +42,16 @@ func TestShouldPublishLocalSpotForwardDisabledAllowsOnlyLocalDX(t *testing.T) {
 func TestShouldPublishLocalSpotForwardEnabledUsesPeerPublishPolicy(t *testing.T) {
 	m := &Manager{cfg: config.PeeringConfig{ForwardSpots: true}}
 	tests := []struct {
-		name string
-		src  spot.SourceType
-		test bool
-		want bool
+		name       string
+		src        spot.SourceType
+		sourceNode string
+		test       bool
+		want       bool
 	}{
 		{name: "manual allowed", src: spot.SourceManual, want: true},
 		{name: "manual test spotter blocked", src: spot.SourceManual, test: true, want: false},
 		{name: "upstream blocked", src: spot.SourceUpstream, want: false},
+		{name: "dxsummit upstream blocked", src: spot.SourceUpstream, sourceNode: "DXSUMMIT", want: false},
 		{name: "peer blocked", src: spot.SourcePeer, want: false},
 		{name: "rbn blocked", src: spot.SourceRBN, want: false},
 		{name: "ft8 blocked", src: spot.SourceFT8, want: false},
@@ -58,6 +63,7 @@ func TestShouldPublishLocalSpotForwardEnabledUsesPeerPublishPolicy(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			s := spot.NewSpot("K1ABC", "W1XYZ", 7074.0, "FT8")
 			s.SourceType = tc.src
+			s.SourceNode = tc.sourceNode
 			s.IsTestSpotter = tc.test
 			if got := m.ShouldPublishLocalSpot(s); got != tc.want {
 				t.Fatalf("ShouldPublishLocalSpot(%s,test=%v)=%v want %v", tc.src, tc.test, got, tc.want)

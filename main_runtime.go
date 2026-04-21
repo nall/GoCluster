@@ -18,6 +18,7 @@ import (
 	"dxcluster/config"
 	"dxcluster/cty"
 	"dxcluster/dedup"
+	"dxcluster/dxsummit"
 	"dxcluster/filter"
 	"dxcluster/floodcontrol"
 	"dxcluster/gridstore"
@@ -130,8 +131,9 @@ type clusterRuntime struct {
 	rbnDigitalClient  *rbn.Client
 	humanTelnetClient *rbn.Client
 
-	pskrClient *pskreporter.Client
-	pskrTopics []string
+	dxsummitClient *dxsummit.Client
+	pskrClient     *pskreporter.Client
+	pskrTopics     []string
 }
 
 type archivePeerSecondaryPolicy struct {
@@ -1006,6 +1008,7 @@ func (r *clusterRuntime) connectFeeds() {
 	r.connectRBNFeed()
 	r.connectRBNDigitalFeed()
 	r.connectHumanTelnetFeed()
+	r.connectDXSummitFeed()
 	r.connectPSKReporterFeed()
 }
 
@@ -1091,6 +1094,20 @@ func (r *clusterRuntime) forwardHumanPassthrough(rawPassthrough <-chan string) {
 	}
 }
 
+func (r *clusterRuntime) connectDXSummitFeed() {
+	if !r.cfg.DXSummit.Enabled {
+		return
+	}
+	r.dxsummitClient = dxsummit.NewClient(r.cfg.DXSummit)
+	if err := r.dxsummitClient.Connect(); err != nil {
+		log.Printf("Warning: Failed to start DXSummit: %v", err)
+		r.dxsummitClient = nil
+		return
+	}
+	go forwardSpots(r.dxsummitClient.GetSpotChannel(), r.ingestInput, "DXSummit", r.cfg.SpotPolicy, nil)
+	log.Println("DXSummit client feeding spots into unified dedup engine")
+}
+
 func (r *clusterRuntime) connectPSKReporterFeed() {
 	if !r.cfg.PSKReporter.Enabled {
 		return
@@ -1125,7 +1142,7 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 }
 
 func (r *clusterRuntime) startMonitors() {
-	ingestSources := make([]ingestHealthSource, 0, 4)
+	ingestSources := make([]ingestHealthSource, 0, 5)
 	if r.rbnClient != nil {
 		ingestSources = append(ingestSources, rbnHealthSource(ingestSourceName(r.cfg.RBN.Name, "RBN"), r.rbnClient))
 	}
@@ -1134,6 +1151,9 @@ func (r *clusterRuntime) startMonitors() {
 	}
 	if r.humanTelnetClient != nil {
 		ingestSources = append(ingestSources, rbnHealthSource(ingestSourceName(r.cfg.HumanTelnet.Name, "Human Telnet"), r.humanTelnetClient))
+	}
+	if r.dxsummitClient != nil {
+		ingestSources = append(ingestSources, dxsummitHealthSource(ingestSourceName(r.cfg.DXSummit.Name, dxsummit.SourceNode), r.dxsummitClient))
 	}
 	if r.pskrClient != nil {
 		ingestSources = append(ingestSources, pskReporterHealthSource(ingestSourceName(r.cfg.PSKReporter.Name, "PSKReporter"), r.pskrClient))
@@ -1166,10 +1186,12 @@ func (r *clusterRuntime) startMonitors() {
 		r.rbnClient,
 		r.rbnDigitalClient,
 		r.pskrClient,
+		r.dxsummitClient,
 		r.pskrPathOnlyStats,
 		r.peerManager,
 		r.cfg.Server.NodeID,
 		r.cfg.Skew.File,
+		dashboardIngestSourceConfigFromConfig(r.cfg),
 	)
 	if r.pathCfg.Enabled {
 		go startPathPredictionLogger(r.ctx, r.logMux, r.telnetServer, r.pathPredictor, r.pathReport)
@@ -1194,6 +1216,9 @@ func (r *clusterRuntime) logStartup() {
 	}
 	if r.cfg.HumanTelnet.Enabled {
 		log.Printf("Receiving human/relay spots from %s:%d...", r.cfg.HumanTelnet.Host, r.cfg.HumanTelnet.Port)
+	}
+	if r.cfg.DXSummit.Enabled {
+		log.Printf("Receiving DXSummit HTTP spots every %d seconds...", r.cfg.DXSummit.PollIntervalSeconds)
 	}
 	if r.cfg.Dedup.ClusterWindowSeconds > 0 {
 		log.Printf("Unified deduplication active: %d second window", r.cfg.Dedup.ClusterWindowSeconds)
@@ -1262,6 +1287,9 @@ func (r *clusterRuntime) shutdown() {
 	}
 	if r.pskrClient != nil {
 		r.pskrClient.Stop()
+	}
+	if r.dxsummitClient != nil {
+		r.dxsummitClient.Stop()
 	}
 	if r.telnetServer != nil {
 		r.telnetServer.Stop()

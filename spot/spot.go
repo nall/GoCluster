@@ -683,13 +683,14 @@ func (s *Spot) buildDXClusterLine(commentPayload string) string {
 	if maxDELen < 1 {
 		maxDELen = 1
 	}
-	if strings.HasSuffix(deCall, "-#") {
+	if strings.HasSuffix(deCall, "-#") || strings.HasSuffix(deCall, "-@") {
+		marker := deCall[len(deCall)-2:]
 		maxDELenWithGap := maxDELen - 1
 		if maxDELenWithGap < 1 {
 			maxDELenWithGap = 1
 		}
 		if len(deCall) > maxDELenWithGap {
-			deCall = strings.TrimSuffix(deCall, "-#")
+			deCall = strings.TrimSuffix(deCall, marker)
 		}
 	}
 	if len(deCall) > maxDELen {
@@ -810,7 +811,7 @@ func (s *Spot) buildDXClusterLine(commentPayload string) string {
 // Downstream: None (pure mapping).
 func FreqToBand(freq float64) string {
 	for _, band := range bandTable {
-		if freq >= band.Min && freq <= band.Max {
+		if band.Contains(freq) {
 			return band.Name
 		}
 	}

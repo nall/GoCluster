@@ -3,7 +3,7 @@
 Configuration is split by concern so you only edit the relevant file:
 
 - `app.yaml` - server identity, stats interval, console UI, and logging options (including dropped-call dedupe window).
-- `ingest.yaml` - RBN/PSKReporter/human ingest plus the shared call cache.
+- `ingest.yaml` - RBN/PSKReporter/human/DXSummit ingest plus the shared call cache.
 - `dedupe.yaml` - primary/secondary dedupe policy windows.
 - `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.
 - `pipeline.yaml` - call correction, harmonics, spot policy.
@@ -35,3 +35,13 @@ Bulletin behavior:
 - `telnet.bulletin_dedupe_window_seconds` suppresses identical WWV, WCY, and `TO ALL` announcement lines across all bulletin sources before they enter client control queues.
 - Set `telnet.bulletin_dedupe_window_seconds: 0` to disable bulletin dedupe.
 - `telnet.bulletin_dedupe_max_entries` is the hard cap on retained bulletin keys while dedupe is enabled.
+
+DXSummit ingest:
+- `dxsummit.enabled` defaults to `false`. When enabled, one HTTP polling goroutine reads `dxsummit.base_url` and forwards accepted rows into the shared ingest pipeline as human `UPSTREAM` spots with `SourceNode=DXSUMMIT`.
+- `dxsummit.poll_interval_seconds` controls poll cadence. The shipped default is `30`.
+- `dxsummit.max_records_per_poll` maps directly to the DXSummit `limit` query parameter. The shipped default is `500`; valid range is `1..10000`.
+- Normal polls use `from_time=now-lookback_seconds`, `to_time=now`, `limit=max_records_per_poll`, and `include=HF,VHF,UHF`.
+- `dxsummit.include_bands` is limited to `HF`, `VHF`, and `UHF`.
+- `dxsummit.startup_backfill_seconds: 0` means seed-only startup: the initial page sets the high-water cursor and emits no historical rows.
+- `dxsummit.spot_channel_size` and `dxsummit.max_response_bytes` bound retained queue and response memory.
+- DXSummit latitude/longitude fields are not used to populate grids. Existing CTY and grid-cache enrichment may fill grids later from callsign-derived data.

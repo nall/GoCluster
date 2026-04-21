@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -131,6 +132,7 @@ type Config struct {
 	RBNDigital          RBNConfig            `yaml:"rbn_digital"`
 	HumanTelnet         RBNConfig            `yaml:"human_telnet"`
 	PSKReporter         PSKReporterConfig    `yaml:"pskreporter"`
+	DXSummit            DXSummitConfig       `yaml:"dxsummit"`
 	Archive             ArchiveConfig        `yaml:"archive"`
 	Dedup               DedupConfig          `yaml:"dedup"`
 	FloodControl        FloodControlConfig   `yaml:"flood_control"`
@@ -555,9 +557,32 @@ type PSKReporterConfig struct {
 	MaxPayloadBytes int `yaml:"max_payload_bytes"`
 }
 
+// DXSummitConfig contains DXSummit HTTP polling settings.
+type DXSummitConfig struct {
+	Enabled                bool     `yaml:"enabled"`
+	Name                   string   `yaml:"name"`
+	BaseURL                string   `yaml:"base_url"`
+	PollIntervalSeconds    int      `yaml:"poll_interval_seconds"`
+	MaxRecordsPerPoll      int      `yaml:"max_records_per_poll"`
+	RequestTimeoutMS       int      `yaml:"request_timeout_ms"`
+	LookbackSeconds        int      `yaml:"lookback_seconds"`
+	StartupBackfillSeconds int      `yaml:"startup_backfill_seconds"`
+	IncludeBands           []string `yaml:"include_bands"`
+	SpotChannelSize        int      `yaml:"spot_channel_size"`
+	MaxResponseBytes       int64    `yaml:"max_response_bytes"`
+}
+
 const (
 	defaultPSKReporterTopic                 = "pskr/filter/v2/+/+/#"
 	defaultPSKReporterQoS12EnqueueTimeoutMS = 250
+	defaultDXSummitName                     = "DXSUMMIT"
+	defaultDXSummitBaseURL                  = "http://www.dxsummit.fi/api/v1/spots"
+	defaultDXSummitPollIntervalSeconds      = 30
+	defaultDXSummitMaxRecordsPerPoll        = 500
+	defaultDXSummitRequestTimeoutMS         = 10000
+	defaultDXSummitLookbackSeconds          = 300
+	defaultDXSummitSpotChannelSize          = 1000
+	defaultDXSummitMaxResponseBytes         = 1048576
 )
 
 // ArchiveConfig controls optional Pebble archival of broadcasted spots.
@@ -1286,6 +1311,14 @@ type loadRawPresence struct {
 	hasAdaptiveMinReportsEnabled                    bool
 	hasArchiveCleanupYield                          bool
 	hasPSKRMQTTTimeout                              bool
+	hasDXSummitBaseURL                              bool
+	hasDXSummitPollInterval                         bool
+	hasDXSummitMaxRecords                           bool
+	hasDXSummitRequestTimeout                       bool
+	hasDXSummitLookback                             bool
+	hasDXSummitIncludeBands                         bool
+	hasDXSummitSpotChannel                          bool
+	hasDXSummitMaxResponse                          bool
 	hasFamilyTruncationEnabled                      bool
 	hasFamilyTruncationPrefix                       bool
 	hasFamilyTruncationSuffix                       bool
@@ -1337,6 +1370,14 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 		hasAdaptiveMinReportsEnabled:                    yamlKeyPresent(raw, "call_correction", "adaptive_min_reports", "enabled"),
 		hasArchiveCleanupYield:                          yamlKeyPresent(raw, "archive", "cleanup_batch_yield_ms"),
 		hasPSKRMQTTTimeout:                              yamlKeyPresent(raw, "pskreporter", "mqtt_qos12_enqueue_timeout_ms"),
+		hasDXSummitBaseURL:                              yamlKeyPresent(raw, "dxsummit", "base_url"),
+		hasDXSummitPollInterval:                         yamlKeyPresent(raw, "dxsummit", "poll_interval_seconds"),
+		hasDXSummitMaxRecords:                           yamlKeyPresent(raw, "dxsummit", "max_records_per_poll"),
+		hasDXSummitRequestTimeout:                       yamlKeyPresent(raw, "dxsummit", "request_timeout_ms"),
+		hasDXSummitLookback:                             yamlKeyPresent(raw, "dxsummit", "lookback_seconds"),
+		hasDXSummitIncludeBands:                         yamlKeyPresent(raw, "dxsummit", "include_bands"),
+		hasDXSummitSpotChannel:                          yamlKeyPresent(raw, "dxsummit", "spot_channel_size"),
+		hasDXSummitMaxResponse:                          yamlKeyPresent(raw, "dxsummit", "max_response_bytes"),
 		hasFamilyTruncationEnabled:                      yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "enabled"),
 		hasFamilyTruncationPrefix:                       yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_prefix_match"),
 		hasFamilyTruncationSuffix:                       yamlKeyPresent(raw, "call_correction", "family_policy", "truncation", "allow_suffix_match"),
@@ -1428,6 +1469,9 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	normalizeFeedConfig(&cfg, presence)
+	if err := normalizeDXSummitConfig(&cfg, presence); err != nil {
+		return nil, err
+	}
 	if err := normalizeArchiveAndStatsConfig(&cfg, presence); err != nil {
 		return nil, err
 	}
@@ -1589,6 +1633,96 @@ func normalizeFeedConfig(cfg *Config, presence loadRawPresence) {
 	if cfg.PSKReporter.MaxPayloadBytes <= 0 {
 		cfg.PSKReporter.MaxPayloadBytes = 4096
 	}
+}
+
+func normalizeDXSummitConfig(cfg *Config, presence loadRawPresence) error {
+	dx := &cfg.DXSummit
+	dx.Name = strings.TrimSpace(dx.Name)
+	if dx.Name == "" {
+		dx.Name = defaultDXSummitName
+	}
+	dx.BaseURL = strings.TrimSpace(dx.BaseURL)
+	if dx.BaseURL == "" {
+		if presence.hasDXSummitBaseURL {
+			return fmt.Errorf("invalid dxsummit.base_url: must not be empty")
+		}
+		dx.BaseURL = defaultDXSummitBaseURL
+	}
+	parsed, err := url.Parse(dx.BaseURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("invalid dxsummit.base_url %q (must be an absolute http or https URL)", dx.BaseURL)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("invalid dxsummit.base_url %q (scheme must be http or https)", dx.BaseURL)
+	}
+
+	if dx.PollIntervalSeconds <= 0 {
+		if presence.hasDXSummitPollInterval {
+			return fmt.Errorf("invalid dxsummit.poll_interval_seconds %d (must be > 0)", dx.PollIntervalSeconds)
+		}
+		dx.PollIntervalSeconds = defaultDXSummitPollIntervalSeconds
+	}
+	if dx.MaxRecordsPerPoll <= 0 {
+		if presence.hasDXSummitMaxRecords {
+			return fmt.Errorf("invalid dxsummit.max_records_per_poll %d (must be between 1 and 10000)", dx.MaxRecordsPerPoll)
+		}
+		dx.MaxRecordsPerPoll = defaultDXSummitMaxRecordsPerPoll
+	}
+	if dx.MaxRecordsPerPoll > 10000 {
+		return fmt.Errorf("invalid dxsummit.max_records_per_poll %d (must be between 1 and 10000)", dx.MaxRecordsPerPoll)
+	}
+	if dx.RequestTimeoutMS <= 0 {
+		if presence.hasDXSummitRequestTimeout {
+			return fmt.Errorf("invalid dxsummit.request_timeout_ms %d (must be > 0)", dx.RequestTimeoutMS)
+		}
+		dx.RequestTimeoutMS = defaultDXSummitRequestTimeoutMS
+	}
+	if dx.RequestTimeoutMS >= dx.PollIntervalSeconds*1000 {
+		return fmt.Errorf("invalid dxsummit.request_timeout_ms %d (must be less than poll_interval_seconds * 1000)", dx.RequestTimeoutMS)
+	}
+	if dx.LookbackSeconds <= 0 {
+		if presence.hasDXSummitLookback {
+			return fmt.Errorf("invalid dxsummit.lookback_seconds %d (must be >= poll_interval_seconds)", dx.LookbackSeconds)
+		}
+		dx.LookbackSeconds = defaultDXSummitLookbackSeconds
+	}
+	if dx.LookbackSeconds < dx.PollIntervalSeconds {
+		return fmt.Errorf("invalid dxsummit.lookback_seconds %d (must be >= poll_interval_seconds)", dx.LookbackSeconds)
+	}
+	if dx.StartupBackfillSeconds < 0 {
+		return fmt.Errorf("invalid dxsummit.startup_backfill_seconds %d (must be >= 0)", dx.StartupBackfillSeconds)
+	}
+	if dx.StartupBackfillSeconds > dx.LookbackSeconds {
+		return fmt.Errorf("invalid dxsummit.startup_backfill_seconds %d (must be <= lookback_seconds)", dx.StartupBackfillSeconds)
+	}
+	if len(dx.IncludeBands) == 0 {
+		if presence.hasDXSummitIncludeBands {
+			return fmt.Errorf("invalid dxsummit.include_bands: must include at least one of HF, VHF, UHF")
+		}
+		dx.IncludeBands = []string{"HF", "VHF", "UHF"}
+	}
+	for i, band := range dx.IncludeBands {
+		normalized := strings.ToUpper(strings.TrimSpace(band))
+		switch normalized {
+		case "HF", "VHF", "UHF":
+			dx.IncludeBands[i] = normalized
+		default:
+			return fmt.Errorf("invalid dxsummit.include_bands[%d] %q (expected HF, VHF, or UHF)", i, band)
+		}
+	}
+	if dx.SpotChannelSize <= 0 {
+		if presence.hasDXSummitSpotChannel {
+			return fmt.Errorf("invalid dxsummit.spot_channel_size %d (must be > 0)", dx.SpotChannelSize)
+		}
+		dx.SpotChannelSize = defaultDXSummitSpotChannelSize
+	}
+	if dx.MaxResponseBytes <= 0 {
+		if presence.hasDXSummitMaxResponse {
+			return fmt.Errorf("invalid dxsummit.max_response_bytes %d (must be > 0)", dx.MaxResponseBytes)
+		}
+		dx.MaxResponseBytes = defaultDXSummitMaxResponseBytes
+	}
+	return nil
 }
 
 func normalizeArchiveAndStatsConfig(cfg *Config, presence loadRawPresence) error {
@@ -3177,6 +3311,16 @@ func (c *Config) Print() {
 			c.HumanTelnet.TelnetTransport,
 			c.HumanTelnet.SlotBuffer,
 			c.HumanTelnet.KeepaliveSec)
+	}
+	if c.DXSummit.Enabled {
+		fmt.Printf("DXSummit: %s (poll=%ds max_records=%d lookback=%ds bands=%s buffer=%d timeout=%dms)\n",
+			c.DXSummit.BaseURL,
+			c.DXSummit.PollIntervalSeconds,
+			c.DXSummit.MaxRecordsPerPoll,
+			c.DXSummit.LookbackSeconds,
+			strings.Join(c.DXSummit.IncludeBands, ","),
+			c.DXSummit.SpotChannelSize,
+			c.DXSummit.RequestTimeoutMS)
 	}
 	if c.Archive.Enabled {
 		fmt.Printf("Archive: %s (queue=%d batch=%d/%dms cleanup=%ds cleanup_batch=%d yield=%dms retain_ft=%ds retain_other=%ds sync=%s auto_delete_corrupt=%t)\n",

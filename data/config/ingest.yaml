@@ -35,6 +35,20 @@ human_telnet:
   keepalive_seconds: 180       # Periodic CRLF to keep idle connections alive (0 disables)
   keep_ssid_suffix: true       # When false, telnet/archive/filters use stripped DE calls
 
+# Optional DXSummit HTTP ingest (HF/VHF/UHF spot polling)
+dxsummit:
+  enabled: true
+  name: "DXSUMMIT"
+  base_url: "http://www.dxsummit.fi/api/v1/spots"
+  poll_interval_seconds: 60        # Poll cadence; each request is non-overlapping
+  max_records_per_poll: 500        # Maps to DXSummit's limit query parameter
+  request_timeout_ms: 10000        # Per-request timeout; must be below poll interval
+  lookback_seconds: 300            # Query window: from_time=now-lookback to to_time=now
+  startup_backfill_seconds: 300    # 0 seeds cursor on startup without replaying old spots
+  include_bands: ["HF", "VHF", "UHF"]
+  spot_channel_size: 1000          # Buffered channel from poller to shared ingest
+  max_response_bytes: 1048576      # Hard cap for one HTTP response body
+
 pskreporter:
   enabled: true
   name: "PSKReporter"

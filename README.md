@@ -82,7 +82,7 @@ Supported bands:
 
 ## What The Cluster Does
 
-- Ingests spots from RBN CW/RTTY, RBN digital, PSKReporter, local `DX` commands, and optional peer feeds.
+- Ingests spots from RBN CW/RTTY, RBN digital, PSKReporter, optional DXSummit HTTP polling, local `DX` commands, and optional peer feeds.
 - Normalizes callsigns, frequencies, modes, and reports before shared validation and enrichment.
 - Adds CTY metadata and optional FCC license checks where that policy applies.
 - Applies shared-ingest flood policy before primary dedupe using the shipped `floodcontrol.yaml` rails.
@@ -259,6 +259,7 @@ Implementation-heavy material now lives next to the relevant code:
 - [`pathreliability/README.md`](pathreliability/README.md) - path bucket math and shipped versus fallback tuning
 - [`rbn/README.md`](rbn/README.md) - structural RBN parsing and comment handoff
 - [`pskreporter/README.md`](pskreporter/README.md) - MQTT normalization, path-only modes, and FT frequency handling
+- [`dxsummit/README.md`](dxsummit/README.md) - HTTP polling, DXSummit source markers, and HF/VHF/UHF scope
 - [`peer/README.md`](peer/README.md) - peer forwarding, receive-only behavior, and control-plane details
 
 Additional operator references:

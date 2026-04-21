@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"dxcluster/dxsummit"
 	"dxcluster/pskreporter"
 	"dxcluster/rbn"
 	"dxcluster/strutil"
@@ -226,6 +227,29 @@ func pskReporterHealthSource(name string, client *pskreporter.Client) ingestHeal
 				MQTTDropsQoS0:        snap.MQTTInboundDropsQoS0,
 				MQTTQoS12Timeouts:    snap.MQTTInboundQoS12Timeouts,
 				MQTTQoS12Disconnects: snap.MQTTInboundQoS12Disconnects,
+			}
+		},
+	}
+}
+
+func dxsummitHealthSource(name string, client *dxsummit.Client) ingestHealthSource {
+	return ingestHealthSource{
+		name: name,
+		snapshot: func() ingestHealthSnapshot {
+			if client == nil {
+				return ingestHealthSnapshot{}
+			}
+			snap := client.HealthSnapshot()
+			return ingestHealthSnapshot{
+				Connected:       snap.Connected,
+				LastMessageAt:   snap.LastMessageAt,
+				LastSpotAt:      snap.LastSpotAt,
+				LastParseErrAt:  snap.LastParseErrAt,
+				SpotQueueLen:    snap.SpotQueueLen,
+				SpotQueueCap:    snap.SpotQueueCap,
+				SpotDrops:       snap.SpotDrops,
+				ParseErrors:     snap.ParseErrors,
+				PayloadTooLarge: snap.ResponseTooLarge,
 			}
 		},
 	}

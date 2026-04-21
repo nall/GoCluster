@@ -30,6 +30,7 @@ import (
 	"dxcluster/cty"
 	"dxcluster/dedup"
 	"dxcluster/download"
+	"dxcluster/dxsummit"
 	"dxcluster/gridstore"
 	"dxcluster/internal/correctionflow"
 	"dxcluster/internal/pebbleresilience"
@@ -745,7 +746,7 @@ func formatTopCounterSummary(counts map[string]uint64, limit int) string {
 // Key aspects: Uses a ticker, diff counters, and optional secondary dedupe stats.
 // Upstream: main stats goroutine.
 // Downstream: tracker accessors, loadFCCSnapshot, and UI/log output.
-func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string) {
+func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, dxsummitClient *dxsummit.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string, ingestSourceCfg dashboardIngestSourceConfig) {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
@@ -928,6 +929,11 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		rbnFTLive := rbnDigitalClient != nil && rbnDigitalClient.HealthSnapshot().Connected
 		rbnLive := rbnFeedsLive(rbnClient, rbnDigitalClient)
 		pskLive := pskReporterLive(pskSnap, now)
+		dxsummitSnap := dxsummit.HealthSnapshot{}
+		if dxsummitClient != nil {
+			dxsummitSnap = dxsummitClient.HealthSnapshot()
+		}
+		dxsummitLive := dxsummitIsLive(dxsummitSnap, ingestSourceCfg.DXSummitPollIntervalSeconds, now)
 		if pathPredictor != nil {
 			pathPredictor.RefreshStatsSnapshot(now)
 		}
@@ -938,6 +944,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			peerSSIDs = peerManager.ActiveSessionSSIDs()
 		}
 		p92Live := peerSessions > 0
+		ingestSources := dashboardIngestSources(ingestSourceCfg, rbnCWLive, rbnFTLive, pskLive, dxsummitLive, p92Live, peerSessions, peerSSIDs)
 
 		lines := make([]string, 0, 11)
 		lines = append(lines,
@@ -981,6 +988,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			dash.SetStats(lines)
 			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, recentBandStore, ctyState, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
 				rbnLive, pskLive, p92Live, rbnCWLive, rbnFTLive, peerSessions, peerSSIDs,
+				ingestSources,
 				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4,
 				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63,
 				p92Total,
@@ -1727,10 +1735,10 @@ func weightBinLabel(idx int, edges []float64) string {
 }
 
 // collapseSSIDForBroadcast trims SSID fragments so clients see a single
-// skimmer identity (e.g., N2WQ-1-# -> N2WQ-#, N2WQ-1 -> N2WQ).
+// source identity (e.g., N2WQ-1-# -> N2WQ-#, N2WQ-1 -> N2WQ).
 // It preserves non-numeric suffixes.
 // Purpose: Normalize spotter SSIDs before telnet broadcast.
-// Key aspects: Collapses numeric suffixes while preserving non-numeric tokens.
+// Key aspects: Collapses numeric suffixes while preserving known source markers.
 // Upstream: processOutputSpots.
 // Downstream: stripNumericSSID.
 func collapseSSIDForBroadcast(call string) string {
@@ -1738,11 +1746,22 @@ func collapseSSIDForBroadcast(call string) string {
 	if call == "" {
 		return call
 	}
-	if strings.HasSuffix(call, "-#") {
-		trimmed := strings.TrimSuffix(call, "-#")
-		return stripNumericSSID(trimmed) + "-#"
+	if marker := knownSourceMarkerSuffix(call); marker != "" {
+		trimmed := strings.TrimSuffix(call, marker)
+		return stripNumericSSID(trimmed) + marker
 	}
 	return stripNumericSSID(call)
+}
+
+func knownSourceMarkerSuffix(call string) string {
+	switch {
+	case strings.HasSuffix(call, "-#"):
+		return "-#"
+	case strings.HasSuffix(call, "-@"):
+		return "-@"
+	default:
+		return ""
+	}
 }
 
 // Purpose: Remove a numeric SSID suffix (e.g., "-1") from a callsign.
@@ -2599,6 +2618,9 @@ func sourceStatsLabel(s *spot.Spot) string {
 	case spot.SourcePeer:
 		return "PEER"
 	case spot.SourceUpstream:
+		if strutil.NormalizeUpper(s.SourceNode) == "DXSUMMIT" {
+			return "DXSUMMIT"
+		}
 		return "UPSTREAM"
 	}
 
@@ -2614,6 +2636,8 @@ func sourceStatsLabel(s *spot.Spot) string {
 		return "PEER"
 	case "UPSTREAM":
 		return "UPSTREAM"
+	case "DXSUMMIT":
+		return "DXSUMMIT"
 	}
 	return "OTHER"
 }
@@ -4174,6 +4198,7 @@ func buildOverviewLines(
 	rbnCWLive, rbnFTLive bool,
 	peerSessions int,
 	peerSSIDs []string,
+	ingestSources []dashboardIngestSource,
 	rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4 uint64,
 	pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63 uint64,
 	p92Total uint64,
@@ -4328,38 +4353,92 @@ func buildOverviewLines(
 	)
 	lines = append(lines, formatPathLines(pathPredictor, now)...)
 	lines = append(lines, "INGEST SOURCES")
-	lines = append(lines, formatIngestSourceLines(rbnCWLive, rbnFTLive, pskLive, peerSessions, peerSSIDs)...)
+	lines = append(lines, formatIngestSourceLines(ingestSources)...)
 	lines = append(lines, "NETWORK")
 	lines = append(lines, formatNetworkLines(telnetSrv, clientList)...)
 	return lines
 }
 
-func formatIngestSourceLines(rbnCWLive, rbnFTLive, pskLive bool, peerSessions int, peerSSIDs []string) []string {
-	connected := 0
-	entries := make([]string, 0, 4+len(peerSSIDs))
-	if rbnCWLive {
-		connected++
-		entries = append(entries, "RBN")
+type dashboardIngestSourceConfig struct {
+	RBNEnabled                  bool
+	RBNDigitalEnabled           bool
+	PSKReporterEnabled          bool
+	DXSummitEnabled             bool
+	PeeringEnabled              bool
+	DXSummitPollIntervalSeconds int
+}
+
+type dashboardIngestSource struct {
+	Label     string
+	Enabled   bool
+	Connected bool
+	Details   []string
+}
+
+func dashboardIngestSourceConfigFromConfig(cfg *config.Config) dashboardIngestSourceConfig {
+	if cfg == nil {
+		return dashboardIngestSourceConfig{}
 	}
-	if rbnFTLive {
-		connected++
-		entries = append(entries, "RBN-FT")
+	return dashboardIngestSourceConfig{
+		RBNEnabled:                  cfg.RBN.Enabled,
+		RBNDigitalEnabled:           cfg.RBNDigital.Enabled,
+		PSKReporterEnabled:          cfg.PSKReporter.Enabled,
+		DXSummitEnabled:             cfg.DXSummit.Enabled,
+		PeeringEnabled:              cfg.Peering.Enabled,
+		DXSummitPollIntervalSeconds: cfg.DXSummit.PollIntervalSeconds,
 	}
-	if pskLive {
-		connected++
-		entries = append(entries, "PSKReporter")
-	}
-	if peerSessions > 0 {
-		connected++
+}
+
+func dashboardIngestSources(
+	cfg dashboardIngestSourceConfig,
+	rbnCWLive, rbnFTLive, pskLive, dxsummitLive, p92Live bool,
+	peerSessions int,
+	peerSSIDs []string,
+) []dashboardIngestSource {
+	peerDetails := []string(nil)
+	if p92Live {
 		if len(peerSSIDs) > 0 {
-			entries = append(entries, peerSSIDs...)
-		} else {
-			entries = append(entries, fmt.Sprintf("Peers (%d)", peerSessions))
+			peerDetails = append(peerDetails, peerSSIDs...)
+		} else if peerSessions > 0 {
+			peerDetails = append(peerDetails, fmt.Sprintf("Peers (%d)", peerSessions))
 		}
 	}
-	lines := []string{fmt.Sprintf("[yellow]Ingest[-]: %d / 4 connected", connected)}
+	return []dashboardIngestSource{
+		{Label: "RBN", Enabled: cfg.RBNEnabled, Connected: rbnCWLive},
+		{Label: "RBN-FT", Enabled: cfg.RBNDigitalEnabled, Connected: rbnFTLive},
+		{Label: "PSKReporter", Enabled: cfg.PSKReporterEnabled, Connected: pskLive},
+		{Label: dxsummit.SourceNode, Enabled: cfg.DXSummitEnabled, Connected: dxsummitLive},
+		{Label: "Peers", Enabled: cfg.PeeringEnabled, Connected: p92Live, Details: peerDetails},
+	}
+}
+
+func formatIngestSourceLines(sources []dashboardIngestSource) []string {
+	connected := 0
+	enabled := 0
+	entries := make([]string, 0, len(sources))
+	for _, source := range sources {
+		if !source.Enabled {
+			continue
+		}
+		enabled++
+		if source.Connected {
+			connected++
+			if len(source.Details) > 0 {
+				for _, detail := range source.Details {
+					entries = append(entries, withIngestStatusLabel(detail, true))
+				}
+				continue
+			}
+		}
+		entries = append(entries, withIngestStatusLabel(source.Label, source.Connected))
+	}
+	lines := []string{fmt.Sprintf("[yellow]Ingest[-]: %d / %d connected", connected, enabled)}
+	if enabled == 0 {
+		lines = append(lines, "", "(none enabled)")
+		return lines
+	}
 	if len(entries) == 0 {
-		lines = append(lines, "", "(none)")
+		lines = append(lines, "")
 		return lines
 	}
 	lines = append(lines, formatClientListLines(entries)...)
@@ -4871,6 +4950,19 @@ func pskReporterLive(snap pskreporter.HealthSnapshot, now time.Time) bool {
 		return false
 	}
 	return now.Sub(snap.LastPayloadAt) <= ingestIdleThreshold
+}
+
+// Purpose: Report whether DXSummit has completed a recent successful poll.
+// Key aspects: Seed-only startup can be live without emitted spots, so liveness
+// is based on LastPollAt rather than LastSpotAt.
+// Upstream: stats ticker liveness.
+// Downstream: dxsummit.HealthSnapshot timestamps.
+func dxsummitIsLive(snap dxsummit.HealthSnapshot, pollIntervalSeconds int, now time.Time) bool {
+	if !snap.Connected || snap.LastPollAt.IsZero() || pollIntervalSeconds <= 0 {
+		return false
+	}
+	maxAge := 2*time.Duration(pollIntervalSeconds)*time.Second + time.Second
+	return now.Sub(snap.LastPollAt) <= maxAge
 }
 
 // Purpose: Compute per-interval RBN ingest deltas (CW/RTTY + FT8/FT4).

@@ -2515,6 +2515,7 @@ func TestBuildOverviewLinesIncludesRecentSupportByBand(t *testing.T) {
 		false,
 		0,
 		nil,
+		nil,
 		0,
 		0,
 		0,
@@ -2650,7 +2651,12 @@ func TestFormatRecentSupportByBandLinesIncludesCustomSCPStaticCalls(t *testing.T
 }
 
 func TestFormatIngestSourceLinesIncludesPeerSSIDs(t *testing.T) {
-	lines := formatIngestSourceLines(true, true, true, 2, []string{"KM3T-44", "N2WQ-73"})
+	lines := formatIngestSourceLines([]dashboardIngestSource{
+		{Label: "RBN", Enabled: true, Connected: true},
+		{Label: "RBN-FT", Enabled: true, Connected: true},
+		{Label: "PSKReporter", Enabled: true, Connected: true},
+		{Label: "Peers", Enabled: true, Connected: true, Details: []string{"KM3T-44", "N2WQ-73"}},
+	})
 	if len(lines) == 0 {
 		t.Fatal("expected ingest source lines")
 	}
@@ -2667,11 +2673,13 @@ func TestFormatIngestSourceLinesIncludesPeerSSIDs(t *testing.T) {
 }
 
 func TestFormatIngestSourceLinesFallsBackToPeerCount(t *testing.T) {
-	lines := formatIngestSourceLines(false, false, false, 2, nil)
+	lines := formatIngestSourceLines([]dashboardIngestSource{
+		{Label: "Peers", Enabled: true, Connected: true, Details: []string{"Peers (2)"}},
+	})
 	if len(lines) == 0 {
 		t.Fatal("expected ingest source lines")
 	}
-	if !strings.Contains(lines[0], "1 / 4 connected") {
+	if !strings.Contains(lines[0], "1 / 1 connected") {
 		t.Fatalf("expected peer-only connected summary, got %q", lines[0])
 	}
 	joined := strings.Join(lines, "\n")
@@ -2876,6 +2884,8 @@ func TestCollapseSSIDForBroadcast(t *testing.T) {
 	}{
 		{"N2WQ-1-#", "N2WQ-#"},
 		{"N2WQ-#", "N2WQ-#"},
+		{"EA5JLX-1-@", "EA5JLX-@"},
+		{"EA5JLX-@", "EA5JLX-@"},
 		{"N2WQ-1", "N2WQ"},
 		{"N2WQ-12", "N2WQ"},
 		{"N2WQ-TEST", "N2WQ-TEST"},
@@ -2902,6 +2912,8 @@ func TestNormalizeCallForMetadata(t *testing.T) {
 	}{
 		{"VE6WZ-#", "VE6WZ"},
 		{"VE6WZ-1-#", "VE6WZ"},
+		{"EA5JLX-@", "EA5JLX"},
+		{"EA5JLX-1-@", "EA5JLX"},
 		{"VE6WZ-1", "VE6WZ"},
 		{"VE6WZ-TEST", "VE6WZ"},
 		{"VE6WZ/P", "VE6WZ/P"},

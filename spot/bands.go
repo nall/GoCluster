@@ -2,11 +2,18 @@ package spot
 
 import "strings"
 
+// BandSegment describes one contiguous frequency allocation in kHz.
+type BandSegment struct {
+	Min float64 // minimum frequency in kHz
+	Max float64 // maximum frequency in kHz
+}
+
 // BandInfo describes an amateur radio band by name and frequency range in kHz.
 type BandInfo struct {
-	Name string  // canonical band name (e.g., "20m", "70cm")
-	Min  float64 // minimum frequency in kHz
-	Max  float64 // maximum frequency in kHz
+	Name     string        // canonical band name (e.g., "20m", "70cm")
+	Min      float64       // minimum primary segment frequency in kHz
+	Max      float64       // maximum primary segment frequency in kHz
+	Segments []BandSegment // optional additional contiguous segments for the same band
 }
 
 var bandTable = []BandInfo{
@@ -28,7 +35,7 @@ var bandTable = []BandInfo{
 	{Name: "70cm", Min: 420000, Max: 450000},
 	{Name: "33cm", Min: 902000, Max: 928000},
 	{Name: "23cm", Min: 1240000, Max: 1300000},
-	{Name: "13cm", Min: 2300000, Max: 2310000},
+	{Name: "13cm", Min: 2300000, Max: 2310000, Segments: []BandSegment{{Min: 2390000, Max: 2450000}}},
 }
 
 var bandLookup = func() map[string]BandInfo {
@@ -42,6 +49,19 @@ var bandLookup = func() map[string]BandInfo {
 	}
 	return m
 }()
+
+// Contains reports whether freq falls inside any segment for this band.
+func (b BandInfo) Contains(freq float64) bool {
+	if freq >= b.Min && freq <= b.Max {
+		return true
+	}
+	for _, segment := range b.Segments {
+		if freq >= segment.Min && freq <= segment.Max {
+			return true
+		}
+	}
+	return false
+}
 
 // NormalizeBand normalizes a band label into canonical lookup form.
 // Key aspects: Lowercases, strips whitespace, normalizes units, and appends "m" for bare numbers.
@@ -112,7 +132,7 @@ func SupportedBandNames() []string {
 }
 
 // FrequencyBounds returns min/max frequencies across all bands.
-// Key aspects: Uses first/last entries in bandTable.
+// Key aspects: Scans all primary and secondary band segments.
 // Upstream: Frequency sanity checks and UI displays.
 // Downstream: bandTable access.
 // FrequencyBounds returns the minimum and maximum frequencies covered by the band table.
@@ -121,6 +141,22 @@ func FrequencyBounds() (min, max float64) {
 		return 0, 0
 	}
 	min = bandTable[0].Min
-	max = bandTable[len(bandTable)-1].Max
+	max = bandTable[0].Max
+	for _, entry := range bandTable {
+		if entry.Min < min {
+			min = entry.Min
+		}
+		if entry.Max > max {
+			max = entry.Max
+		}
+		for _, segment := range entry.Segments {
+			if segment.Min < min {
+				min = segment.Min
+			}
+			if segment.Max > max {
+				max = segment.Max
+			}
+		}
+	}
 	return
 }

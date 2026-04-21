@@ -215,6 +215,21 @@ func TestFormatDXClusterStripsTrailingHashSSIDOnlyWhenTooLong(t *testing.T) {
 	}
 }
 
+func TestFormatDXClusterPreservesDXSummitMarkerWhenCallFits(t *testing.T) {
+	s := &Spot{
+		DXCall:    "K2GOD",
+		DECall:    "EA5JLX-@",
+		Frequency: 21074.4,
+		Mode:      "FT8",
+		Time:      time.Date(2026, time.April, 21, 19, 59, 0, 0, time.UTC),
+	}
+
+	got := s.FormatDXCluster()
+	if !strings.Contains(got, "DX de EA5JLX-@:") {
+		t.Fatalf("expected trailing -@ to be preserved when call fits, got %q", got)
+	}
+}
+
 func TestCloneWithCommentResetsFormatting(t *testing.T) {
 	s := &Spot{
 		DXCall:    "KE0UI",

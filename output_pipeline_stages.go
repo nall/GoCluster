@@ -356,7 +356,11 @@ func (p *outputPipeline) prepareFanoutSpot(ctx *outputSpotContext) bool {
 			dxCall = s.DXCall
 		}
 		if strings.TrimSpace(s.DXMetadata.Grid) == "" {
-			if grid, derived, ok := lookupGridUnified(dxCall, p.gridLookupSync, p.gridLookup); ok {
+			dxLookupCall := normalizeCallForMetadata(dxCall)
+			if dxLookupCall == "" {
+				dxLookupCall = dxCall
+			}
+			if grid, derived, ok := lookupGridUnified(dxLookupCall, p.gridLookupSync, p.gridLookup); ok {
 				s.DXMetadata.Grid = grid
 				s.DXMetadata.GridDerived = derived
 				gridBackfilled = true
@@ -367,7 +371,11 @@ func (p *outputPipeline) prepareFanoutSpot(ctx *outputSpotContext) bool {
 			deCall = s.DECall
 		}
 		if strings.TrimSpace(s.DEMetadata.Grid) == "" {
-			if grid, derived, ok := lookupGridUnified(deCall, p.gridLookupSync, p.gridLookup); ok {
+			deLookupCall := normalizeCallForMetadata(deCall)
+			if deLookupCall == "" {
+				deLookupCall = deCall
+			}
+			if grid, derived, ok := lookupGridUnified(deLookupCall, p.gridLookupSync, p.gridLookup); ok {
 				s.DEMetadata.Grid = grid
 				s.DEMetadata.GridDerived = derived
 				gridBackfilled = true

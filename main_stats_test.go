@@ -1,9 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"dxcluster/dxsummit"
 	"dxcluster/pskreporter"
 	"dxcluster/spot"
 )
@@ -21,7 +23,9 @@ func TestSourceStatsLabel(t *testing.T) {
 		{"psk", &spot.Spot{SourceType: spot.SourcePSKReporter}, "PSKREPORTER"},
 		{"peer", &spot.Spot{SourceType: spot.SourcePeer}, "PEER"},
 		{"upstream", &spot.Spot{SourceType: spot.SourceUpstream}, "UPSTREAM"},
+		{"dxsummit-upstream", &spot.Spot{SourceType: spot.SourceUpstream, SourceNode: "DXSUMMIT"}, "DXSUMMIT"},
 		{"node-fallback", &spot.Spot{SourceNode: "PSKREPORTER"}, "PSKREPORTER"},
+		{"dxsummit-node-fallback", &spot.Spot{SourceNode: "DXSUMMIT"}, "DXSUMMIT"},
 		{"other", &spot.Spot{}, "OTHER"},
 	}
 	for _, tc := range cases {
@@ -89,5 +93,110 @@ func TestPSKReporterLive(t *testing.T) {
 	snap.LastPayloadAt = now.Add(-ingestIdleThreshold - time.Second)
 	if got := pskReporterLive(snap, now); got {
 		t.Fatal("expected stale payload to be false")
+	}
+}
+
+func TestFormatIngestSourceLinesEnabledOnly(t *testing.T) {
+	sources := []dashboardIngestSource{
+		{Label: "RBN", Enabled: true, Connected: true},
+		{Label: "RBN-FT", Enabled: true, Connected: true},
+		{Label: "PSKReporter", Enabled: true, Connected: true},
+		{Label: "DXSUMMIT", Enabled: true, Connected: true},
+		{Label: "Peers", Enabled: false, Connected: false},
+	}
+	lines := formatIngestSourceLines(sources)
+	joined := strings.Join(lines, "\n")
+	if lines[0] != "[yellow]Ingest[-]: 4 / 4 connected" {
+		t.Fatalf("unexpected summary %q", lines[0])
+	}
+	for _, want := range []string{"[green]RBN[-]", "[green]RBN-FT[-]", "[green]PSKReporter[-]", "[green]DXSUMMIT[-]"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in %q", want, joined)
+		}
+	}
+	if strings.Contains(joined, "Peers") {
+		t.Fatalf("disabled peers should not be listed: %q", joined)
+	}
+}
+
+func TestFormatIngestSourceLinesShowsOfflineEnabledSources(t *testing.T) {
+	sources := []dashboardIngestSource{
+		{Label: "RBN", Enabled: true, Connected: true},
+		{Label: "RBN-FT", Enabled: true, Connected: true},
+		{Label: "PSKReporter", Enabled: true, Connected: true},
+		{Label: "DXSUMMIT", Enabled: true, Connected: false},
+	}
+	lines := formatIngestSourceLines(sources)
+	joined := strings.Join(lines, "\n")
+	if lines[0] != "[yellow]Ingest[-]: 3 / 4 connected" {
+		t.Fatalf("unexpected summary %q", lines[0])
+	}
+	if !strings.Contains(joined, "[red]DXSUMMIT[-]") {
+		t.Fatalf("expected offline DXSummit label in %q", joined)
+	}
+}
+
+func TestFormatIngestSourceLinesPeerAggregate(t *testing.T) {
+	t.Run("enabled no sessions", func(t *testing.T) {
+		lines := formatIngestSourceLines([]dashboardIngestSource{
+			{Label: "Peers", Enabled: true, Connected: false},
+		})
+		joined := strings.Join(lines, "\n")
+		if lines[0] != "[yellow]Ingest[-]: 0 / 1 connected" {
+			t.Fatalf("unexpected summary %q", lines[0])
+		}
+		if !strings.Contains(joined, "[red]Peers[-]") {
+			t.Fatalf("expected offline peer aggregate in %q", joined)
+		}
+	})
+
+	t.Run("multiple sessions count once", func(t *testing.T) {
+		lines := formatIngestSourceLines([]dashboardIngestSource{
+			{Label: "Peers", Enabled: true, Connected: true, Details: []string{"N2WQ-73", "KM3T-44"}},
+		})
+		joined := strings.Join(lines, "\n")
+		if lines[0] != "[yellow]Ingest[-]: 1 / 1 connected" {
+			t.Fatalf("unexpected summary %q", lines[0])
+		}
+		for _, want := range []string{"[green]N2WQ-73[-]", "[green]KM3T-44[-]"} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("expected %q in %q", want, joined)
+			}
+		}
+	})
+}
+
+func TestFormatIngestSourceLinesNoEnabledSources(t *testing.T) {
+	lines := formatIngestSourceLines([]dashboardIngestSource{
+		{Label: "RBN", Enabled: false, Connected: true},
+	})
+	joined := strings.Join(lines, "\n")
+	if lines[0] != "[yellow]Ingest[-]: 0 / 0 connected" {
+		t.Fatalf("unexpected summary %q", lines[0])
+	}
+	if !strings.Contains(joined, "(none enabled)") {
+		t.Fatalf("expected none enabled marker in %q", joined)
+	}
+}
+
+func TestDXSummitIsLive(t *testing.T) {
+	now := time.Date(2026, 4, 21, 20, 45, 0, 0, time.UTC)
+	if got := dxsummitIsLive(dxsummit.HealthSnapshot{
+		Connected:  true,
+		LastPollAt: now.Add(-30 * time.Second),
+	}, 30, now); !got {
+		t.Fatal("expected recent successful poll to be live")
+	}
+	if got := dxsummitIsLive(dxsummit.HealthSnapshot{
+		Connected:  false,
+		LastPollAt: now.Add(-30 * time.Second),
+	}, 30, now); got {
+		t.Fatal("expected disconnected DXSummit snapshot to be offline")
+	}
+	if got := dxsummitIsLive(dxsummit.HealthSnapshot{
+		Connected:  true,
+		LastPollAt: now.Add(-62 * time.Second),
+	}, 30, now); got {
+		t.Fatal("expected stale DXSummit poll to be offline")
 	}
 }
