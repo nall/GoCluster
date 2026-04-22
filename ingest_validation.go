@@ -27,8 +27,9 @@ type ingestValidator struct {
 	metaCache          *callMetaCache
 	ctyUpdater         func(call string, info *cty.PrefixInfo)
 	gridUpdate         func(call, grid string)
-	unlicensedReporter func(source, role, call, mode string, freq float64)
+	unlicensedReporter func(source, role, call, deCall, dxCall, mode string, freq float64)
 	dropReporter       func(line string)
+	badCallReporter    func(source, role, reason, call, deCall, dxCall, mode, detail string)
 	isLicensedUS       func(call string) bool
 	requireCTY         bool
 	ctyDropDXCounter   ratelimit.Counter
@@ -46,7 +47,7 @@ func newIngestValidator(
 	ctyUpdater func(call string, info *cty.PrefixInfo),
 	gridUpdate func(call, grid string),
 	dedupInput chan<- *spot.Spot,
-	unlicensedReporter func(source, role, call, mode string, freq float64),
+	unlicensedReporter func(source, role, call, deCall, dxCall, mode string, freq float64),
 	dropReporter func(line string),
 	requireCTY bool,
 ) *ingestValidator {
@@ -71,6 +72,13 @@ func newIngestValidator(
 		invalidDropDE:      ratelimit.NewCounterWithRetry(defaultIngestDropLogInterval),
 		dedupDropCounter:   ratelimit.NewCounterWithRetry(defaultIngestDropLogInterval),
 	}
+}
+
+func (v *ingestValidator) SetBadCallReporter(reporter func(source, role, reason, call, deCall, dxCall, mode, detail string)) {
+	if v == nil {
+		return
+	}
+	v.badCallReporter = reporter
 }
 
 // Input returns the channel ingest sources should send spots into.
@@ -222,7 +230,7 @@ afterLookup:
 				}
 				if !v.isLicensedUS(callKey) {
 					if v.unlicensedReporter != nil {
-						v.unlicensedReporter(ingestSourceLabel(s), "DE", callKey, s.ModeNorm, s.Frequency)
+						v.unlicensedReporter(ingestSourceLabel(s), "DE", callKey, deCall, dxCall, s.ModeNorm, s.Frequency)
 					}
 					return false
 				}
@@ -277,6 +285,7 @@ func (v *ingestValidator) logCTYDrop(role, call string, s *spot.Spot) {
 	}
 	if count, ok := counter.Inc(); ok {
 		line := fmt.Sprintf("CTY drop: unknown %s %s at %.1f kHz (source=%s total=%d)", role, call, s.Frequency, ingestSourceLabel(s), count)
+		v.reportBadCall(role, "cty_unknown", call, s, "cty_validation")
 		if v.dropReporter != nil {
 			v.dropReporter(line)
 			return
@@ -292,12 +301,20 @@ func (v *ingestValidator) logInvalidDrop(role, call string, s *spot.Spot) {
 	}
 	if count, ok := counter.Inc(); ok {
 		line := fmt.Sprintf("CTY drop: invalid %s %s (>=3 leading letters) at %.1f kHz (source=%s total=%d)", role, call, s.Frequency, ingestSourceLabel(s), count)
+		v.reportBadCall(role, "leading_letters", call, s, "cty_prefilter")
 		if v.dropReporter != nil {
 			v.dropReporter(line)
 			return
 		}
 		log.Print(line)
 	}
+}
+
+func (v *ingestValidator) reportBadCall(role, reason, call string, s *spot.Spot, detail string) {
+	if v == nil || v.badCallReporter == nil || s == nil {
+		return
+	}
+	v.badCallReporter(ingestSourceLabel(s), role, reason, call, s.DECall, s.DXCall, s.ModeNorm, detail)
 }
 
 func ingestSourceLabel(s *spot.Spot) string {

@@ -46,7 +46,8 @@ type outputPipeline struct {
 	gridUpdate              func(call, grid string)
 	gridLookup              func(call string) (string, bool, bool)
 	gridLookupSync          func(call string) (string, bool, bool)
-	unlicensedReporter      func(source, role, call, mode string, freq float64)
+	unlicensedReporter      func(source, role, call, deCall, dxCall, mode string, freq float64)
+	droppedCallLogger       *droppedCallLogger
 	adaptiveMinReports      *spot.AdaptiveMinReports
 	refresher               *adaptiveRefresher
 	spotterReliability      spot.SpotterReliability
@@ -108,7 +109,8 @@ func newOutputPipeline(
 	gridUpdate func(call, grid string),
 	gridLookup func(call string) (string, bool, bool),
 	gridLookupSync func(call string) (string, bool, bool),
-	unlicensedReporter func(source, role, call, mode string, freq float64),
+	unlicensedReporter func(source, role, call, deCall, dxCall, mode string, freq float64),
+	droppedCallLogger *droppedCallLogger,
 	adaptiveMinReports *spot.AdaptiveMinReports,
 	refresher *adaptiveRefresher,
 	spotterReliability spot.SpotterReliability,
@@ -149,6 +151,7 @@ func newOutputPipeline(
 		gridLookup:              gridLookup,
 		gridLookupSync:          gridLookupSync,
 		unlicensedReporter:      unlicensedReporter,
+		droppedCallLogger:       droppedCallLogger,
 		adaptiveMinReports:      adaptiveMinReports,
 		refresher:               refresher,
 		spotterReliability:      spotterReliability,

@@ -51,6 +51,32 @@ func TestACParserLeavesModeBlankWithoutExplicitToken(t *testing.T) {
 	}
 }
 
+func TestParserReportsNoValidDXCall(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "RBN", nil, false, 10)
+	var got struct {
+		source string
+		role   string
+		reason string
+		de     string
+		dx     string
+		detail string
+	}
+	c.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.source = source
+		got.role = role
+		got.reason = reason
+		got.de = deCall
+		got.dx = dxCall
+		got.detail = detail
+	})
+
+	c.parseSpot("DX de W1XYZ: 14074.0")
+
+	if got.source != "RBN" || got.role != "DX" || got.reason != "no_valid_dx" || got.de != "W1XYZ" || got.dx != "" || got.detail != "source_parser" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 func TestACParserLeavesModeBlankWithoutExplicitTokenVoiceBand(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
 	line := "DX de KC9IMA: 28319.0 KC9IMA ARRL 10-Meter Contest 1912Z"

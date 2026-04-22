@@ -19,6 +19,10 @@ import (
 	"dxcluster/strutil"
 )
 
+// BadCallReporter receives parse-time callsign drops. The callback must remain
+// short because it runs on peer session reader goroutines.
+type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
+
 type Manager struct {
 	cfg               config.PeeringConfig
 	localCall         string
@@ -44,6 +48,7 @@ type Manager struct {
 	reconnects        atomic.Uint64
 	userCountFn       func() int
 	dropReporter      func(line string)
+	badCallReporter   BadCallReporter
 }
 
 // pc92Work wraps an inbound PC92 frame with the time it was observed so topology
@@ -264,6 +269,7 @@ func (m *Manager) HandleFrame(frame *Frame, sess *session) {
 	case "PC26", "PC11", "PC61":
 		spotEntry, err := parseSpotFromFrame(frame, sess.remoteCall)
 		if err != nil {
+			m.reportBadCallParseDrop(frame, sess, err)
 			if frame.Type == "PC61" {
 				m.reportDrop(formatPC61DropLine(frame, sess, err))
 				return
@@ -331,6 +337,88 @@ func (m *Manager) reportDrop(line string) {
 		return
 	}
 	log.Print(line)
+}
+
+func (m *Manager) reportBadCallParseDrop(frame *Frame, sess *session, err error) {
+	if m == nil || frame == nil || err == nil {
+		return
+	}
+	role := peerBadCallRole(err)
+	if role == "" {
+		return
+	}
+	reporter := m.badCallReporterSnapshot()
+	if reporter == nil {
+		return
+	}
+	fields := frame.payloadFields()
+	call, deCall, dxCall, mode := peerBadCallFields(fields, role)
+	reporter(peerBadCallSource(frame, sess), role, "invalid_callsign", call, deCall, dxCall, mode, "peer_parse")
+}
+
+func (m *Manager) badCallReporterSnapshot() BadCallReporter {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.badCallReporter
+}
+
+func peerBadCallRole(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "invalid DX callsign"):
+		return "DX"
+	case strings.Contains(msg, "invalid DE callsign"):
+		return "DE"
+	default:
+		return ""
+	}
+}
+
+func peerBadCallFields(fields []string, role string) (call, deCall, dxCall, mode string) {
+	if len(fields) > 1 {
+		dxCall = strings.TrimSpace(fields[1])
+	}
+	if len(fields) > 5 {
+		deCall = strings.TrimSpace(fields[5])
+	}
+	if len(fields) > 4 {
+		freq := 0.0
+		if len(fields) > 0 {
+			if parsed, err := strconv.ParseFloat(strings.TrimSpace(fields[0]), 64); err == nil {
+				freq = parsed
+			}
+		}
+		mode = spot.ParseSpotComment(fields[4], freq).Mode
+	}
+	if role == "DE" {
+		call = deCall
+	} else {
+		call = dxCall
+	}
+	return call, deCall, dxCall, mode
+}
+
+func peerBadCallSource(frame *Frame, sess *session) string {
+	source := ""
+	if frame != nil {
+		fields := frame.payloadFields()
+		if len(fields) > 6 {
+			source = strings.TrimSpace(fields[6])
+		}
+	}
+	if source == "" && sess != nil {
+		source = strings.TrimSpace(sess.remoteCall)
+	}
+	if source == "" {
+		source = sessionLabel(sess)
+	}
+	if source == "" {
+		source = "unknown"
+	}
+	return "peer:" + source
 }
 
 // Purpose: Format a standardized PC61 drop line for the dropped pane.
@@ -437,6 +525,17 @@ func (m *Manager) SetRawBroadcast(fn func(string)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rawBroadcast = fn
+}
+
+// SetBadCallReporter installs an optional callback for peer frame callsign
+// validation drops.
+func (m *Manager) SetBadCallReporter(fn BadCallReporter) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.badCallReporter = fn
 }
 
 // SetWWVBroadcast installs a callback used to forward WWV/WCY bulletins to telnet clients.

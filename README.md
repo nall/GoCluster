@@ -92,6 +92,24 @@ Supported bands:
 
 The main operator-facing configuration lives in [`data/config`](data/config). The config directory layout is described in [`data/config/README.md`](data/config/README.md).
 
+## Dropped Call Logs
+
+`logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. It is disabled by default. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.
+
+Each entry uses the same timestamped daily-file logger as the system log and records only the ingestion source, dropped role, reason, call, DE, DX, mode, and a short detail field. Frequency, category, and dashboard text are intentionally omitted.
+
+```yaml
+logging:
+  dropped_calls:
+    enabled: false
+    dir: "data/logs/dropped_calls"
+    retention_days: 7
+    dedupe_window_seconds: 120
+    bad_de_dx: true
+    no_license: true
+    harmonics: true
+```
+
 ## Quick Start
 
 1. Install Go `1.26+`.

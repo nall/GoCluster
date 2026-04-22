@@ -397,10 +397,22 @@ type UIConfig struct {
 
 // LoggingConfig controls optional system log duplication to disk.
 type LoggingConfig struct {
-	Enabled                 bool   `yaml:"enabled"`
-	DropDedupeWindowSeconds int    `yaml:"drop_dedupe_window_seconds"`
-	Dir                     string `yaml:"dir"`
-	RetentionDays           int    `yaml:"retention_days"`
+	Enabled                 bool                     `yaml:"enabled"`
+	DropDedupeWindowSeconds int                      `yaml:"drop_dedupe_window_seconds"`
+	Dir                     string                   `yaml:"dir"`
+	RetentionDays           int                      `yaml:"retention_days"`
+	DroppedCalls            DroppedCallLoggingConfig `yaml:"dropped_calls"`
+}
+
+// DroppedCallLoggingConfig controls optional per-category dropped-call files.
+type DroppedCallLoggingConfig struct {
+	Enabled             bool   `yaml:"enabled"`
+	Dir                 string `yaml:"dir"`
+	RetentionDays       int    `yaml:"retention_days"`
+	DedupeWindowSeconds int    `yaml:"dedupe_window_seconds"`
+	BadDEDX             bool   `yaml:"bad_de_dx"`
+	NoLicense           bool   `yaml:"no_license"`
+	Harmonics           bool   `yaml:"harmonics"`
 }
 
 // PropReportConfig controls automatic propagation report generation on log rotation.
@@ -1349,6 +1361,10 @@ type loadRawPresence struct {
 	hasTelnetBulletinDedupeWindow                   bool
 	hasTelnetBulletinDedupeMaxEntries               bool
 	hasLoggingDropDedupeWindow                      bool
+	hasDroppedCallsDedupeWindow                     bool
+	hasDroppedCallsBadDEDX                          bool
+	hasDroppedCallsNoLicense                        bool
+	hasDroppedCallsHarmonics                        bool
 	hasReputationIPInfoPebbleLoadIPv4               bool
 	hasReputationIPInfoDeleteCSVAfterImport         bool
 	hasReputationIPInfoKeepGzip                     bool
@@ -1408,6 +1424,10 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 		hasTelnetBulletinDedupeWindow:                   yamlKeyPresent(raw, "telnet", "bulletin_dedupe_window_seconds"),
 		hasTelnetBulletinDedupeMaxEntries:               yamlKeyPresent(raw, "telnet", "bulletin_dedupe_max_entries"),
 		hasLoggingDropDedupeWindow:                      yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
+		hasDroppedCallsDedupeWindow:                     yamlKeyPresent(raw, "logging", "dropped_calls", "dedupe_window_seconds"),
+		hasDroppedCallsBadDEDX:                          yamlKeyPresent(raw, "logging", "dropped_calls", "bad_de_dx"),
+		hasDroppedCallsNoLicense:                        yamlKeyPresent(raw, "logging", "dropped_calls", "no_license"),
+		hasDroppedCallsHarmonics:                        yamlKeyPresent(raw, "logging", "dropped_calls", "harmonics"),
 		hasReputationIPInfoPebbleLoadIPv4:               yamlKeyPresent(raw, "reputation", "ipinfo_pebble_load_ipv4"),
 		hasReputationIPInfoDeleteCSVAfterImport:         yamlKeyPresent(raw, "reputation", "ipinfo_delete_csv_after_import"),
 		hasReputationIPInfoKeepGzip:                     yamlKeyPresent(raw, "reputation", "ipinfo_keep_gzip"),
@@ -1572,6 +1592,43 @@ func normalizeLoggingAndPropReportConfig(cfg *Config, presence loadRawPresence) 
 	}
 	if _, err := time.Parse("15:04", cfg.PropReport.RefreshUTC); err != nil {
 		return fmt.Errorf("invalid prop report refresh time %q: %w", cfg.PropReport.RefreshUTC, err)
+	}
+	return normalizeDroppedCallLoggingConfig(cfg, presence)
+}
+
+func normalizeDroppedCallLoggingConfig(cfg *Config, presence loadRawPresence) error {
+	dropped := &cfg.Logging.DroppedCalls
+	dropped.Dir = strings.TrimSpace(dropped.Dir)
+	if !presence.hasDroppedCallsBadDEDX {
+		dropped.BadDEDX = true
+	}
+	if !presence.hasDroppedCallsNoLicense {
+		dropped.NoLicense = true
+	}
+	if !presence.hasDroppedCallsHarmonics {
+		dropped.Harmonics = true
+	}
+	if !presence.hasDroppedCallsDedupeWindow {
+		dropped.DedupeWindowSeconds = cfg.Logging.DropDedupeWindowSeconds
+	}
+	if dropped.DedupeWindowSeconds < 0 {
+		return fmt.Errorf("invalid logging.dropped_calls.dedupe_window_seconds %d (must be >= 0)", dropped.DedupeWindowSeconds)
+	}
+	if dropped.RetentionDays < 0 {
+		return fmt.Errorf("invalid logging.dropped_calls.retention_days %d (must be >= 0)", dropped.RetentionDays)
+	}
+	if dropped.RetentionDays == 0 {
+		dropped.RetentionDays = cfg.Logging.RetentionDays
+		if dropped.RetentionDays <= 0 {
+			dropped.RetentionDays = 7
+		}
+	}
+	if dropped.Dir == "" {
+		baseDir := cfg.Logging.Dir
+		if baseDir == "" {
+			baseDir = "data/logs"
+		}
+		dropped.Dir = filepath.Join(baseDir, "dropped_calls")
 	}
 	return nil
 }
@@ -3280,6 +3337,14 @@ func (c *Config) Print() {
 	} else {
 		fmt.Printf("Logging: disabled (drop_dedupe_window_seconds=%d)\n", c.Logging.DropDedupeWindowSeconds)
 	}
+	fmt.Printf("Dropped-call logs: enabled=%t dir=%s retention_days=%d dedupe_window_seconds=%d files(bad_de_dx=%t no_license=%t harmonics=%t)\n",
+		c.Logging.DroppedCalls.Enabled,
+		c.Logging.DroppedCalls.Dir,
+		c.Logging.DroppedCalls.RetentionDays,
+		c.Logging.DroppedCalls.DedupeWindowSeconds,
+		c.Logging.DroppedCalls.BadDEDX,
+		c.Logging.DroppedCalls.NoLicense,
+		c.Logging.DroppedCalls.Harmonics)
 	if c.PropReport.Enabled {
 		fmt.Printf("Prop report: enabled (refresh=%s UTC)\n", c.PropReport.RefreshUTC)
 	} else {

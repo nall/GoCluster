@@ -2,7 +2,7 @@
 
 Configuration is split by concern so you only edit the relevant file:
 
-- `app.yaml` - server identity, stats interval, console UI, and logging options (including dropped-call dedupe window).
+- `app.yaml` - server identity, stats interval, console UI, system logging, and optional dropped-call logs.
 - `ingest.yaml` - RBN/PSKReporter/human/DXSummit ingest plus the shared call cache.
 - `dedupe.yaml` - primary/secondary dedupe policy windows.
 - `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.

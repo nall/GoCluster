@@ -43,6 +43,10 @@ type pskModeInfo struct {
 	isPSK     bool
 }
 
+// BadCallReporter receives parse-time callsign drops. Implementations must be
+// non-blocking or very short because it runs in PSKReporter worker goroutines.
+type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
+
 // Client represents a PSKReporter MQTT client
 type Client struct {
 	broker       string
@@ -84,6 +88,9 @@ type Client struct {
 	allowedModes  map[string]struct{}
 	pathOnlyModes map[string]struct{}
 	hasPathOnly   bool
+
+	badCallReporterMu sync.RWMutex
+	badCallReporter   BadCallReporter
 }
 
 var (
@@ -247,6 +254,17 @@ func enablePahoDebugLogging() {
 		mqtt.CRITICAL = log.New(writer, "PSKReporter MQTT CRITICAL: ", 0)
 		log.Printf("PSKReporter: Paho MQTT debug logging enabled via %s", envPSKReporterMQTTDebug)
 	})
+}
+
+// SetBadCallReporter installs an optional callback for callsign-validation
+// drops. It is safe to call while workers are running.
+func (c *Client) SetBadCallReporter(reporter BadCallReporter) {
+	if c == nil {
+		return
+	}
+	c.badCallReporterMu.Lock()
+	c.badCallReporter = reporter
+	c.badCallReporterMu.Unlock()
 }
 
 // Connect connects to the PSKReporter MQTT broker and starts workers.
@@ -627,7 +645,15 @@ func (c *Client) handlePayload(payload []byte) {
 // generate different hashes, preventing proper deduplication.
 func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spot {
 	// Validate required fields
-	if msg.SenderCall == "" || msg.ReceiverCall == "" || msg.Frequency == 0 {
+	if msg.SenderCall == "" {
+		c.reportBadCall("DX", "missing_callsign", msg.SenderCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical, "source_parser")
+		return nil
+	}
+	if msg.ReceiverCall == "" {
+		c.reportBadCall("DE", "missing_callsign", msg.ReceiverCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical, "source_parser")
+		return nil
+	}
+	if msg.Frequency == 0 {
 		return nil
 	}
 
@@ -640,10 +666,12 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	deCall := norm.deCall
 	if !spot.IsValidNormalizedCallsign(dxCall) {
 		// log.Printf("PSKReporter: invalid DX call %s", msg.SenderCall) // noisy: caller requested silence
+		c.reportBadCall("DX", "invalid_callsign", msg.SenderCall, deCall, msg.SenderCall, norm.modeUpper, "source_parser")
 		return nil
 	}
 	if !spot.IsValidNormalizedCallsign(deCall) {
 		// log.Printf("PSKReporter: invalid DE call %s", msg.ReceiverCall) // noisy: caller requested silence
+		c.reportBadCall("DE", "invalid_callsign", msg.ReceiverCall, msg.ReceiverCall, dxCall, norm.modeUpper, "source_parser")
 		return nil
 	}
 
@@ -709,6 +737,29 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	s.RefreshBeaconFlag()
 
 	return s
+}
+
+func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail string) {
+	if c == nil {
+		return
+	}
+	c.badCallReporterMu.RLock()
+	reporter := c.badCallReporter
+	c.badCallReporterMu.RUnlock()
+	if reporter == nil {
+		return
+	}
+	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, detail)
+}
+
+func (c *Client) badCallSource() string {
+	if c == nil {
+		return "PSKREPORTER"
+	}
+	if source := strings.TrimSpace(c.name); source != "" {
+		return source
+	}
+	return "PSKREPORTER"
 }
 
 // Purpose: Report whether a mode is CW or RTTY.

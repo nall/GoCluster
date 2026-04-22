@@ -36,6 +36,10 @@ var (
 	rbnNormalizeCache = spot.NewCallCache(rbnCallCacheSize, rbnCallCacheTTL)
 )
 
+// BadCallReporter receives parse-time callsign drops. Implementations must be
+// short and non-blocking because it runs on the telnet read loop.
+type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
+
 // Client represents an RBN telnet client
 type Client struct {
 	host       string
@@ -66,6 +70,9 @@ type Client struct {
 	keepaliveDone     chan struct{}
 
 	rawChan chan<- string // optional passthrough for non-DX lines (minimal parser only)
+
+	badCallReporterMu sync.RWMutex
+	badCallReporter   BadCallReporter
 }
 
 type spotToken struct {
@@ -203,6 +210,17 @@ func (c *Client) UseMinimalParser() {
 	if c != nil {
 		c.minimalParse = true
 	}
+}
+
+// SetBadCallReporter installs an optional callback for callsign-validation
+// drops. It is safe to call while the read loop is running.
+func (c *Client) SetBadCallReporter(reporter BadCallReporter) {
+	if c == nil {
+		return
+	}
+	c.badCallReporterMu.Lock()
+	c.badCallReporter = reporter
+	c.badCallReporterMu.Unlock()
 }
 
 // SetTelnetTransport select the telnet transport backend.
@@ -720,6 +738,7 @@ func (c *Client) parseSpot(line string) {
 
 	deCallRaw, freqFromCall, freqOK := extractCallAndFreq(tokens[2])
 	if strings.TrimSpace(deCallRaw) == "" {
+		c.reportBadCall("DE", "missing_callsign", deCallRaw, deCallRaw, "", "", "source_parser")
 		log.Printf("RBN spot missing spotter callsign: %s", line)
 		return
 	}
@@ -759,12 +778,18 @@ func (c *Client) parseSpot(line string) {
 		return
 	}
 	if dxCall == "" {
+		c.reportBadCall("DX", "no_valid_dx", "", deCall, "", "", "source_parser")
 		return
 	}
 
 	parsed := spot.ParseSpotComment(buildComment(tokens, consumed), freq)
 	mode := parsed.Mode
-	if !spot.IsValidNormalizedCallsign(dxCall) || !spot.IsValidNormalizedCallsign(deCall) {
+	if !spot.IsValidNormalizedCallsign(dxCall) {
+		c.reportBadCall("DX", "invalid_callsign", dxCall, deCall, dxCall, mode, "source_parser")
+		return
+	}
+	if !spot.IsValidNormalizedCallsign(deCall) {
+		c.reportBadCall("DE", "invalid_callsign", deCallRaw, deCallRaw, dxCall, mode, "source_parser")
 		return
 	}
 	if !c.minimalParse && strings.TrimSpace(mode) == "" {
@@ -887,6 +912,35 @@ func (c *Client) HealthSnapshot() HealthSnapshot {
 		snap.LastSpotAt = time.Unix(0, ns)
 	}
 	return snap
+}
+
+func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail string) {
+	if c == nil {
+		return
+	}
+	c.badCallReporterMu.RLock()
+	reporter := c.badCallReporter
+	c.badCallReporterMu.RUnlock()
+	if reporter == nil {
+		return
+	}
+	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, detail)
+}
+
+func (c *Client) badCallSource() string {
+	if c == nil {
+		return "RBN"
+	}
+	if source := strings.TrimSpace(c.name); source != "" {
+		return source
+	}
+	if c.minimalParse {
+		return string(spot.SourceUpstream)
+	}
+	if c.port == 7001 {
+		return "RBN-DIGITAL"
+	}
+	return "RBN"
 }
 
 // Stop stops the RBN client and closes connections.

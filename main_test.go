@@ -84,8 +84,8 @@ func TestFormatConfidenceSingleReporterOnlyUnknown(t *testing.T) {
 
 func TestMakeUnlicensedReporterEmitsPlainTextToSurface(t *testing.T) {
 	surface := &captureSurface{}
-	reporter := makeUnlicensedReporter(surface, nil, nil)
-	reporter("rbn", "dx", "k1abc", "cw", 7029.5)
+	reporter := makeUnlicensedReporter(surface, nil, nil, nil)
+	reporter("rbn", "dx", "k1abc", "n0call", "k1abc", "cw", 7029.5)
 
 	if len(surface.unlicensed) != 1 {
 		t.Fatalf("expected one unlicensed message, got %d", len(surface.unlicensed))

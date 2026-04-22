@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"strings"
@@ -244,6 +245,17 @@ func (p *outputPipeline) applyPostResolverAdjustments(ctx *outputSpotContext) bo
 			harmonicMsg := formatHarmonicSuppressedMessage(s.DXCall, s.Frequency, fundamental, corroborators, deltaDB)
 			if p.tracker != nil {
 				p.tracker.IncrementHarmonicSuppressions()
+			}
+			if p.droppedCallLogger != nil {
+				detail := fmt.Sprintf("corroborators=%d_delta_db=%d", corroborators, deltaDB)
+				p.droppedCallLogger.LogHarmonic(
+					droppedCallSourceFromSpot(s),
+					droppedCallDXFromSpot(s),
+					droppedCallDEFromSpot(s),
+					droppedCallDXFromSpot(s),
+					droppedCallModeFromSpot(s),
+					detail,
+				)
 			}
 			if p.dash != nil {
 				p.dash.AppendHarmonic(harmonicMsg)

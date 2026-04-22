@@ -136,6 +136,44 @@ func TestParseRecordRejectsMalformedMarkerAndUnsupportedFrequency(t *testing.T) 
 	}
 }
 
+func TestParseRecordReportsInvalidCalls(t *testing.T) {
+	info := "FT8"
+	var got struct {
+		source string
+		role   string
+		reason string
+		call   string
+		de     string
+		dx     string
+		mode   string
+		detail string
+	}
+	reporter := func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.source = source
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.de = deCall
+		got.dx = dxCall
+		got.mode = mode
+		got.detail = detail
+	}
+	_, err := parseRecordWithReporter(rawSpot{
+		ID:        10,
+		DECall:    "BAD!",
+		DXCall:    "K2GOD",
+		Info:      &info,
+		Frequency: 21074.4,
+		Time:      "2026-04-21T19:59:09",
+	}, reporter)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if got.source != SourceNode || got.role != "DE" || got.reason != "invalid_callsign" || got.call != "BAD!" || got.de != "BAD!" || got.dx != "K2GOD" || got.mode != "FT8" || got.detail != "source_parser" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 func TestPollWarningsAndFailureCounters(t *testing.T) {
 	t.Run("full page warning", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

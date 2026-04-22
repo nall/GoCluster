@@ -134,6 +134,48 @@ func TestConvertToSpotFTFrequencyFailsOpenWithoutMatchingDial(t *testing.T) {
 	}
 }
 
+func TestConvertToSpotReportsInvalidSenderCall(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
+	var got struct {
+		source string
+		role   string
+		reason string
+		call   string
+		de     string
+		dx     string
+		mode   string
+		detail string
+	}
+	client.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.source = source
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.de = deCall
+		got.dx = dxCall
+		got.mode = mode
+		got.detail = detail
+	})
+
+	modeInfo, ok := parseModeInfo("FT8")
+	if !ok {
+		t.Fatal("expected FT8 mode info")
+	}
+	msg := &PSKRMessage{
+		Frequency:    14074000,
+		Mode:         "FT8",
+		Timestamp:    time.Now().Add(-time.Minute).Unix(),
+		SenderCall:   "BAD!",
+		ReceiverCall: "N0CALL",
+	}
+	if spot := client.convertToSpot(msg, modeInfo); spot != nil {
+		t.Fatalf("expected invalid sender to drop, got %+v", spot)
+	}
+	if got.source != "PSKREPORTER" || got.role != "DX" || got.reason != "invalid_callsign" || got.call != "BAD!" || got.mode != "FT8" || got.detail != "source_parser" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 type testMessage struct {
 	payload []byte
 }

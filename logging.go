@@ -87,6 +87,10 @@ func newDailyFileSink(dir string, retentionDays int) (*dailyFileSink, error) {
 	return sink, nil
 }
 
+func newDailyLogSink(dir string, retentionDays int) (lineSink, error) {
+	return newDailyFileSink(dir, retentionDays)
+}
+
 // WriteLine appends a timestamped line to the current daily log file.
 // Key aspects: Rotates on day change and logs file errors to stderr (rate-limited).
 // Upstream: logFanout line dispatch.
@@ -250,7 +254,7 @@ func setupLogging(cfg config.LoggingConfig, console io.Writer) (*logFanout, erro
 	if !cfg.Enabled {
 		return fanout, nil
 	}
-	fileSink, err := newDailyFileSink(cfg.Dir, cfg.RetentionDays)
+	fileSink, err := newDailyLogSink(cfg.Dir, cfg.RetentionDays)
 	if err != nil {
 		return fanout, err
 	}

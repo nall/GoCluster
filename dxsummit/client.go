@@ -45,6 +45,10 @@ type rawSpot struct {
 	DXLongitude *float64 `json:"dx_longitude"`
 }
 
+// BadCallReporter receives parse-time callsign drops. The callback must be
+// quick because it runs on the polling goroutine.
+type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
+
 // HealthSnapshot reports DXSummit polling and queue state for diagnostics.
 type HealthSnapshot struct {
 	Connected          bool
@@ -74,17 +78,18 @@ type Client struct {
 	now        func() time.Time
 	logf       func(string, ...any)
 
-	mu             sync.Mutex
-	cancel         context.CancelFunc
-	connected      bool
-	lastPollAt     time.Time
-	lastMessageAt  time.Time
-	lastSpotAt     time.Time
-	lastParseErrAt time.Time
-	lastStatusCode int
-	lastError      string
-	lastSeenID     uint64
-	wg             sync.WaitGroup
+	mu              sync.Mutex
+	cancel          context.CancelFunc
+	connected       bool
+	lastPollAt      time.Time
+	lastMessageAt   time.Time
+	lastSpotAt      time.Time
+	lastParseErrAt  time.Time
+	lastStatusCode  int
+	lastError       string
+	lastSeenID      uint64
+	badCallReporter BadCallReporter
+	wg              sync.WaitGroup
 
 	spotDrops          atomic.Uint64
 	parseErrors        atomic.Uint64
@@ -137,6 +142,17 @@ func (c *Client) SetNowFunc(now func() time.Time) {
 func (c *Client) SetLogger(logf func(string, ...any)) {
 	c.mu.Lock()
 	c.logf = logf
+	c.mu.Unlock()
+}
+
+// SetBadCallReporter installs an optional callback for callsign-validation
+// drops. It is safe to call while polling is active.
+func (c *Client) SetBadCallReporter(reporter BadCallReporter) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.badCallReporter = reporter
 	c.mu.Unlock()
 }
 
@@ -267,6 +283,7 @@ func (c *Client) poll(ctx context.Context, startup bool) bool {
 	if startup && c.cfg.StartupBackfillSeconds > 0 {
 		startupCutoff = now.Add(-time.Duration(c.cfg.StartupBackfillSeconds) * time.Second)
 	}
+	badCallReporter := c.badCallReporterSnapshot()
 	for _, record := range records {
 		// Keep only the highest DXSummit row ID. This avoids an unbounded seen-ID
 		// map; rows at or below the prior high-water mark are treated as duplicates
@@ -281,7 +298,7 @@ func (c *Client) poll(ctx context.Context, startup bool) bool {
 		if startup && c.cfg.StartupBackfillSeconds == 0 {
 			continue
 		}
-		sp, err := parseRecord(record)
+		sp, err := parseRecordWithReporter(record, badCallReporter)
 		if err != nil {
 			c.parseErrors.Add(1)
 			c.recordParseError(now, err)
@@ -375,6 +392,10 @@ func (c *Client) requestURL(start, end time.Time) (string, error) {
 // coordinates are deliberately ignored here; grids can still be filled later by
 // the existing CTY/grid-cache enrichment path from callsign-derived metadata.
 func parseRecord(record rawSpot) (*spot.Spot, error) {
+	return parseRecordWithReporter(record, nil)
+}
+
+func parseRecordWithReporter(record rawSpot, badCallReporter BadCallReporter) (*spot.Spot, error) {
 	if record.ID == 0 {
 		return nil, errors.New("dxsummit: missing id")
 	}
@@ -385,12 +406,15 @@ func parseRecord(record rawSpot) (*spot.Spot, error) {
 	if spot.FreqToBand(freq) == "???" {
 		return nil, fmt.Errorf("dxsummit: unsupported frequency %.1f", freq)
 	}
+	mode := parseRecordMode(record.Info, freq)
 	dxCall := spot.NormalizeCallsign(record.DXCall)
 	if !spot.IsValidNormalizedCallsign(dxCall) {
+		reportDXSummitBadCall(badCallReporter, "DX", "invalid_callsign", record.DXCall, record.DECall, record.DXCall, mode)
 		return nil, fmt.Errorf("dxsummit: invalid DX call %q", record.DXCall)
 	}
 	deCall, _, ok := normalizeSpotterCall(record.DECall)
 	if !ok {
+		reportDXSummitBadCall(badCallReporter, "DE", "invalid_callsign", record.DECall, record.DECall, record.DXCall, mode)
 		return nil, fmt.Errorf("dxsummit: invalid DE call %q", record.DECall)
 	}
 	sourceTime, err := parseAPITime(record.Time)
@@ -416,6 +440,29 @@ func parseRecord(record rawSpot) (*spot.Spot, error) {
 	sp.EnsureNormalized()
 	sp.RefreshBeaconFlag()
 	return sp, nil
+}
+
+func (c *Client) badCallReporterSnapshot() BadCallReporter {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.badCallReporter
+}
+
+func parseRecordMode(info *string, freq float64) string {
+	if info == nil {
+		return ""
+	}
+	return spot.ParseSpotComment(*info, freq).Mode
+}
+
+func reportDXSummitBadCall(reporter BadCallReporter, role, reason, call, deCall, dxCall, mode string) {
+	if reporter == nil {
+		return
+	}
+	reporter(SourceNode, role, reason, call, deCall, dxCall, mode, "source_parser")
 }
 
 func parseAPITime(value string) (time.Time, error) {

@@ -226,6 +226,64 @@ func TestDXCommandCTYValidation(t *testing.T) {
 	}
 }
 
+func TestDXCommandReportsBadDXCall(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	var got struct {
+		source string
+		role   string
+		reason string
+		call   string
+		de     string
+		dx     string
+		mode   string
+		detail string
+	}
+	p := NewProcessor(nil, nil, input, nil, nil, nil, WithBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.source = source
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.de = deCall
+		got.dx = dxCall
+		got.mode = mode
+		got.detail = detail
+	}))
+
+	resp := p.ProcessCommandForClient("DX 7001 BAD! FT8", "N2WQ", "", nil, "classic")
+	if !strings.Contains(resp, "Invalid DX callsign") {
+		t.Fatalf("expected invalid DX response, got %q", resp)
+	}
+	if got.source != "manual:N2WQ" || got.role != "DX" || got.reason != "invalid_callsign" || got.call != "BAD!" || got.de != "N2WQ" || got.dx != "BAD!" || got.mode != "FT8" || got.detail != "manual_dx" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
+func TestDXCommandReportsCTYUnknownDXCall(t *testing.T) {
+	ctyDB := loadTestCTY(t)
+	ctyLookup := func() *cty.CTYDatabase { return ctyDB }
+	input := make(chan *spot.Spot, 1)
+	var got struct {
+		role   string
+		reason string
+		call   string
+		mode   string
+	}
+	p := NewProcessor(nil, nil, input, ctyLookup, nil, nil, WithBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.mode = mode
+	}))
+
+	resp := p.ProcessCommandForClient("DX 7001 K4ZZZ FT8", "N2WQ", "", nil, "classic")
+	if !strings.Contains(resp, "Unknown DX callsign") {
+		t.Fatalf("expected CTY validation response, got %q", resp)
+	}
+	if got.role != "DX" || got.reason != "cty_unknown" || got.call != "K4ZZZ" || got.mode != "FT8" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 func TestTestSpotterBaseCall(t *testing.T) {
 	cases := []struct {
 		call string

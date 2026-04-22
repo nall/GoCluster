@@ -52,6 +52,10 @@ type DedupeHelpConfig struct {
 // command-call surface.
 type ProcessorOption func(*Processor)
 
+// BadCallReporter receives callsign-validation drops from manually entered DX
+// commands. The callback should be short because it runs in the session command path.
+type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
+
 // Processor handles telnet command parsing and replies that rely on shared state
 // (recent spots in the archive).
 type Processor struct {
@@ -62,6 +66,7 @@ type Processor struct {
 	prefixIdx     *prefixIndex
 	repGate       *reputation.Gate
 	repReport     func(reputation.DropEvent)
+	badCallReport BadCallReporter
 	pathGlyphHelp PathGlyphHelpConfig
 	dedupeHelp    DedupeHelpConfig
 }
@@ -107,6 +112,17 @@ func WithDedupeHelp(cfg DedupeHelpConfig) ProcessorOption {
 			return
 		}
 		p.dedupeHelp = cfg
+	}
+}
+
+// WithBadCallReporter installs an optional callback for callsign-validation
+// drops in manually entered DX commands.
+func WithBadCallReporter(reporter BadCallReporter) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.badCallReport = reporter
 	}
 }
 
@@ -1262,6 +1278,24 @@ func containsASCIILetter(s string) bool {
 	return false
 }
 
+func (p *Processor) reportBadCall(source, role, reason, call, deCall, dxCall, mode, detail string) {
+	if p == nil || p.badCallReport == nil {
+		return
+	}
+	p.badCallReport(source, role, reason, call, deCall, dxCall, mode, detail)
+}
+
+func manualDXMode(fields []string, freq float64) string {
+	if len(fields) <= 3 {
+		return ""
+	}
+	comment := strings.TrimSpace(strings.Join(fields[3:], " "))
+	if comment == "" {
+		return ""
+	}
+	return spot.ParseSpotComment(comment, freq).Mode
+}
+
 // Purpose: Handle the DX command and enqueue a human spot.
 // Key aspects: Validates callsign/frequency; parses comment for mode/report.
 // Upstream: ProcessCommandForClient (DX).
@@ -1273,6 +1307,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 	}
 	spotterNorm := spot.NormalizeCallsign(spotterRaw)
 	if !spot.IsValidNormalizedCallsign(spotterNorm) {
+		p.reportBadCall("manual:"+spotterRaw, "DE", "invalid_callsign", spotterRaw, spotterRaw, "", "", "manual_dx")
 		return "DX command requires a valid callsign.\n"
 	}
 	if len(fields) < 3 {
@@ -1285,11 +1320,13 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 	}
 	dx := spot.NormalizeCallsign(dxRaw)
 	if !spot.IsValidNormalizedCallsign(dx) {
+		p.reportBadCall("manual:"+spotterNorm, "DX", "invalid_callsign", dxRaw, spotterNorm, dxRaw, manualDXMode(fields, freq), "manual_dx")
 		return "Invalid DX callsign.\n"
 	}
 	if p.ctyLookup != nil {
 		if db := p.ctyLookup(); db != nil {
 			if _, ok := db.LookupCallsignPortable(dx); !ok {
+				p.reportBadCall("manual:"+spotterNorm, "DX", "cty_unknown", dx, spotterNorm, dx, manualDXMode(fields, freq), "manual_dx")
 				return "Unknown DX callsign (not in CTY database).\n"
 			}
 		}
@@ -1304,6 +1341,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 			return testCallCTYUnavailableMsg
 		}
 		if _, ok := db.LookupCallsignPortable(testBaseCall); !ok {
+			p.reportBadCall("manual:"+spotterNorm, "DE", "cty_unknown", testBaseCall, spotterNorm, dx, manualDXMode(fields, freq), "test_spotter_base")
 			return testCallCTYInvalidMsg
 		}
 	}

@@ -121,6 +121,68 @@ func TestIngestValidatorPreservesGrids(t *testing.T) {
 	}
 }
 
+func TestIngestValidatorReportsCTYUnknownDrop(t *testing.T) {
+	db := loadIngestCTY(t)
+	var got struct {
+		source string
+		role   string
+		reason string
+		call   string
+		de     string
+		dx     string
+		mode   string
+		detail string
+	}
+	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
+	v.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.source = source
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.de = deCall
+		got.dx = dxCall
+		got.mode = mode
+		got.detail = detail
+	})
+	v.isLicensedUS = func(call string) bool { return true }
+
+	s := spot.NewSpotNormalized("ZZ9ABC", "K1ABC", 14074.0, "FT8")
+	s.SourceNode = "RBN"
+	if v.validateSpot(s) {
+		t.Fatalf("expected unknown CTY DX to be dropped")
+	}
+	if got.source != "RBN" || got.role != "DX" || got.reason != "cty_unknown" || got.call != "ZZ9ABC" || got.de != "K1ABC" || got.dx != "ZZ9ABC" || got.mode != "FT8" || got.detail != "cty_validation" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
+func TestIngestValidatorReportsLeadingLetterDrop(t *testing.T) {
+	db := loadIngestCTY(t)
+	var got struct {
+		role   string
+		reason string
+		call   string
+		detail string
+	}
+	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
+	v.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.role = role
+		got.reason = reason
+		got.call = call
+		got.detail = detail
+	})
+	v.isLicensedUS = func(call string) bool { return true }
+
+	s := spot.NewSpotNormalized("ABC1D", "K1ABC", 14074.0, "FT8")
+	s.SourceNode = "RBN"
+	if v.validateSpot(s) {
+		t.Fatalf("expected leading-letter DX to be dropped")
+	}
+	if got.role != "DX" || got.reason != "leading_letters" || got.call != "ABC1D" || got.detail != "cty_prefilter" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 func TestIngestValidatorDropsUnlicensedUSSpotter(t *testing.T) {
 	db := loadIngestCTY(t)
 	var gotSource, gotRole, gotCall, gotMode string
@@ -128,7 +190,7 @@ func TestIngestValidatorDropsUnlicensedUSSpotter(t *testing.T) {
 	reported := false
 
 	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
-	v.unlicensedReporter = func(source, role, call, mode string, freq float64) {
+	v.unlicensedReporter = func(source, role, call, deCall, dxCall, mode string, freq float64) {
 		reported = true
 		gotSource = source
 		gotRole = role
@@ -169,7 +231,7 @@ func TestIngestValidatorSkipsULSForTestSpotter(t *testing.T) {
 	reported := false
 
 	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
-	v.unlicensedReporter = func(source, role, call, mode string, freq float64) {
+	v.unlicensedReporter = func(source, role, call, deCall, dxCall, mode string, freq float64) {
 		reported = true
 	}
 	v.isLicensedUS = func(call string) bool { return false }

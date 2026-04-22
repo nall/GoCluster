@@ -28,6 +28,14 @@ ui:
 # Optional daily system log files (local time, one file per day).
 logging:
   enabled: true
-  dir: "data/logs"
+  dir: "data/logs/system"
   retention_days: 7   # Keep daily logs for this many days
-  drop_dedupe_window_seconds: 120  # 0 disables dropped-call log dedupe
+  drop_dedupe_window_seconds: 120  # 0 disables console dropped-event dedupe; dropped_calls may override file dedupe
+  dropped_calls:
+    enabled: true
+    dir: "data/logs/dropped_calls"
+    retention_days: 7
+    dedupe_window_seconds: 120
+    bad_de_dx: true
+    no_license: true
+    harmonics: true

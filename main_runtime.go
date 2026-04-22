@@ -47,8 +47,9 @@ type clusterRuntime struct {
 	cfg          *config.Config
 	configSource string
 
-	logMux  *logFanout
-	surface ui.Surface
+	logMux            *logFanout
+	droppedCallLogger *droppedCallLogger
+	surface           ui.Surface
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -78,7 +79,7 @@ type clusterRuntime struct {
 	statsTracker       *stats.Tracker
 	dropLogDeduper     *dropLogDeduper
 	dropReporter       func(string)
-	unlicensedReporter func(source, role, call, mode string, freq float64)
+	unlicensedReporter func(source, role, call, deCall, dxCall, mode string, freq float64)
 
 	repGate         *reputation.Gate
 	repDropReporter func(reputation.DropEvent)
@@ -181,6 +182,11 @@ func (r *clusterRuntime) setupLoggingAndUI() bool {
 	log.SetOutput(logMux)
 	if logErr != nil {
 		log.Printf("Logging: %v", logErr)
+	}
+	droppedCallLogger, droppedCallErr := newDroppedCallLogger(r.cfg.Logging.DroppedCalls)
+	r.droppedCallLogger = droppedCallLogger
+	if droppedCallErr != nil {
+		log.Printf("Logging: %v", droppedCallErr)
 	}
 	log.Printf("Loaded configuration from %s", r.configSource)
 	if err := spot.SetDXClusterLineLength(r.cfg.Telnet.OutputLineLength); err != nil {
@@ -485,7 +491,7 @@ func (r *clusterRuntime) initializeObservabilityState() {
 	dropDedupeWindow := time.Duration(r.cfg.Logging.DropDedupeWindowSeconds) * time.Second
 	r.dropLogDeduper = newDropLogDeduper(dropDedupeWindow, defaultDropLogDedupeMaxKeys)
 	r.dropReporter = makeDroppedReporter(r.surface, r.dropLogDeduper)
-	r.unlicensedReporter = makeUnlicensedReporter(r.surface, r.statsTracker, r.dropLogDeduper)
+	r.unlicensedReporter = makeUnlicensedReporter(r.surface, r.statsTracker, r.dropLogDeduper, r.droppedCallLogger)
 
 	if r.cfg.Reputation.Enabled {
 		gate, err := reputation.NewGate(r.cfg.Reputation, r.ctyLookup)
@@ -677,6 +683,7 @@ func (r *clusterRuntime) initializePipelineCore() {
 		log.Println("Flood control disabled")
 	}
 	r.ingestValidator = newIngestValidator(r.ctyLookup, r.metaCache, r.ctyUpdater, r.gridUpdater, dedupInput, r.unlicensedReporter, r.dropReporter, r.cfg.CTY.Enabled)
+	r.ingestValidator.SetBadCallReporter(r.reportBadCallDrop)
 	r.ingestValidator.Start()
 	r.ingestInput = r.ingestValidator.Input()
 
@@ -815,6 +822,7 @@ func (r *clusterRuntime) initializeServices() bool {
 			MedWindowSeconds:  r.cfg.Dedup.SecondaryMedWindowSeconds,
 			SlowWindowSeconds: r.cfg.Dedup.SecondarySlowWindowSeconds,
 		}),
+		commands.WithBadCallReporter(r.reportBadCallDrop),
 	)
 	if !r.initializeTelnetServer() {
 		return false
@@ -832,6 +840,7 @@ func (r *clusterRuntime) initializePeerManager() bool {
 		log.Printf("Failed to init peering manager: %v", err)
 		return false
 	}
+	pm.SetBadCallReporter(r.reportBadCallDrop)
 	if err := pm.Start(r.ctx); err != nil {
 		log.Printf("Failed to start peering manager: %v", err)
 		return false
@@ -986,6 +995,7 @@ func (r *clusterRuntime) startOutputPipeline() {
 		r.gridLookup,
 		r.gridLookupSync,
 		r.unlicensedReporter,
+		r.droppedCallLogger,
 		r.adaptiveMinReports,
 		r.refresher,
 		r.spotterReliability,
@@ -1017,6 +1027,7 @@ func (r *clusterRuntime) connectRBNFeed() {
 		return
 	}
 	r.rbnClient = rbn.NewClient(r.cfg.RBN.Host, r.cfg.RBN.Port, r.cfg.RBN.Callsign, r.cfg.RBN.Name, r.skewStore, r.cfg.RBN.KeepSSIDSuffix, r.cfg.RBN.SlotBuffer)
+	r.rbnClient.SetBadCallReporter(r.reportBadCallDrop)
 	r.rbnClient.SetTelnetTransport(r.cfg.RBN.TelnetTransport)
 	if r.cfg.RBN.KeepaliveSec > 0 {
 		r.rbnClient.EnableKeepalive(time.Duration(r.cfg.RBN.KeepaliveSec) * time.Second)
@@ -1034,6 +1045,7 @@ func (r *clusterRuntime) connectRBNDigitalFeed() {
 		return
 	}
 	r.rbnDigitalClient = rbn.NewClient(r.cfg.RBNDigital.Host, r.cfg.RBNDigital.Port, r.cfg.RBNDigital.Callsign, r.cfg.RBNDigital.Name, r.skewStore, r.cfg.RBNDigital.KeepSSIDSuffix, r.cfg.RBNDigital.SlotBuffer)
+	r.rbnDigitalClient.SetBadCallReporter(r.reportBadCallDrop)
 	r.rbnDigitalClient.SetTelnetTransport(r.cfg.RBNDigital.TelnetTransport)
 	if r.cfg.RBNDigital.KeepaliveSec > 0 {
 		r.rbnDigitalClient.EnableKeepalive(time.Duration(r.cfg.RBNDigital.KeepaliveSec) * time.Second)
@@ -1054,6 +1066,7 @@ func (r *clusterRuntime) connectHumanTelnetFeed() {
 	go r.forwardHumanPassthrough(rawPassthrough)
 
 	r.humanTelnetClient = rbn.NewClient(r.cfg.HumanTelnet.Host, r.cfg.HumanTelnet.Port, r.cfg.HumanTelnet.Callsign, r.cfg.HumanTelnet.Name, r.skewStore, r.cfg.HumanTelnet.KeepSSIDSuffix, r.cfg.HumanTelnet.SlotBuffer)
+	r.humanTelnetClient.SetBadCallReporter(r.reportBadCallDrop)
 	r.humanTelnetClient.SetTelnetTransport(r.cfg.HumanTelnet.TelnetTransport)
 	r.humanTelnetClient.UseMinimalParser()
 	r.humanTelnetClient.SetRawPassthrough(rawPassthrough)
@@ -1099,6 +1112,7 @@ func (r *clusterRuntime) connectDXSummitFeed() {
 		return
 	}
 	r.dxsummitClient = dxsummit.NewClient(r.cfg.DXSummit)
+	r.dxsummitClient.SetBadCallReporter(r.reportBadCallDrop)
 	if err := r.dxsummitClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to start DXSummit: %v", err)
 		r.dxsummitClient = nil
@@ -1132,6 +1146,7 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 		r.cfg.PSKReporter.SpotChannelSize,
 		r.cfg.PSKReporter.MaxPayloadBytes,
 	)
+	r.pskrClient.SetBadCallReporter(r.reportBadCallDrop)
 	if err := r.pskrClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to connect to PSKReporter: %v", err)
 		return
@@ -1326,9 +1341,19 @@ func (r *clusterRuntime) close() {
 	if r.surface != nil {
 		r.surface.Stop()
 	}
+	if r.droppedCallLogger != nil {
+		_ = r.droppedCallLogger.Close()
+	}
 	if r.logMux != nil {
 		r.logMux.Close()
 	}
+}
+
+func (r *clusterRuntime) reportBadCallDrop(source, role, reason, call, deCall, dxCall, mode, detail string) {
+	if r == nil || r.droppedCallLogger == nil {
+		return
+	}
+	r.droppedCallLogger.LogBadCall(source, role, reason, call, deCall, dxCall, mode, detail)
 }
 
 func (r *clusterRuntime) ctyLookup() *cty.CTYDatabase {

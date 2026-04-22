@@ -374,12 +374,12 @@ func main() {
 // Key aspects: Returns a closure that increments stats and formats output.
 // Upstream: main wiring for applyLicenseGate reporting.
 // Downstream: tracker.IncrementUnlicensedDrops and dash.AppendUnlicensed/log.Println.
-func makeUnlicensedReporter(dash ui.Surface, tracker *stats.Tracker, deduper *dropLogDeduper) func(source, role, call, mode string, freq float64) {
+func makeUnlicensedReporter(dash ui.Surface, tracker *stats.Tracker, deduper *dropLogDeduper, droppedCalls *droppedCallLogger) func(source, role, call, deCall, dxCall, mode string, freq float64) {
 	// Purpose: Emit an unlicensed drop event with consistent formatting.
 	// Key aspects: Normalizes fields and routes to UI or log.
 	// Upstream: applyLicenseGate.
 	// Downstream: tracker.IncrementUnlicensedDrops, dash.AppendUnlicensed, log.Println.
-	return func(source, role, call, mode string, freq float64) {
+	return func(source, role, call, deCall, dxCall, mode string, freq float64) {
 		if tracker != nil {
 			tracker.IncrementUnlicensedDrops()
 		}
@@ -387,6 +387,9 @@ func makeUnlicensedReporter(dash ui.Surface, tracker *stats.Tracker, deduper *dr
 		role = strutil.NormalizeUpper(role)
 		mode = strutil.NormalizeUpper(mode)
 		call = strings.TrimSpace(strings.ToUpper(call))
+		if droppedCalls != nil {
+			droppedCalls.LogNoLicense(source, role, call, deCall, dxCall, mode, "fcc_uls")
+		}
 
 		message := formatUnlicensedDropMessage(role, call, source, mode, freq)
 		if dash != nil {
@@ -1296,7 +1299,8 @@ func processOutputSpots(
 	gridUpdate func(call, grid string),
 	gridLookup func(call string) (string, bool, bool),
 	gridLookupSync func(call string) (string, bool, bool),
-	unlicensedReporter func(source, role, call, mode string, freq float64),
+	unlicensedReporter func(source, role, call, deCall, dxCall, mode string, freq float64),
+	droppedCallLogger *droppedCallLogger,
 	adaptiveMinReports *spot.AdaptiveMinReports,
 	refresher *adaptiveRefresher,
 	spotterReliability spot.SpotterReliability,
@@ -1337,6 +1341,7 @@ func processOutputSpots(
 		gridLookup,
 		gridLookupSync,
 		unlicensedReporter,
+		droppedCallLogger,
 		adaptiveMinReports,
 		refresher,
 		spotterReliability,
@@ -1854,7 +1859,7 @@ func peerPublishComment(src *spot.Spot) string {
 // Key aspects: Jurisdiction is derived from the normalized base call; reporter callback on drops.
 // Upstream: processOutputSpots before broadcast.
 // Downstream: uls.IsLicensedUS, reporter.
-func applyLicenseGate(s *spot.Spot, ctyDB *cty.CTYDatabase, metaCache *callMetaCache, reporter func(source, role, call, mode string, freq float64)) bool {
+func applyLicenseGate(s *spot.Spot, ctyDB *cty.CTYDatabase, metaCache *callMetaCache, reporter func(source, role, call, deCall, dxCall, mode string, freq float64)) bool {
 	if s == nil {
 		return false
 	}
@@ -1918,7 +1923,7 @@ func applyLicenseGate(s *spot.Spot, ctyDB *cty.CTYDatabase, metaCache *callMetaC
 		}
 		if !uls.IsLicensedUS(callKey) {
 			if reporter != nil {
-				reporter(s.SourceNode, "DX", callKey, s.ModeNorm, s.Frequency)
+				reporter(droppedCallSourceFromSpot(s), "DX", callKey, deCall, dxCall, droppedCallModeFromSpot(s), s.Frequency)
 			}
 			return true
 		}
