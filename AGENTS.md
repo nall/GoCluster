@@ -38,6 +38,7 @@ When the user asks what existing code does and has not asked for changes:
 - If no skill applies, say `Skill check: none applicable`.
 - Canonical skills location is `~/.codex/skills` (Windows typically `%USERPROFILE%\.codex\skills`).
 - Repo-managed skills under `codex-skills/` count as available when their trigger matches; prefer the installed version when both exist.
+- Explanation-only code-understanding skills are not required for feature work unless the user asks for explanation, but feature work still requires targeted current-code discovery before planning.
 - When the user asks why a path is slow and local profile data exists, prefer a profiling-specific skill over a general explanation skill.
 - When a task touches retained server-lifetime state, maps, caches, interners, pools, indexes, or cleanup/eviction behavior, use `go-retained-state-audit` before implementation if available.
 - When a task touches YAML config, config loaders, schema validation, defaulting, operator settings, reference-table loading, or optional tool/secret config, use `go-config-contract-audit` before implementation if available.
@@ -51,6 +52,7 @@ When the user asks what existing code does and has not asked for changes:
 - For Small work: state a brief plan, implement, run targeted checks, update docs/comments if needed, and give a short verification summary.
 - Reclassify Small work as Non-trivial immediately if the blast radius expands.
 - Non-trivial work includes any meaningful blast radius, schema/config/protocol/parser change, shared component, operational behavior, concurrency/lifecycle concern, docs/decision impact, or uncertain impact.
+- Before proposing or confirming a Non-trivial Scope Ledger, perform targeted Current-State Discovery: inspect relevant entry points, caller/callee flow, persisted state, user-visible surfaces, and existing tests. Ask product or semantic questions only after discoverable code facts have been checked.
 - For Non-trivial changes, do not edit files, propose diffs, run formatters, or run full checker suites until the user replies with the exact approval token: `Approved vN`.
 - Record `Ledger status: Approved vN found: yes/no`.
 - Do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval.
@@ -63,8 +65,8 @@ When the user asks what existing code does and has not asked for changes:
 
 ## Execution Loop
 1. Classify the request and perform the skill check.
-2. If Non-trivial, produce or confirm the Scope Ledger, then stop until exact `Approved vN`.
-3. After approval, run Git preflight and inspect current state before designing the change.
+2. If Non-trivial, perform targeted Current-State Discovery, produce or confirm the Scope Ledger grounded in that discovery, then stop until exact `Approved vN`.
+3. After approval, run Git preflight and refresh current-state context before designing the change.
 4. Identify contracts, user-visible behavior, dependency rigor, required audits, README/docs impact, and checker set before code.
 5. Implement one verified slice at a time; rerun the relevant checks before continuing.
 6. Review the current diff as a reviewer, fix confirmed issues, and rerun affected checks.

@@ -2,7 +2,20 @@
 
 Use this exact structure for Non-trivial tasks unless the user explicitly requests a different reporting shape.
 
-## 1. Proposed Scope Ledger vN
+## 1. Skill check
+- Skill check: selected <skill>
+or
+- Skill check: none applicable
+
+## 2. Current-State Discovery Evidence
+- Inspected entry points/surfaces:
+- Caller/callee flow checked:
+- Persisted/config/archive/schema surfaces checked:
+- User-visible/help/docs surfaces checked:
+- Existing tests checked:
+- Unknown from inspected code:
+
+## 3. Proposed Scope Ledger vN
 - Version: vN
 - Objective:
 - In scope:
@@ -19,21 +32,16 @@ No code, diffs, file writes, or full validation commands before that approval.
 
 ---
 
-## 2. Skill check
-- Skill check: selected <skill>
-or
-- Skill check: none applicable
-
-## 3. Git preflight
+## 4. Git preflight
 - Git preflight: branch=<name>; worktree=<clean|dirty acknowledged>; rollback=<hash/tag/branch>
 
-## 4. Current-State Understanding Note
+## 5. Current-State Understanding Note
 - Current flow:
 - Likely impacted files/packages/functions:
 - Invariants that must not break:
 - Top 3 failure modes if changed incorrectly:
 
-## 5. Requirements & Edge Cases Note
+## 6. Requirements & Edge Cases Note
 - Functional requirements:
 - Non-functional requirements:
 - Compatibility constraints:
@@ -41,7 +49,7 @@ or
 - Observability expectations:
 - Edge cases:
 
-## 6. Dependency impact
+## 7. Dependency impact
 - Dependency rigor: Light | Full
 - Touched files/packages:
 - Upstream callers/sources reviewed:
@@ -50,7 +58,7 @@ or
 - Config/metrics/logs/docs affected:
 - Dependency scan evidence: <required for Full rigor>
 
-## 7. Config Contract Audit
+## 8. Config Contract Audit
 - Required? yes/no
 - Touched YAML files and classification:
 - Single loader path:
@@ -63,7 +71,7 @@ or
 - Consumer-level tests planned:
 - Docs/ADR impact:
 
-## 8. Implementation Plan
+## 9. Implementation Plan
 - Objective:
 - In scope:
 - Out of scope:
@@ -75,7 +83,7 @@ or
   2.
 - Rollback note:
 
-## 9. Architecture Note
+## 10. Architecture Note
 - Concurrency model:
 - Ownership/lifetime:
 - Backpressure and queue policy:
@@ -86,7 +94,7 @@ or
 - Determinism guarantees:
 - Alternatives considered:
 
-## 10. User Impact and Determinism Note
+## 11. User Impact and Determinism Note
 - User-visible behavior changes:
 - Operator-visible behavior changes:
 - Slow-client behavior:
@@ -94,13 +102,13 @@ or
 - Reconnect behavior:
 - Determinism statement:
 
-## 11. Decision-memory scan
+## 12. Decision-memory scan
 - Relevant ADRs:
 - Relevant TSRs:
 - Decision refs:
 - If none: `No relevant ADR found` / `No relevant TSR found`
 
-## 12. Implementation slices
+## 13. Implementation slices
 For each milestone:
 - what changed
 - files touched
@@ -108,7 +116,7 @@ For each milestone:
 - result
 - remaining risk before next slice
 
-## 13. Review Pass
+## 14. Review Pass
 - Findings by severity:
 - Confirmed fixes:
 - Rerun checks:
@@ -116,13 +124,13 @@ For each milestone:
 If no material findings:
 - `Review Pass findings: none material`
 
-## 14. Tests and checker results
+## 15. Tests and checker results
 - Command:
 - Purpose:
 - Result:
 - Incremental or final:
 
-## 15. Performance evidence
+## 16. Performance evidence
 - Required? yes/no
 - If yes:
   - benchmark results
@@ -130,17 +138,17 @@ If no material findings:
   - pprof highlights
   - conclusion
 
-## 16. Documentation and README
+## 17. Documentation and README
 - README impact: Required | Not required
 - README action:
 - Docs/comments updated:
 
-## 17. ADR/TSR update
+## 18. ADR/TSR update
 - ADR created/updated:
 - TSR created/updated:
 - or `No decision change`
 
-## 18. Self-Audit
+## 19. Self-Audit
 Use:
 - Scope completeness: PASS|FAIL|N/A - note
 - Dependency coverage: PASS|FAIL|N/A - note
@@ -159,7 +167,7 @@ Use:
 - Traceability completeness: PASS|FAIL|N/A - note
 - Validation block completeness: PASS|FAIL|N/A - note
 
-## 19. PR-style summary
+## 20. PR-style summary
 - Summary:
 - Tradeoffs:
 - Risks and mitigations:
@@ -173,7 +181,7 @@ Use:
 - Dependency scan evidence:
 - Decision refs:
 
-### Scope-to-Code Traceability
+## 21. Scope-to-Code Traceability
 For every Scope Ledger item that was `Agreed` or `Pending` at the start of implementation:
 - Ledger item:
 - Code locations:
@@ -181,7 +189,7 @@ For every Scope Ledger item that was `Agreed` or `Pending` at the start of imple
 - Docs/comments:
 - Decision refs:
 
-## 20. Validation block
+## 22. Validation block
 Validation Score: X/6
 Failed items: none | <comma-separated failed item numbers/names>
 Auto-fail conditions triggered: no | yes (<conditions>)

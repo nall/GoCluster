@@ -56,6 +56,7 @@ Approved vN
 ```
 
 No code, diffs, or full validation should happen before that approval.
+Before that ledger, Codex should inspect the relevant current code path so the scope is grounded in actual entry points, state, tests, and user-visible behavior.
 
 ## Practical loop
 

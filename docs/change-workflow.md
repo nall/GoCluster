@@ -45,6 +45,23 @@ For Non-trivial changes:
 - do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval
 - every scope change after approval requires a new ledger version
 
+### Current-State Discovery before Scope Ledger
+Before proposing or confirming a Non-trivial Scope Ledger, perform a targeted
+Current-State Discovery pass. The first ledger must be grounded in inspected
+code and docs, not assumptions.
+
+Minimum discovery:
+- relevant entry points and command/API surfaces
+- caller/callee flow at least one level where material
+- persisted state, config, archive, or schema surfaces when relevant
+- user-visible/operator-visible output and HELP/docs surfaces
+- existing tests for the affected behavior
+- applicable installed or repo-managed skills
+
+Ask product or semantic questions only after discoverable code facts have been
+checked. If a fact cannot be established from inspection, say
+`Unknown from inspected code` and name what should be inspected next.
+
 Before code, explicitly identify:
 - impacted contracts, or `No contract changes`
 - user-visible behavior changes, or `No user-visible behavior changes`
@@ -82,7 +99,8 @@ Output format:
 - `Git preflight: branch=<name>; worktree=<clean|dirty acknowledged>; rollback=<hash/tag/branch>`
 
 ## Current-State Understanding Note
-This is mandatory before implementation planning.
+This is mandatory before implementation planning. It extends the pre-ledger
+Current-State Discovery with the detail needed for implementation.
 
 Required content:
 - current request/data/control flow
