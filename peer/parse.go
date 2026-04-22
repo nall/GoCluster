@@ -68,6 +68,7 @@ func parsePC11(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	}
 	s.Time = ts
 	s.Comment = parsed.Comment
+	s.Events = parsed.Events
 	s.SourceType = spot.SourcePeer
 	s.SourceNode = origin
 	s.Report = parsed.Report
@@ -119,6 +120,7 @@ func parsePC61(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	}
 	s.Time = ts
 	s.Comment = parsed.Comment
+	s.Events = parsed.Events
 	s.SourceType = spot.SourcePeer
 	s.SourceNode = origin
 	s.SpotterIP = spotterIP

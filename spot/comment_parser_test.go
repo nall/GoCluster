@@ -180,12 +180,58 @@ func TestParseSpotCommentNoExplicitModeLeavesBlank(t *testing.T) {
 	}
 }
 
+func TestParseSpotCommentDetectsEventsWithoutConsumingTokens(t *testing.T) {
+	comment := "FT8 POTA SOTA-ABC WWFF-1234 LLOTA, IOTA."
+	result := ParseSpotComment(comment, 14074.0)
+
+	want := EventPOTA | EventSOTA | EventWWFF | EventLLOTA | EventIOTA
+	if result.Events != want {
+		t.Fatalf("expected events %q, got mask %b", EventString(want), result.Events)
+	}
+	if !strings.Contains(result.Comment, "POTA") || !strings.Contains(result.Comment, "SOTA-ABC") || !strings.Contains(result.Comment, "WWFF-1234") {
+		t.Fatalf("expected event tokens preserved in comment, got %q", result.Comment)
+	}
+}
+
+func TestParseSpotCommentEventReferencesRejectUnsupportedForms(t *testing.T) {
+	tests := []string{
+		"POTA/SOTA",
+		"SOTA/W1-ABC",
+		"K-1234",
+		"#POTA",
+		"POTALAND",
+		"POTA-",
+	}
+	for _, tc := range tests {
+		result := ParseSpotComment(tc, 14074.0)
+		if result.Events != 0 {
+			t.Fatalf("expected %q not to set an event, got %q", tc, EventString(result.Events))
+		}
+	}
+}
+
+func TestParseSpotEventsDerivesLegacyArchiveEvents(t *testing.T) {
+	got := ParseSpotEvents("cq pota-k-1234 and sota-abc.")
+	want := EventPOTA | EventSOTA
+	if got != want {
+		t.Fatalf("expected %q, got %q", EventString(want), EventString(got))
+	}
+}
+
+func BenchmarkParseSpotCommentEvents(b *testing.B) {
+	comment := "FT8 -12 dB POTA-1234 SOTA-ABC CQ TEST"
+	for i := 0; i < b.N; i++ {
+		_ = ParseSpotComment(comment, 14074.0)
+	}
+}
+
 func FuzzParseSpotComment(f *testing.F) {
 	seeds := []struct {
 		comment string
 		freq    float64
 	}{
 		{"FT2 -12 dB CQ TEST", 14080.0},
+		{"POTA-1234 SOTA-ABC CQ", 14074.0},
 		{"FT8 73 CQ", 14074.0},
 		{"RTTY 45 BPS TEST", 14070.0},
 		{"CQ JS8 TEST", 7078.0},

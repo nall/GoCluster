@@ -200,6 +200,34 @@ func TestPassCommands(t *testing.T) {
 			},
 		},
 		{
+			name: "pass event list",
+			cmd:  "PASS EVENT POTA,SOTA",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.Events["POTA"] || !f.Events["SOTA"] {
+					t.Fatalf("expected POTA and SOTA events to be enabled")
+				}
+				if f.AllEvents {
+					t.Fatalf("AllEvents should be false when specific events are set")
+				}
+			},
+		},
+		{
+			name: "pass event all resets",
+			cmd:  "PASS EVENT ALL",
+			setup: func(c *Client) {
+				c.filter.SetEvent("POTA", true)
+				c.filter.SetEvent("WWFF", false)
+			},
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.AllEvents || f.BlockAllEvents {
+					t.Fatalf("expected AllEvents=true and BlockAllEvents=false after PASS EVENT ALL")
+				}
+				if len(f.Events) != 0 || len(f.BlockEvents) != 0 {
+					t.Fatalf("expected PASS EVENT ALL to clear allow and block sets")
+				}
+			},
+		},
+		{
 			name: "pass dxcall pattern",
 			cmd:  "PASS DXCALL K1*",
 			check: func(t *testing.T, f *filter.Filter) {
@@ -460,6 +488,24 @@ func TestRejectCommands(t *testing.T) {
 			check: func(t *testing.T, f *filter.Filter) {
 				if !f.BlockSources["SKIMMER"] {
 					t.Fatalf("expected SKIMMER source to be blocked")
+				}
+			},
+		},
+		{
+			name: "reject event list",
+			cmd:  "REJECT EVENT WWFF",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.BlockEvents["WWFF"] {
+					t.Fatalf("expected WWFF event to be blocked")
+				}
+			},
+		},
+		{
+			name: "reject event all blocks all spots",
+			cmd:  "REJECT EVENT ALL",
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.BlockAllEvents || f.AllEvents {
+					t.Fatalf("expected all events blocked after REJECT EVENT ALL")
 				}
 			},
 		},
@@ -821,6 +867,9 @@ func TestShowFilterSnapshotDefault(t *testing.T) {
 	if !strings.Contains(resp, "PATH: allow=ALL block=NONE") {
 		t.Fatalf("expected PATH line to show allow/block defaults, got: %q", resp)
 	}
+	if !strings.Contains(resp, "EVENT: allow=ALL block=NONE") {
+		t.Fatalf("expected EVENT line to show allow/block defaults, got: %q", resp)
+	}
 	if !strings.Contains(resp, "SELF: ON") {
 		t.Fatalf("expected SELF line in snapshot, got: %q", resp)
 	}
@@ -1167,6 +1216,36 @@ func TestCCDialectDXBMMapping(t *testing.T) {
 	resp, handled = engine.Handle(client, "SET/FILTER DXBM/PASS MW-MW")
 	if !handled || !strings.Contains(resp, "Unknown DXBM band") {
 		t.Fatalf("expected unknown DXBM band error, got handled=%v resp=%q", handled, resp)
+	}
+}
+
+func TestCCDialectEventFilterOnOff(t *testing.T) {
+	engine := newFilterCommandEngine()
+	client := newTestClient()
+	client.dialect = DialectCC
+
+	resp, handled := engine.Handle(client, "SET/FILTER EVENT POTA")
+	if !handled || resp == "" {
+		t.Fatalf("expected EVENT PASS handled, got handled=%v resp=%q", handled, resp)
+	}
+	if !client.filter.Events["POTA"] {
+		t.Fatalf("expected POTA enabled via CC dialect")
+	}
+
+	resp, handled = engine.Handle(client, "SET/FILTER EVENT/OFF")
+	if !handled || resp == "" {
+		t.Fatalf("expected EVENT/OFF handled, got handled=%v resp=%q", handled, resp)
+	}
+	if !client.filter.BlockAllEvents || client.filter.AllEvents {
+		t.Fatalf("expected EVENT/OFF to map to REJECT EVENT ALL")
+	}
+
+	resp, handled = engine.Handle(client, "SET/FILTER EVENT/ON")
+	if !handled || resp == "" {
+		t.Fatalf("expected EVENT/ON handled, got handled=%v resp=%q", handled, resp)
+	}
+	if !client.filter.AllEvents || client.filter.BlockAllEvents {
+		t.Fatalf("expected EVENT/ON to map to PASS EVENT ALL")
 	}
 }
 

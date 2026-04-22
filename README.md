@@ -59,6 +59,11 @@ Confidence glyphs:
   B - A correction was attempted, but base-call or CTY validation failed, so
     the original call was kept.
 
+Event filters:
+  EVENT recognizes LLOTA, IOTA, POTA, SOTA, and WWFF as standalone comment
+    tokens or acronym-prefixed references such as POTA-1234. Only the event
+    family is filtered; the reference remains in the comment.
+
 Path reliability glyphs:
   ">" - HIGH: favorable path.
   "=" - MEDIUM: workable path.
@@ -68,11 +73,14 @@ Path reliability glyphs:
   PATH filters use HIGH, MEDIUM, LOW, UNLIKELY, INSUFFICIENT.
 
 List types:
-  BAND, MODE, SOURCE, DXCALL, DECALL, DXGRID2, DEGRID2, DXCONT, DECONT, DXZONE
-  DEZONE, DXDXCC, DEDXCC, CONFIDENCE, PATH
+  BAND, MODE, SOURCE, EVENT, DXCALL, DECALL, DXGRID2, DEGRID2, DXCONT, DECONT
+  DXZONE, DEZONE, DXDXCC, DEDXCC, CONFIDENCE, PATH
 
 Supported modes:
   CW, FT2, FT4, FT8, JS8, LSB, USB, RTTY, MSK144, PSK, SSTV, UNKNOWN
+
+Supported events:
+  LLOTA, IOTA, POTA, SOTA, WWFF
 
 Supported bands:
   2200m, 630m, 160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 2m
@@ -158,6 +166,19 @@ Useful commands:
 - If you request a disabled policy, the server automatically chooses the nearest enabled policy and tells you what it picked.
 
 WWV, WCY, and `TO ALL` announcement bulletins have a separate server-wide duplicate guard because they are delivered as telnet control traffic rather than spots. The shipped `runtime.yaml` suppresses identical bulletin lines for `600s` across peer and relay sources; set `telnet.bulletin_dedupe_window_seconds: 0` to disable that behavior.
+
+## EVENT Filtering
+
+`PASS EVENT` and `REJECT EVENT` filter spots by comment-derived activation/event family. The supported families are `LLOTA`, `IOTA`, `POTA`, `SOTA`, and `WWFF`.
+
+Event recognition is intentionally family-level. A comment token such as `POTA` or `POTA-1234` marks the spot as `POTA`; the reference text stays in the comment and is not a separate filter key. Slash forms such as `POTA/SOTA` and event-specific reference grammars without the acronym prefix are not interpreted by this filter.
+
+Useful commands:
+
+- `PASS EVENT POTA,SOTA` shows spots tagged with either family.
+- `REJECT EVENT WWFF` hides WWFF-tagged spots.
+- `PASS EVENT ALL` disables EVENT filtering.
+- `REJECT EVENT ALL` blocks every spot, including spots with no event tag.
 
 ## NEARBY Filtering
 

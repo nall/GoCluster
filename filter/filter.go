@@ -5,6 +5,7 @@
 //   - Mode (e.g., CW, USB, JS8, SSTV, FT8, RTTY)
 //   - Callsign patterns (e.g., W1*, LZ5VV, *ABC) for DX and DE calls
 //   - Source category (HUMAN vs SKIMMER/automated)
+//   - Event family (LLOTA/IOTA/POTA/SOTA/WWFF)
 //   - Path reliability class (HIGH/MEDIUM/LOW/UNLIKELY/INSUFFICIENT)
 //
 // Filter Logic:
@@ -87,6 +88,9 @@ func modeFilterTokenForSpot(s *spot.Spot) string {
 // SKIMMER represents everything else (Spot.IsHuman=false), including automated sources.
 var SupportedSources = []string{"HUMAN", "SKIMMER"}
 
+// SupportedEvents enumerates comment-derived event families available for EVENT filters.
+var SupportedEvents = spot.SupportedEvents
+
 // SupportedContinents enumerates continent codes used in DX metadata.
 var SupportedContinents = []string{"AF", "AN", "AS", "EU", "NA", "OC", "SA"}
 
@@ -125,6 +129,18 @@ var supportedSourceSet = func() map[string]bool {
 			continue
 		}
 		m[s] = true
+	}
+	return m
+}()
+
+var supportedEventSet = func() map[string]bool {
+	m := make(map[string]bool, len(SupportedEvents))
+	for _, event := range SupportedEvents {
+		e := strutil.NormalizeUpper(event)
+		if e == "" {
+			continue
+		}
+		m[e] = true
 	}
 	return m
 }()
@@ -205,6 +221,11 @@ func IsSupportedSource(source string) bool {
 	return supportedSourceSet[source]
 }
 
+// IsSupportedEvent reports whether an event label is supported for filtering.
+func IsSupportedEvent(event string) bool {
+	return normalizeEvent(event) != ""
+}
+
 // Purpose: Normalize a source label to a supported canonical value.
 // Key aspects: Returns empty string when unsupported.
 // Upstream: Filter.SetSource, SetDefaultSourceSelection.
@@ -215,6 +236,14 @@ func normalizeSource(source string) string {
 		return source
 	}
 	return ""
+}
+
+func normalizeEvent(event string) string {
+	event = spot.NormalizeEvent(event)
+	if event == "" || !supportedEventSet[event] {
+		return ""
+	}
+	return event
 }
 
 // IsSupportedContinent reports whether a continent code is supported.
@@ -387,6 +416,8 @@ type Filter struct {
 	BlockModes           map[string]bool // Blocked modes
 	Sources              map[string]bool // Allowed source categories (HUMAN/SKIMMER)
 	BlockSources         map[string]bool // Blocked source categories
+	Events               map[string]bool // Allowed event families
+	BlockEvents          map[string]bool // Blocked event families
 	DXCallsigns          []string        `yaml:"callsigns,omitempty"` // DX callsign patterns (e.g., ["W1*", "LZ5VV"])
 	BlockDXCallsigns     []string        `yaml:"block_callsigns,omitempty"`
 	DECallsigns          []string        `yaml:"decallsigns,omitempty"` // DE callsign patterns
@@ -397,6 +428,8 @@ type Filter struct {
 	BlockAllModes        bool            // If true, reject all modes
 	AllSources           bool            // If true, accept all source categories (except blocked)
 	BlockAllSources      bool            // If true, reject all sources
+	AllEvents            bool            // If true, accept all event families (except blocked)
+	BlockAllEvents       bool            // If true, reject all spots, including eventless spots
 	Confidence           map[string]bool // Allowed confidence glyphs (whitelist when non-empty)
 	BlockConfidence      map[string]bool // Blocked confidence glyphs
 	AllConfidence        bool            // If true, accept all confidence glyphs (except blocked)
@@ -510,6 +543,8 @@ func NewFilter() *Filter {
 		BlockModes:           make(map[string]bool),
 		Sources:              make(map[string]bool),
 		BlockSources:         make(map[string]bool),
+		Events:               make(map[string]bool),
+		BlockEvents:          make(map[string]bool),
 		DXCallsigns:          make([]string, 0),
 		BlockDXCallsigns:     make([]string, 0),
 		DECallsigns:          make([]string, 0),
@@ -540,6 +575,8 @@ func NewFilter() *Filter {
 		BlockAllModes:        false,
 		AllSources:           true, // Accept both HUMAN and SKIMMER spots unless narrowed
 		BlockAllSources:      false,
+		AllEvents:            true, // Accept every event family until narrowed
+		BlockAllEvents:       false,
 		AllowWWV:             boolPtr(true),
 		AllowWCY:             boolPtr(true),
 		AllowAnnounce:        boolPtr(true),
@@ -640,6 +677,21 @@ func (f *Filter) SetSource(source string, enabled bool) {
 		return
 	}
 	applyAllowBlockToggle(&f.Sources, &f.BlockSources, source, enabled, &f.AllSources, &f.BlockAllSources)
+}
+
+// SetEvent allows or blocks a supported comment-derived event family.
+// Key aspects: Normalizes to the bounded event vocabulary before mutation.
+// Upstream: Telnet PASS/REJECT EVENT commands.
+// Downstream: passesEventFilter.
+func (f *Filter) SetEvent(event string, enabled bool) {
+	if f == nil {
+		return
+	}
+	event = normalizeEvent(event)
+	if event == "" {
+		return
+	}
+	applyAllowBlockToggle(&f.Events, &f.BlockEvents, event, enabled, &f.AllEvents, &f.BlockAllEvents)
 }
 
 // AddDXCallsignPattern adds a DX callsign pattern to the allowlist.
@@ -1047,6 +1099,14 @@ func (f *Filter) ResetSources() {
 	f.BlockAllSources = false
 }
 
+// ResetEvents clears EVENT filters and allows every event family.
+func (f *Filter) ResetEvents() {
+	f.Events = make(map[string]bool)
+	f.AllEvents = true
+	f.BlockEvents = make(map[string]bool)
+	f.BlockAllEvents = false
+}
+
 // Reset resets all filter criteria back to permissive defaults.
 // Key aspects: Invokes the specific reset helpers for each filter domain.
 // Upstream: Telnet RESET ALL commands or new-session defaults.
@@ -1055,6 +1115,7 @@ func (f *Filter) Reset() {
 	f.ResetBands()
 	f.ResetModes()
 	f.ResetSources()
+	f.ResetEvents()
 	f.ClearCallsignPatterns()
 	f.ResetConfidence()
 	f.ResetPathClasses()
@@ -1397,6 +1458,9 @@ func (f *Filter) matchesWithPath(s *spot.Spot, pathClass string) bool {
 	if !passesStringFilter(sourceLabel, f.Sources, f.BlockSources, f.AllSources, f.BlockAllSources) {
 		return false
 	}
+	if !passesEventFilter(s.Events, f.Events, f.BlockEvents, f.AllEvents, f.BlockAllEvents) {
+		return false
+	}
 
 	if f.NearbyEnabled {
 		if !f.matchesNearby(s, bandNorm) {
@@ -1584,6 +1648,31 @@ func passesStringFilter(token string, allow map[string]bool, block map[string]bo
 		}
 	}
 	return true
+}
+
+func passesEventFilter(events spot.EventMask, allow map[string]bool, block map[string]bool, allowAll, blockAll bool) bool {
+	if blockAll {
+		return false
+	}
+	for event := range block {
+		bit := spot.EventMaskForName(event)
+		if bit != 0 && events&bit != 0 {
+			return false
+		}
+	}
+	if allowAll {
+		return true
+	}
+	if len(allow) == 0 {
+		return false
+	}
+	for event := range allow {
+		bit := spot.EventMaskForName(event)
+		if bit != 0 && events&bit != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Purpose: Trim whitespace with panic protection.
@@ -1786,6 +1875,19 @@ func (f *Filter) String() string {
 	}
 	if len(f.DECallsigns) > 0 || len(f.BlockDECallsigns) > 0 {
 		parts = append(parts, formatCallsignSummary("DECallsigns", f.DECallsigns, f.BlockDECallsigns))
+	}
+
+	if f.BlockAllEvents {
+		parts = append(parts, "Event: NONE (no spots will pass)")
+	} else if f.AllEvents || len(f.Events) == 0 {
+		parts = append(parts, "Event: ALL")
+	} else {
+		events := enabledEvents(f.Events)
+		if len(events) > 0 {
+			parts = append(parts, "Event: "+strings.Join(events, ", "))
+		} else {
+			parts = append(parts, "Event: NONE (no spots will pass)")
+		}
 	}
 
 	// Describe continent filters
@@ -1991,6 +2093,22 @@ func enabledPathClasses(m map[string]bool) []string {
 		out = append(out, class)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func enabledEvents(m map[string]bool) []string {
+	if len(m) == 0 {
+		return []string{"NONE"}
+	}
+	out := make([]string, 0, len(m))
+	for _, event := range SupportedEvents {
+		if m[event] {
+			out = append(out, event)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"NONE"}
+	}
 	return out
 }
 
@@ -2212,6 +2330,21 @@ func (f *Filter) migrateLegacyUnknownMode() {
 	f.Modes[UnknownModeToken] = true
 }
 
+// pruneUnsupportedEvents keeps persisted EVENT maps bounded to the supported vocabulary.
+func pruneUnsupportedEvents(m map[string]bool) {
+	for event, enabled := range m {
+		canonical := normalizeEvent(event)
+		if !enabled || canonical == "" {
+			delete(m, event)
+			continue
+		}
+		if canonical != event {
+			delete(m, event)
+			m[canonical] = true
+		}
+	}
+}
+
 // Purpose: Repair zero-value filters loaded from disk.
 // Key aspects: Ensures maps/pointers exist, migrates legacy filter state, and
 // restores permissive defaults where the saved record left fields empty.
@@ -2239,6 +2372,14 @@ func (f *Filter) normalizeDefaults() {
 	if f.BlockSources == nil {
 		f.BlockSources = make(map[string]bool)
 	}
+	if f.Events == nil {
+		f.Events = make(map[string]bool)
+	}
+	if f.BlockEvents == nil {
+		f.BlockEvents = make(map[string]bool)
+	}
+	pruneUnsupportedEvents(f.Events)
+	pruneUnsupportedEvents(f.BlockEvents)
 	if f.DXCallsigns == nil {
 		f.DXCallsigns = make([]string, 0)
 	}
@@ -2334,6 +2475,9 @@ func (f *Filter) normalizeDefaults() {
 	}
 	if len(f.Sources) == 0 {
 		f.AllSources = true
+	}
+	if len(f.Events) == 0 && !f.BlockAllEvents {
+		f.AllEvents = true
 	}
 	if len(f.Confidence) == 0 {
 		f.AllConfidence = true

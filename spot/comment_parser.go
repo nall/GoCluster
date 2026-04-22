@@ -15,6 +15,7 @@ type CommentParseResult struct {
 	HasReport bool
 	TimeToken string
 	Comment   string
+	Events    EventMask
 }
 
 type acTokenKind int
@@ -413,6 +414,7 @@ func ParseSpotComment(comment string, freq float64) CommentParseResult {
 		timeToken       string
 		speedValue      string
 		speedUnit       string
+		events          EventMask
 		pendingNumIdx   = -1
 		pendingNumValue int
 	)
@@ -437,6 +439,7 @@ func ParseSpotComment(comment string, freq float64) CommentParseResult {
 			consumed[idx] = true
 			continue
 		}
+		events |= eventFromCommentToken(tok.upper)
 		if isTimeToken(clean) {
 			if timeToken == "" {
 				timeToken = clean
@@ -533,7 +536,23 @@ func ParseSpotComment(comment string, freq float64) CommentParseResult {
 		HasReport: hasReport,
 		TimeToken: timeToken,
 		Comment:   cleaned,
+		Events:    events,
 	}
+}
+
+// ParseSpotEvents extracts EVENT families from a preserved comment without
+// applying mode/report cleanup. It is used for legacy archive records that
+// predate persisted EVENT metadata.
+func ParseSpotEvents(comment string) EventMask {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return 0
+	}
+	var events EventMask
+	for _, tok := range tokenizeComment(comment) {
+		events |= eventFromCommentToken(tok.upper)
+	}
+	return events
 }
 
 // Purpose: Decide whether a mode accepts bare numeric reports.

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"dxcluster/config"
+	"dxcluster/filter"
 	"dxcluster/spot"
 )
 
@@ -73,5 +74,67 @@ func TestRecentFilteredDeepScan(t *testing.T) {
 		if got[i].Time.After(got[i-1].Time) {
 			t.Fatalf("expected newest-first order, got %s after %s", got[i].Time, got[i-1].Time)
 		}
+	}
+}
+
+func TestRecentFilteredAppliesEventFilter(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.ArchiveConfig{
+		DBPath:              dir,
+		AutoDeleteCorruptDB: true,
+		Synchronous:         "off",
+	}
+	db, err := openArchiveDB(cfg)
+	if err != nil {
+		t.Fatalf("open archive db: %v", err)
+	}
+	defer db.Close()
+
+	writeOpts, err := archiveWriteOptions(cfg)
+	if err != nil {
+		t.Fatalf("write opts: %v", err)
+	}
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	now := time.Now().UTC()
+	spots := []*spot.Spot{
+		{
+			DXCall:    "K1POTA",
+			DECall:    "DE1AA",
+			Frequency: 14074.0,
+			Mode:      "CW",
+			Time:      now.Add(-2 * time.Second),
+			Comment:   "POTA-1234",
+			Events:    spot.EventPOTA,
+		},
+		{
+			DXCall:    "K1SOTA",
+			DECall:    "DE1AA",
+			Frequency: 14074.0,
+			Mode:      "CW",
+			Time:      now.Add(-1 * time.Second),
+			Comment:   "SOTA-ABC",
+			Events:    spot.EventSOTA,
+		},
+	}
+	for i, s := range spots {
+		key := spotKeyBytes(normalizeUnixNano(s.Time), uint32(i))
+		if err := batch.Set(key, encodeRecord(s), nil); err != nil {
+			t.Fatalf("batch set: %v", err)
+		}
+	}
+	if err := batch.Commit(writeOpts); err != nil {
+		t.Fatalf("batch commit: %v", err)
+	}
+
+	f := filter.NewFilter()
+	f.SetEvent("POTA", true)
+	got, err := (&Writer{db: db}).RecentFiltered(10, f.Matches)
+	if err != nil {
+		t.Fatalf("RecentFiltered: %v", err)
+	}
+	if len(got) != 1 || got[0].DXCall != "K1POTA" {
+		t.Fatalf("expected only K1POTA history result, got %+v", got)
 	}
 }

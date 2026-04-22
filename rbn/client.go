@@ -828,6 +828,7 @@ func (c *Client) parseSpot(line string) {
 	if comment != "" {
 		s.Comment = comment
 	}
+	s.Events = parsed.Events
 	s.IsHuman = c.minimalParse
 	if c.minimalParse {
 		s.SourceType = spot.SourceUpstream

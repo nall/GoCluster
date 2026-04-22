@@ -118,6 +118,7 @@ func (e *filterCommandEngine) registerDomains() {
 		newDXBMHandler(),
 		newModeHandler(),
 		newSourceHandler(),
+		newEventHandler(),
 		newNoFilterHandler(),
 		newCallPatternHandler("DXCALL"),
 		newCallPatternHandler("DECALL"),
@@ -602,6 +603,65 @@ func newSourceHandler() *domainHandler {
 				}
 				c.updateFilter(func(f *filter.Filter) { f.SetSource(value, false) })
 				return fmt.Sprintf("Source filters disabled: %s\n", value), true
+			default:
+				return invalidFilterCommandMsg, false
+			}
+		},
+	}
+}
+
+func newEventHandler() *domainHandler {
+	return &domainHandler{
+		name: "EVENT",
+		apply: func(c *Client, action filterAction, args []string) (string, bool) {
+			value := strings.TrimSpace(strings.Join(args, " "))
+			switch action {
+			case actionAllow:
+				if value == "" {
+					return "Usage: PASS EVENT <event>[,<event>...] (LLOTA, IOTA, POTA, SOTA, WWFF, or ALL)\nType HELP for usage.\n", false
+				}
+				if strings.EqualFold(value, "ALL") {
+					c.updateFilter(func(f *filter.Filter) { f.ResetEvents() })
+					return "Event filtering disabled\n", true
+				}
+				events := parseEventList(value)
+				if len(events) == 0 {
+					return "Usage: PASS EVENT <event>[,<event>...] (LLOTA, IOTA, POTA, SOTA, WWFF, or ALL)\nType HELP for usage.\n", false
+				}
+				if invalid := collectInvalidEvents(events); len(invalid) > 0 {
+					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents, ", ")), false
+				}
+				c.updateFilter(func(f *filter.Filter) {
+					for _, event := range events {
+						f.SetEvent(event, true)
+					}
+				})
+				return fmt.Sprintf("Filter set: Events %s\n", strings.Join(events, ", ")), true
+			case actionBlock:
+				if value == "" {
+					return "Usage: REJECT EVENT <event>[,<event>...] (comma or space separated, or ALL)\nType HELP for usage.\n", false
+				}
+				if strings.EqualFold(value, "ALL") {
+					c.updateFilter(func(f *filter.Filter) {
+						f.ResetEvents()
+						f.BlockAllEvents = true
+						f.AllEvents = false
+					})
+					return "All events blocked\n", true
+				}
+				events := parseEventList(value)
+				if len(events) == 0 {
+					return "Usage: REJECT EVENT <event>[,<event>...] (comma or space separated, or ALL)\nType HELP for usage.\n", false
+				}
+				if invalid := collectInvalidEvents(events); len(invalid) > 0 {
+					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents, ", ")), false
+				}
+				c.updateFilter(func(f *filter.Filter) {
+					for _, event := range events {
+						f.SetEvent(event, false)
+					}
+				})
+				return fmt.Sprintf("Event filters disabled: %s\n", strings.Join(events, ", ")), true
 			default:
 				return invalidFilterCommandMsg, false
 			}
@@ -1363,6 +1423,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	bands := snapshotAllowBlockStrings(f.AllBands, f.BlockAllBands, f.Bands, f.BlockBands, spot.SupportedBandNames())
 	modes := snapshotAllowBlockStrings(f.AllModes, f.BlockAllModes, f.Modes, f.BlockModes, filter.SupportedModes)
 	sources := snapshotAllowBlockStrings(f.AllSources, f.BlockAllSources, f.Sources, f.BlockSources, filter.SupportedSources)
+	events := snapshotAllowBlockStrings(f.AllEvents, f.BlockAllEvents, f.Events, f.BlockEvents, filter.SupportedEvents)
 	confidence := snapshotAllowBlockStrings(f.AllConfidence, f.BlockAllConfidence, f.Confidence, f.BlockConfidence, filter.SupportedConfidenceSymbols)
 	pathClasses := snapshotAllowBlockStrings(f.AllPathClasses, f.BlockAllPathClasses, f.PathClasses, f.BlockPathClasses, filter.SupportedPathClasses)
 	dxCont := snapshotAllowBlockStrings(f.AllDXContinents, f.BlockAllDXContinents, f.DXContinents, f.BlockDXContinents, filter.SupportedContinents)
@@ -1401,6 +1462,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 		summaryAllowBlockField("BAND", bands, maxFieldLen),
 		summaryAllowBlockField("MODE", modes, maxFieldLen),
 		summaryAllowBlockField("SOURCE", sources, maxFieldLen),
+		summaryAllowBlockField("EVENT", events, maxFieldLen),
 		clampSummaryField(dxCallSummary, maxFieldLen),
 		clampSummaryField(deCallSummary, maxFieldLen),
 		summaryAllowBlockField("CONFIDENCE", confidence, maxFieldLen),
@@ -1427,6 +1489,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	b.WriteString(formatAllowBlockLine("BAND", bands))
 	b.WriteString(formatAllowBlockLine("MODE", modes))
 	b.WriteString(formatAllowBlockLine("SOURCE", sources))
+	b.WriteString(formatAllowBlockLine("EVENT", events))
 	b.WriteString(dxCallLine)
 	b.WriteString(deCallLine)
 	b.WriteString(formatAllowBlockLine("CONFIDENCE", confidence))
@@ -1798,6 +1861,24 @@ func parseModeList(arg string) []string {
 	return modes
 }
 
+func parseEventList(arg string) []string {
+	values := splitListValues(arg)
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	events := make([]string, 0, len(values))
+	for _, value := range values {
+		event := strutil.NormalizeUpper(value)
+		if event == "" || seen[event] {
+			continue
+		}
+		events = append(events, event)
+		seen[event] = true
+	}
+	return events
+}
+
 func parseConfidenceList(arg string) []string {
 	values := splitListValues(arg)
 	if len(values) == 0 {
@@ -1973,6 +2054,16 @@ func collectInvalidModes(modes []string) []string {
 	for _, mode := range modes {
 		if !filter.IsSupportedMode(mode) {
 			invalid = append(invalid, mode)
+		}
+	}
+	return invalid
+}
+
+func collectInvalidEvents(events []string) []string {
+	invalid := make([]string, 0)
+	for _, event := range events {
+		if !filter.IsSupportedEvent(event) {
+			invalid = append(invalid, event)
 		}
 	}
 	return invalid

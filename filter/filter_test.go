@@ -349,8 +349,25 @@ func TestSetDXZoneClearsBlockAndRecomputesAllFlag(t *testing.T) {
 func TestNormalizeDefaultsRestoresPermissiveFilters(t *testing.T) {
 	var f Filter
 	f.normalizeDefaults()
-	if !f.AllSources || !f.AllPathClasses || !f.AllDXContinents || !f.AllDEContinents || !f.AllDXZones || !f.AllDEZones {
+	if !f.AllSources || !f.AllEvents || !f.AllPathClasses || !f.AllDXContinents || !f.AllDEContinents || !f.AllDXZones || !f.AllDEZones {
 		t.Fatalf("expected normalizeDefaults to restore permissive flags")
+	}
+}
+
+func TestNormalizeDefaultsPrunesUnsupportedEvents(t *testing.T) {
+	f := Filter{
+		Events:      map[string]bool{"pota": true, "BAD": true, "SOTA": false},
+		BlockEvents: map[string]bool{"wwff": true, "NOPE": true},
+	}
+	f.normalizeDefaults()
+	if !f.Events["POTA"] || len(f.Events) != 1 {
+		t.Fatalf("expected only canonical POTA allow event after normalize, got %+v", f.Events)
+	}
+	if !f.BlockEvents["WWFF"] || len(f.BlockEvents) != 1 {
+		t.Fatalf("expected only canonical WWFF block event after normalize, got %+v", f.BlockEvents)
+	}
+	if f.AllEvents {
+		t.Fatalf("expected AllEvents=false when one supported event remains")
 	}
 }
 
@@ -394,6 +411,67 @@ func TestSourceFilters(t *testing.T) {
 	}
 	if !f.Matches(skimmer) {
 		t.Fatalf("expected skimmer spot to pass when HUMAN is blocked")
+	}
+}
+
+func TestEventAllowListRequiresMatchingEvent(t *testing.T) {
+	f := NewFilter()
+	f.SetEvent("POTA", true)
+
+	pota := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	pota.Events = spot.EventPOTA
+	if !f.Matches(pota) {
+		t.Fatalf("expected POTA spot to pass PASS EVENT POTA")
+	}
+
+	sota := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	sota.Events = spot.EventSOTA
+	if f.Matches(sota) {
+		t.Fatalf("expected SOTA spot to fail PASS EVENT POTA")
+	}
+
+	none := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	if f.Matches(none) {
+		t.Fatalf("expected eventless spot to fail explicit EVENT allowlist")
+	}
+}
+
+func TestEventRejectWinsOverAllowList(t *testing.T) {
+	f := NewFilter()
+	f.SetEvent("POTA", true)
+	f.SetEvent("WWFF", false)
+
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	s.Events = spot.EventPOTA | spot.EventWWFF
+	if f.Matches(s) {
+		t.Fatalf("expected REJECT EVENT WWFF to win over PASS EVENT POTA")
+	}
+}
+
+func TestRejectEventAllBlocksEventlessSpots(t *testing.T) {
+	f := NewFilter()
+	f.ResetEvents()
+	f.BlockAllEvents = true
+	f.AllEvents = false
+
+	none := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	if f.Matches(none) {
+		t.Fatalf("expected REJECT EVENT ALL to reject eventless spot")
+	}
+}
+
+func BenchmarkEventFilterMatches(b *testing.B) {
+	f := NewFilter()
+	f.SetEvent("POTA", true)
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	s.Events = spot.EventPOTA
+	s.EnsureNormalized()
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !f.Matches(s) {
+			b.Fatal("expected match")
+		}
 	}
 }
 

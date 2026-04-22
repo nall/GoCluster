@@ -429,6 +429,7 @@ func parseRecordWithReporter(record rawSpot, badCallReporter BadCallReporter) (*
 	sp := spot.NewSpotNormalized(dxCall, deCall, freq, parsedComment.Mode)
 	sp.Time = sourceTime
 	sp.Comment = parsedComment.Comment
+	sp.Events = parsedComment.Events
 	sp.Report = parsedComment.Report
 	sp.HasReport = parsedComment.HasReport
 	sp.SourceType = spot.SourceUpstream

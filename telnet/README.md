@@ -40,6 +40,9 @@ Path and confidence filters are operator-visible here:
 
 - `PASS/REJECT CONFIDENCE` works with `?`, `S`, `C`, `P`, `V`, `B`
 - `PASS/REJECT PATH` works with `HIGH`, `MEDIUM`, `LOW`, `UNLIKELY`, `INSUFFICIENT`
+- `PASS/REJECT EVENT` works with `LLOTA`, `IOTA`, `POTA`, `SOTA`, `WWFF`, or `ALL`
+
+EVENT filters are family-level. Standalone tokens such as `POTA` and acronym-prefixed references such as `POTA-1234` both match `POTA`; the reference stays in the comment and is not separately filterable.
 
 ## Dedupe Policies
 

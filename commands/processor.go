@@ -229,6 +229,9 @@ func (p *Processor) handleHelp(dialect string, topic string) string {
 	lines = append(lines, "Supported modes:")
 	lines = append(lines, wrapListLines(filter.SupportedModes)...)
 	lines = append(lines, "")
+	lines = append(lines, "Supported events:")
+	lines = append(lines, wrapListLines(filter.SupportedEvents)...)
+	lines = append(lines, "")
 	lines = append(lines, "Supported bands:")
 	lines = append(lines, wrapListLines(spot.SupportedBandNames())...)
 	return strings.Join(lines, "\n") + "\n"
@@ -967,6 +970,8 @@ func filterHelpLines(dialect string) []string {
 	} {
 		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
 	}
+	lines = append(lines, "", "Event filters:")
+	lines = append(lines, wrapTextLines("EVENT recognizes LLOTA, IOTA, POTA, SOTA, and WWFF as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "  ", "    ")...)
 	if strings.EqualFold(strings.TrimSpace(dialect), "cc") {
 		lines = append(lines,
 			"",
@@ -1149,7 +1154,7 @@ func parseShowHistoryRequest(args []string, commandLabel string) (showHistoryReq
 
 func filterListTypes() []string {
 	return []string{
-		"BAND", "MODE", "SOURCE", "DXCALL", "DECALL", "DXGRID2",
+		"BAND", "MODE", "SOURCE", "EVENT", "DXCALL", "DECALL", "DXGRID2",
 		"DEGRID2", "DXCONT", "DECONT", "DXZONE", "DEZONE", "DXDXCC",
 		"DEDXCC", "CONFIDENCE", "PATH",
 	}
@@ -1383,6 +1388,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 		s.ModeProvenance = spot.ModeProvenanceCommentExplicit
 	}
 	s.Comment = parsed.Comment
+	s.Events = parsed.Events
 	s.Report = parsed.Report
 	s.HasReport = parsed.HasReport
 	s.SourceNode = spotterNorm

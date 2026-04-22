@@ -134,6 +134,7 @@ func TestUserRecordRoundTrip(t *testing.T) {
 
 	f := NewFilter()
 	f.SetMode("CW", true)
+	f.SetEvent("POTA", true)
 	f.NearbyEnabled = true
 	record := &UserRecord{
 		Filter:       *f,
@@ -153,6 +154,9 @@ func TestUserRecordRoundTrip(t *testing.T) {
 	if !loaded.Modes["CW"] {
 		t.Fatalf("expected CW mode to remain enabled after reload")
 	}
+	if !loaded.Events["POTA"] || loaded.AllEvents {
+		t.Fatalf("expected POTA event filter to remain enabled after reload: events=%+v all=%v", loaded.Events, loaded.AllEvents)
+	}
 	if !reflect.DeepEqual(loaded.RecentIPs, record.RecentIPs) {
 		t.Fatalf("expected recent IPs %v, got %v", record.RecentIPs, loaded.RecentIPs)
 	}
@@ -167,6 +171,66 @@ func TestUserRecordRoundTrip(t *testing.T) {
 	}
 	if !loaded.NearbyEnabled {
 		t.Fatalf("expected NEARBY to remain enabled after reload")
+	}
+}
+
+func TestUserRecordNormalizesEventFilters(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	if err := os.WriteFile(filepath.Join(tmp, "K3TO.yaml"), []byte(`
+events:
+  pota: true
+  bogus: true
+  sota: false
+blockevents:
+  wwff: true
+  bad: true
+allevents: false
+dialect: go
+dedupe_policy: MED
+`), 0o644); err != nil {
+		t.Fatalf("write user record: %v", err)
+	}
+
+	loaded, err := LoadUserRecord("K3TO")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if !loaded.Events["POTA"] || len(loaded.Events) != 1 {
+		t.Fatalf("expected only POTA event allowlist after load, got %+v", loaded.Events)
+	}
+	if !loaded.BlockEvents["WWFF"] || len(loaded.BlockEvents) != 1 {
+		t.Fatalf("expected only WWFF event blocklist after load, got %+v", loaded.BlockEvents)
+	}
+	if loaded.AllEvents {
+		t.Fatalf("expected explicit event allowlist to keep AllEvents=false")
+	}
+}
+
+func TestUserRecordPreservesEventBlockAll(t *testing.T) {
+	tmp := t.TempDir()
+	orig := UserDataDir
+	UserDataDir = tmp
+	t.Cleanup(func() { UserDataDir = orig })
+
+	if err := os.WriteFile(filepath.Join(tmp, "N0CALL.yaml"), []byte(`
+blockallevents: true
+allevents: false
+dialect: go
+dedupe_policy: MED
+`), 0o644); err != nil {
+		t.Fatalf("write user record: %v", err)
+	}
+
+	loaded, err := LoadUserRecord("N0CALL")
+	if err != nil {
+		t.Fatalf("LoadUserRecord failed: %v", err)
+	}
+	if !loaded.BlockAllEvents || loaded.AllEvents {
+		t.Fatalf("expected EVENT block-all to preserve AllEvents=false, got all=%v blockAll=%v", loaded.AllEvents, loaded.BlockAllEvents)
 	}
 }
 

@@ -20,12 +20,13 @@ func encodeRecordV2ForTest(s *spot.Spot) []byte {
 		deCall = strings.TrimSpace(s.DECall)
 	}
 	mode := strings.TrimSpace(strings.ToUpper(s.Mode))
-	lengths := [fieldCount]int{
+	comment := strings.TrimSpace(s.Comment)
+	lengths := [fieldCountV3]int{
 		len(dxCall),
 		len(deCall),
 		0,
 		len(mode),
-		0,
+		len(comment),
 		0,
 		0,
 		0,
@@ -51,7 +52,7 @@ func encodeRecordV2ForTest(s *spot.Spot) []byte {
 	binary.BigEndian.PutUint64(raw[4:], math.Float64bits(s.Frequency))
 	binary.BigEndian.PutUint32(raw[12:], uint32(int32(s.Report)))
 	offset := recordFixedHeaderSizeV2
-	for i := 0; i < fieldCount; i++ {
+	for i := 0; i < fieldCountV3; i++ {
 		binary.BigEndian.PutUint16(raw[offset:], uint16(lengths[i]))
 		offset += 2
 	}
@@ -61,7 +62,54 @@ func encodeRecordV2ForTest(s *spot.Spot) []byte {
 	copy(raw[writeOffset:], deCall)
 	writeOffset += len(deCall)
 	copy(raw[writeOffset:], mode)
+	writeOffset += len(mode)
+	copy(raw[writeOffset:], comment)
 	return raw
+}
+
+func encodeRecordV3ForTest(s *spot.Spot) []byte {
+	raw := encodeRecord(s)
+	rec, err := decodeRecord(raw)
+	if err != nil {
+		panic(err)
+	}
+	lengths := [fieldCountV3]int{
+		len(rec.dxCall),
+		len(rec.deCall),
+		len(rec.deCallStripped),
+		len(rec.mode),
+		len(rec.comment),
+		len(rec.source),
+		len(rec.sourceNode),
+		len(rec.confidence),
+		len(rec.band),
+		len(rec.dxGrid),
+		len(rec.deGrid),
+		len(rec.dxCont),
+		len(rec.deCont),
+	}
+	total := recordHeaderSizeV3
+	for _, l := range lengths {
+		total += l
+	}
+	out := make([]byte, total)
+	copy(out[:recordFixedHeaderSize], raw[:recordFixedHeaderSize])
+	out[0] = recordVersionV3
+	offset := recordFixedHeaderSize
+	for i := 0; i < fieldCountV3; i++ {
+		binary.BigEndian.PutUint16(out[offset:], uint16(lengths[i]))
+		offset += 2
+	}
+	writeOffset := recordHeaderSizeV3
+	for _, value := range []string{
+		rec.dxCall, rec.deCall, rec.deCallStripped, rec.mode, rec.comment,
+		rec.source, rec.sourceNode, rec.confidence, rec.band, rec.dxGrid,
+		rec.deGrid, rec.dxCont, rec.deCont,
+	} {
+		copy(out[writeOffset:], value)
+		writeOffset += len(value)
+	}
+	return out
 }
 
 func TestArchiveRecordStoresStrippedDECall(t *testing.T) {
@@ -142,6 +190,48 @@ func TestArchiveRecordPreservesObservedFrequency(t *testing.T) {
 	}
 	if decoded.ObservedFrequency != 14076.11 {
 		t.Fatalf("expected decoded observed frequency 14076.11, got %.2f", decoded.ObservedFrequency)
+	}
+}
+
+func TestArchiveRecordPreservesEvents(t *testing.T) {
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	s.Comment = "POTA-1234 SOTA"
+	s.Events = spot.EventPOTA | spot.EventSOTA
+
+	raw := encodeRecord(s)
+	rec, err := decodeRecord(raw)
+	if err != nil {
+		t.Fatalf("decodeRecord failed: %v", err)
+	}
+	if rec.events != s.Events {
+		t.Fatalf("expected record events %q, got %q", spot.EventString(s.Events), spot.EventString(rec.events))
+	}
+
+	decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
+	if err != nil {
+		t.Fatalf("decodeSpot failed: %v", err)
+	}
+	if decoded.Events != s.Events {
+		t.Fatalf("expected decoded events %q, got %q", spot.EventString(s.Events), spot.EventString(decoded.Events))
+	}
+}
+
+func TestArchiveLegacyRecordsDeriveEventsFromComment(t *testing.T) {
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	s.Comment = "POTA-1234 WWFF-5678"
+	want := spot.EventPOTA | spot.EventWWFF
+
+	for name, raw := range map[string][]byte{
+		"v2": encodeRecordV2ForTest(s),
+		"v3": encodeRecordV3ForTest(s),
+	} {
+		decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
+		if err != nil {
+			t.Fatalf("%s decodeSpot failed: %v", name, err)
+		}
+		if decoded.Events != want {
+			t.Fatalf("%s expected derived events %q, got %q", name, spot.EventString(want), spot.EventString(decoded.Events))
+		}
 	}
 }
 

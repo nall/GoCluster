@@ -40,7 +40,8 @@ var (
 
 const (
 	recordVersionV2         = 2
-	recordVersion           = 3
+	recordVersionV3         = 3
+	recordVersion           = 4
 	recordFixedHeaderSizeV2 = 28
 	recordFixedHeaderSize   = 36
 )
@@ -59,11 +60,14 @@ const (
 	fieldDEGrid
 	fieldDXCont
 	fieldDECont
+	fieldEvents
 	fieldCount
 )
 
 const (
-	recordHeaderSizeV2   = recordFixedHeaderSizeV2 + fieldCount*2
+	fieldCountV3         = fieldEvents
+	recordHeaderSizeV2   = recordFixedHeaderSizeV2 + fieldCountV3*2
+	recordHeaderSizeV3   = recordFixedHeaderSize + fieldCountV3*2
 	recordHeaderSize     = recordFixedHeaderSize + fieldCount*2
 	recentScanMultiplier = 20
 	recentScanGrowth     = 4
@@ -84,14 +88,16 @@ const (
 
 var errInvalidRecord = errors.New("archive: invalid record encoding")
 
-func recordLayout(version byte) (fixedHeaderSize int, headerSize int, ok bool) {
+func recordLayout(version byte) (fixedHeaderSize int, headerSize int, fieldN int, ok bool) {
 	switch version {
 	case recordVersionV2:
-		return recordFixedHeaderSizeV2, recordHeaderSizeV2, true
+		return recordFixedHeaderSizeV2, recordHeaderSizeV2, fieldCountV3, true
+	case recordVersionV3:
+		return recordFixedHeaderSize, recordHeaderSizeV3, fieldCountV3, true
 	case recordVersion:
-		return recordFixedHeaderSize, recordHeaderSize, true
+		return recordFixedHeaderSize, recordHeaderSize, fieldCount, true
 	default:
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 }
 
@@ -628,6 +634,7 @@ type archiveRecord struct {
 	deGridDerived  bool
 	dxCont         string
 	deCont         string
+	events         spot.EventMask
 	freq           float64
 	observedFreq   float64
 	report         int
@@ -676,6 +683,7 @@ func encodeRecord(s *spot.Spot) []byte {
 	}
 	dxCont := strutil.NormalizeUpper(s.DXMetadata.Continent)
 	deCont := strutil.NormalizeUpper(s.DEMetadata.Continent)
+	events := spot.EventString(s.Events)
 
 	lengths := [fieldCount]int{
 		len(dxCall),
@@ -691,6 +699,7 @@ func encodeRecord(s *spot.Spot) []byte {
 		len(deGrid),
 		len(dxCont),
 		len(deCont),
+		len(events),
 	}
 	total := recordHeaderSize
 	for _, l := range lengths {
@@ -748,6 +757,7 @@ func encodeRecord(s *spot.Spot) []byte {
 	writeString(deGrid)
 	writeString(dxCont)
 	writeString(deCont)
+	writeString(events)
 	return buf
 }
 
@@ -755,7 +765,7 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	if len(raw) < recordHeaderSizeV2 {
 		return archiveRecord{}, errInvalidRecord
 	}
-	fixedHeaderSize, headerSize, ok := recordLayout(raw[0])
+	fixedHeaderSize, headerSize, fieldN, ok := recordLayout(raw[0])
 	if !ok || len(raw) < headerSize {
 		return archiveRecord{}, errInvalidRecord
 	}
@@ -768,19 +778,19 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	dxADIF := int(binary.BigEndian.Uint32(raw[20:]))
 	deADIF := int(binary.BigEndian.Uint32(raw[24:]))
 	observedFreq := freq
-	if raw[0] == recordVersion {
+	if raw[0] == recordVersionV3 || raw[0] == recordVersion {
 		observedFreq = math.Float64frombits(binary.BigEndian.Uint64(raw[28:]))
 	}
 
 	offset := fixedHeaderSize
 	lengths := [fieldCount]int{}
-	for i := 0; i < fieldCount; i++ {
+	for i := 0; i < fieldN; i++ {
 		lengths[i] = int(binary.BigEndian.Uint16(raw[offset:]))
 		offset += 2
 	}
 	dataOffset := headerSize
 	fields := [fieldCount]string{}
-	for i := 0; i < fieldCount; i++ {
+	for i := 0; i < fieldN; i++ {
 		l := lengths[i]
 		if l == 0 {
 			continue
@@ -793,6 +803,13 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	}
 	if dataOffset != len(raw) {
 		return archiveRecord{}, errInvalidRecord
+	}
+	events := spot.EventMask(0)
+	if fieldN > fieldEvents {
+		events = spot.ParseEventString(fields[fieldEvents])
+	}
+	if events == 0 {
+		events = spot.ParseSpotEvents(fields[fieldComment])
 	}
 
 	return archiveRecord{
@@ -811,6 +828,7 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 		deGridDerived:  flags&flagDEGridDerived != 0,
 		dxCont:         fields[fieldDXCont],
 		deCont:         fields[fieldDECont],
+		events:         events,
 		freq:           freq,
 		observedFreq:   observedFreq,
 		report:         int(report),
@@ -828,14 +846,14 @@ func modeIsFTRecord(raw []byte) (bool, error) {
 	if len(raw) < recordHeaderSizeV2 {
 		return false, errInvalidRecord
 	}
-	fixedHeaderSize, headerSize, ok := recordLayout(raw[0])
+	fixedHeaderSize, headerSize, fieldN, ok := recordLayout(raw[0])
 	if !ok || len(raw) < headerSize {
 		return false, errInvalidRecord
 	}
 	offset := fixedHeaderSize
 	lengths := [fieldCount]int{}
 	total := headerSize
-	for i := 0; i < fieldCount; i++ {
+	for i := 0; i < fieldN; i++ {
 		l := int(binary.BigEndian.Uint16(raw[offset:]))
 		lengths[i] = l
 		offset += 2
@@ -893,6 +911,7 @@ func decodeSpot(ts int64, raw []byte) (*spot.Spot, error) {
 		Report:            rec.report,
 		Time:              time.Unix(0, ts).UTC(),
 		Comment:           rec.comment,
+		Events:            rec.events,
 		SourceType:        spot.SourceType(rec.source),
 		SourceNode:        rec.sourceNode,
 		TTL:               rec.ttl,

@@ -43,6 +43,7 @@ type Spot struct {
 	Report            int            // Signal report in dB (SNR for digital modes, signal strength for CW)
 	Time              time.Time      // When the spot was created
 	Comment           string         // User comment or additional info
+	Events            EventMask      // Portable/activation event families parsed from Comment
 	SourceType        SourceType     // Where this spot came from
 	SourceNode        string         // Originating node/cluster
 	SpotterIP         string         // Spotter IP address for PC61 frames (optional)
@@ -470,6 +471,7 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		Report:             s.Report,
 		Time:               s.Time,
 		Comment:            comment,
+		Events:             s.Events,
 		SourceType:         s.SourceType,
 		SourceNode:         s.SourceNode,
 		SpotterIP:          s.SpotterIP,
