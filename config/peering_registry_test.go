@@ -1,14 +1,12 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestPeeringPeerFamilyAndDirectionDefault(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
@@ -17,9 +15,7 @@ func TestPeeringPeerFamilyAndDirectionDefault(t *testing.T) {
       host: "peer.example.net"
       port: 7300
 `
-	if err := os.WriteFile(filepath.Join(dir, "peering.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write peering.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "peering.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -97,11 +93,9 @@ func TestPeeringPeerRejectsInvalidAllowIPs(t *testing.T) {
 
 func assertPeeringLoadErrorContains(t *testing.T, cfgText string, want string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "peering.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write peering.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "peering.yaml", cfgText)
 	_, err := Load(dir)
 	if err == nil {
 		t.Fatalf("expected Load() error containing %q, got nil", want)

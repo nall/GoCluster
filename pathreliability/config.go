@@ -1,6 +1,7 @@
 package pathreliability
 
 import (
+	"dxcluster/internal/yamlconfig"
 	"dxcluster/strutil"
 	"fmt"
 	"math"
@@ -42,6 +43,42 @@ type Config struct {
 	powerLUT             []float64
 	powerLUTMinDB        float64
 	powerLUTStepDB       float64
+}
+
+var requiredConfigPaths = []yamlconfig.Path{
+	{"enabled"},
+	{"allowed_bands"},
+	{"glyph_symbols", "high"},
+	{"glyph_symbols", "medium"},
+	{"glyph_symbols", "low"},
+	{"glyph_symbols", "unlikely"},
+	{"glyph_symbols", "insufficient"},
+	{"clamp_min"},
+	{"clamp_max"},
+	{"default_half_life_seconds"},
+	{"band_half_life_seconds"},
+	{"stale_after_seconds"},
+	{"stale_after_half_life_multiplier"},
+	{"max_prediction_age_half_life_multiplier"},
+	{"min_effective_weight"},
+	{"min_fine_weight"},
+	{"fine_only_weight"},
+	{"reverse_hint_discount"},
+	{"merge_receive_weight"},
+	{"merge_transmit_weight"},
+	{"mode_thresholds"},
+	{"glyph_thresholds", "high"},
+	{"glyph_thresholds", "medium"},
+	{"glyph_thresholds", "low"},
+	{"glyph_thresholds", "unlikely"},
+	{"beacon_weight_cap"},
+	{"display_enabled"},
+	{"mode_offsets", "ft4"},
+	{"mode_offsets", "cw"},
+	{"mode_offsets", "rtty"},
+	{"mode_offsets", "psk"},
+	{"mode_offsets", "wspr"},
+	{"noise_offsets_by_band"},
 }
 
 // ModeOffsets normalizes non-FT8 modes to FT8-equivalent dB.
@@ -221,126 +258,115 @@ func DefaultConfig() Config {
 	return cfg
 }
 
-// normalize fills defaults and clamps obvious invalids.
+// normalize validates relationship constraints and rebuilds derived caches.
 func (c *Config) normalize() {
+	_ = c.finalize()
+}
+
+func (c *Config) finalize() error {
 	if c == nil {
-		return
+		return nil
 	}
-	def := DefaultConfig()
 	if len(c.AllowedBands) == 0 {
-		c.AllowedBands = append([]string(nil), def.AllowedBands...)
+		return fmt.Errorf("allowed_bands must not be empty")
 	}
 	if c.ClampMax <= c.ClampMin {
-		c.ClampMin = def.ClampMin
-		c.ClampMax = def.ClampMax
+		return fmt.Errorf("clamp_max must be greater than clamp_min")
 	}
 	if c.DefaultHalfLifeSec <= 0 {
-		c.DefaultHalfLifeSec = def.DefaultHalfLifeSec
+		return fmt.Errorf("default_half_life_seconds must be > 0")
 	}
 	if c.StaleAfterSeconds <= 0 {
-		c.StaleAfterSeconds = def.StaleAfterSeconds
+		return fmt.Errorf("stale_after_seconds must be > 0")
 	}
 	if c.StaleAfterHalfLifeMultiplier <= 0 {
-		c.StaleAfterHalfLifeMultiplier = def.StaleAfterHalfLifeMultiplier
+		return fmt.Errorf("stale_after_half_life_multiplier must be > 0")
 	}
 	if c.MaxPredictionAgeHalfLifeMultiplier < 0 {
-		c.MaxPredictionAgeHalfLifeMultiplier = 0
+		return fmt.Errorf("max_prediction_age_half_life_multiplier must be >= 0")
 	}
 	if c.MinEffectiveWeight <= 0 {
-		c.MinEffectiveWeight = def.MinEffectiveWeight
+		return fmt.Errorf("min_effective_weight must be > 0")
 	}
 	if c.MinFineWeight <= 0 {
-		c.MinFineWeight = def.MinFineWeight
+		return fmt.Errorf("min_fine_weight must be > 0")
 	}
 	if c.FineOnlyWeight <= 0 {
-		c.FineOnlyWeight = def.FineOnlyWeight
+		return fmt.Errorf("fine_only_weight must be > 0")
 	}
 	if c.FineOnlyWeight < c.MinFineWeight {
 		c.FineOnlyWeight = c.MinFineWeight
 	}
 	if c.ReverseHintDiscount <= 0 || c.ReverseHintDiscount > 1 {
-		c.ReverseHintDiscount = def.ReverseHintDiscount
+		return fmt.Errorf("reverse_hint_discount must be > 0 and <= 1")
 	}
 	if c.MergeReceiveWeight <= 0 {
-		c.MergeReceiveWeight = def.MergeReceiveWeight
+		return fmt.Errorf("merge_receive_weight must be > 0")
 	}
 	if c.MergeTransmitWeight <= 0 {
-		c.MergeTransmitWeight = def.MergeTransmitWeight
+		return fmt.Errorf("merge_transmit_weight must be > 0")
 	}
 	sum := c.MergeReceiveWeight + c.MergeTransmitWeight
 	if sum <= 0 {
-		c.MergeReceiveWeight = def.MergeReceiveWeight
-		c.MergeTransmitWeight = def.MergeTransmitWeight
-		sum = c.MergeReceiveWeight + c.MergeTransmitWeight
+		return fmt.Errorf("merge weights must sum above 0")
 	}
 	if sum != 1 {
 		c.MergeReceiveWeight /= sum
 		c.MergeTransmitWeight /= sum
 	}
 	if c.BeaconWeightCap <= 0 {
-		c.BeaconWeightCap = def.BeaconWeightCap
+		return fmt.Errorf("beacon_weight_cap must be > 0")
 	}
-	// Mode offsets: leave caller-provided values unless zeroed.
-	if c.ModeOffsets.FT4 == 0 {
-		c.ModeOffsets.FT4 = def.ModeOffsets.FT4
+	if len(c.BandHalfLifeSec) > 0 {
+		normalizedHalfLife := make(map[string]int, len(c.BandHalfLifeSec))
+		for band, halfLife := range c.BandHalfLifeSec {
+			key := normalizeBand(band)
+			if key == "" {
+				return fmt.Errorf("band_half_life_seconds contains empty band")
+			}
+			if halfLife < 0 {
+				return fmt.Errorf("band_half_life_seconds.%s must be >= 0", band)
+			}
+			normalizedHalfLife[key] = halfLife
+		}
+		c.BandHalfLifeSec = normalizedHalfLife
 	}
-	if c.ModeOffsets.CW == 0 {
-		c.ModeOffsets.CW = def.ModeOffsets.CW
-	}
-	if c.ModeOffsets.RTTY == 0 {
-		c.ModeOffsets.RTTY = def.ModeOffsets.RTTY
-	}
-	if c.ModeOffsets.PSK == 0 {
-		c.ModeOffsets.PSK = def.ModeOffsets.PSK
-	}
-	if c.ModeOffsets.WSPR == 0 {
-		c.ModeOffsets.WSPR = def.ModeOffsets.WSPR
-	}
-	if c.ModeThresholds == nil {
-		c.ModeThresholds = map[string]GlyphThresholds{}
+	if len(c.ModeThresholds) == 0 {
+		return fmt.Errorf("mode_thresholds must not be empty")
 	}
 	normalizedThresholds := make(map[string]GlyphThresholds, len(c.ModeThresholds))
 	for k, v := range c.ModeThresholds {
 		key := strutil.NormalizeUpper(k)
 		if key == "" {
-			continue
+			return fmt.Errorf("mode_thresholds contains empty mode")
+		}
+		if !completeGlyphThresholds(v) {
+			return fmt.Errorf("mode_thresholds.%s must define valid high/medium/low/unlikely thresholds", k)
 		}
 		normalizedThresholds[key] = v
 	}
 	c.ModeThresholds = normalizedThresholds
-	for mode, defThresholds := range def.ModeThresholds {
-		if t, ok := c.ModeThresholds[mode]; ok {
-			merged := mergeGlyphThresholds(defThresholds, t)
-			if validGlyphThresholds(merged) {
-				c.ModeThresholds[mode] = merged
-				continue
-			}
+	for _, mode := range []string{"FT8", "FT4", "CW", "RTTY", "PSK", "USB", "LSB"} {
+		if _, ok := c.ModeThresholds[mode]; !ok {
+			return fmt.Errorf("mode_thresholds missing required mode %s", mode)
 		}
-		c.ModeThresholds[mode] = defThresholds
 	}
-	mergedFallback := mergeGlyphThresholds(def.GlyphThresholds, c.GlyphThresholds)
-	if validGlyphThresholds(mergedFallback) {
-		c.GlyphThresholds = mergedFallback
-	} else {
-		c.GlyphThresholds = def.GlyphThresholds
+	if !completeGlyphThresholds(c.GlyphThresholds) {
+		return fmt.Errorf("glyph_thresholds must define valid high/medium/low/unlikely thresholds")
 	}
-	if c.GlyphSymbols.High == "" {
-		c.GlyphSymbols.High = def.GlyphSymbols.High
+	if c.GlyphSymbols.High == "" ||
+		c.GlyphSymbols.Medium == "" ||
+		c.GlyphSymbols.Low == "" ||
+		c.GlyphSymbols.Unlikely == "" ||
+		c.GlyphSymbols.Insufficient == "" {
+		return fmt.Errorf("glyph_symbols must define high, medium, low, unlikely, and insufficient")
 	}
-	if c.GlyphSymbols.Medium == "" {
-		c.GlyphSymbols.Medium = def.GlyphSymbols.Medium
+	if err := validateNoiseOffsetsByBandForBands(c.NoiseOffsetsByBand, c.AllowedBands); err != nil {
+		return err
 	}
-	if c.GlyphSymbols.Low == "" {
-		c.GlyphSymbols.Low = def.GlyphSymbols.Low
-	}
-	if c.GlyphSymbols.Unlikely == "" {
-		c.GlyphSymbols.Unlikely = def.GlyphSymbols.Unlikely
-	}
-	if c.GlyphSymbols.Insufficient == "" {
-		c.GlyphSymbols.Insufficient = def.GlyphSymbols.Insufficient
-	}
-	c.NoiseOffsetsByBand = normalizeNoiseOffsetsByBand(c.NoiseOffsetsByBand, def.NoiseOffsetsByBand)
+	c.NoiseOffsetsByBand = normalizeNoiseOffsetsByBand(c.NoiseOffsetsByBand, nil)
 	c.buildCaches()
+	return nil
 }
 
 func (c *Config) buildCaches() {
@@ -400,27 +426,11 @@ func validGlyphThresholds(t GlyphThresholds) bool {
 	return t.High > t.Medium && t.Medium > t.Low && t.Low >= t.Unlikely
 }
 
-func mergeGlyphThresholds(def, override GlyphThresholds) GlyphThresholds {
-	if !override.hasHigh && !override.hasMedium && !override.hasLow && !override.hasUnlikely {
-		if validGlyphThresholds(override) {
-			return override
-		}
-		return def
+func completeGlyphThresholds(t GlyphThresholds) bool {
+	if t.hasHigh || t.hasMedium || t.hasLow || t.hasUnlikely {
+		return t.hasHigh && t.hasMedium && t.hasLow && t.hasUnlikely && validGlyphThresholds(t)
 	}
-	out := def
-	if override.hasHigh {
-		out.High = override.High
-	}
-	if override.hasMedium {
-		out.Medium = override.Medium
-	}
-	if override.hasLow {
-		out.Low = override.Low
-	}
-	if override.hasUnlikely {
-		out.Unlikely = override.Unlikely
-	}
-	return out
+	return validGlyphThresholds(t)
 }
 
 func validateGlyphSymbol(symbol string) error {
@@ -439,29 +449,28 @@ func (c Config) NoiseModel() NoiseModel {
 	if !c.noiseModel.empty() {
 		return c.noiseModel
 	}
-	return newNoiseModel(normalizeNoiseOffsetsByBand(c.NoiseOffsetsByBand, defaultNoiseOffsetsByBand()))
+	return newNoiseModel(c.NoiseOffsetsByBand)
 }
 
-// LoadFile loads YAML config and applies defaults.
+// LoadFile loads YAML config, validates required YAML-owned settings, and builds derived caches.
 func LoadFile(path string) (Config, error) {
-	cfg := DefaultConfig()
+	var cfg Config
 	if strings.TrimSpace(path) == "" {
-		return cfg, nil
+		return cfg, fmt.Errorf("path reliability config path is required")
 	}
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
 	}
-	providedNoise, hasNoiseByBand, err := decodeNoiseOffsetsByBand(bs)
+	_, _, err = decodeNoiseOffsetsByBand(bs)
 	if err != nil {
 		return cfg, err
 	}
-	if err := yaml.Unmarshal(bs, &cfg); err != nil {
+	if err := yamlconfig.DecodeBytes(path, bs, &cfg, requiredConfigPaths); err != nil {
 		return cfg, err
 	}
-	if hasNoiseByBand {
-		cfg.NoiseOffsetsByBand = mergeProvidedNoiseOffsetsByBand(providedNoise, defaultNoiseOffsetsByBand())
+	if err := cfg.finalize(); err != nil {
+		return cfg, err
 	}
-	cfg.normalize()
 	return cfg, nil
 }

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func writeTempConfig(t *testing.T, contents string) string {
@@ -17,8 +19,74 @@ func writeTempConfig(t *testing.T, contents string) string {
 	return path
 }
 
+func writeTempConfigOverlay(t *testing.T, contents string) string {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("..", "data", "config", "path_reliability.yaml"))
+	if err != nil {
+		t.Fatalf("read shipped path reliability config: %v", err)
+	}
+	var merged map[string]any
+	if err := yaml.Unmarshal(base, &merged); err != nil {
+		t.Fatalf("parse shipped path reliability config: %v", err)
+	}
+	var override map[string]any
+	if err := yaml.Unmarshal([]byte(contents), &override); err != nil {
+		t.Fatalf("parse override path reliability config: %v", err)
+	}
+	merged = mergeTestYAMLMaps(merged, override)
+	data, err := yaml.Marshal(merged)
+	if err != nil {
+		t.Fatalf("marshal override path reliability config: %v", err)
+	}
+	return writeTempConfig(t, string(data))
+}
+
+func writeTempConfigWithoutKey(t *testing.T, path ...string) string {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("..", "data", "config", "path_reliability.yaml"))
+	if err != nil {
+		t.Fatalf("read shipped path reliability config: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(base, &doc); err != nil {
+		t.Fatalf("parse shipped path reliability config: %v", err)
+	}
+	current := doc
+	for _, key := range path[:len(path)-1] {
+		next, ok := current[key].(map[string]any)
+		if !ok {
+			t.Fatalf("test path %s missing before final key", strings.Join(path, "."))
+		}
+		current = next
+	}
+	delete(current, path[len(path)-1])
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal config without %s: %v", strings.Join(path, "."), err)
+	}
+	return writeTempConfig(t, string(data))
+}
+
+func mergeTestYAMLMaps(dst, src map[string]any) map[string]any {
+	if dst == nil {
+		dst = make(map[string]any)
+	}
+	for key, val := range src {
+		if existing, ok := dst[key]; ok {
+			existingMap, okExisting := existing.(map[string]any)
+			incomingMap, okIncoming := val.(map[string]any)
+			if okExisting && okIncoming {
+				dst[key] = mergeTestYAMLMaps(existingMap, incomingMap)
+				continue
+			}
+		}
+		dst[key] = val
+	}
+	return dst
+}
+
 func TestLoadFileRejectsLegacyThresholdKeys(t *testing.T) {
-	path := writeTempConfig(t, `
+	path := writeTempConfigOverlay(t, `
 glyph_thresholds:
   excellent: -13
   good: -17
@@ -34,7 +102,7 @@ glyph_thresholds:
 }
 
 func TestLoadFileRejectsInvalidGlyphSymbols(t *testing.T) {
-	path := writeTempConfig(t, `
+	path := writeTempConfigOverlay(t, `
 glyph_symbols:
   high: "++"
 `)
@@ -78,52 +146,78 @@ func TestDefaultMaxPredictionAgeMultiplier(t *testing.T) {
 	}
 }
 
-func TestLoadFileNegativeMaxPredictionAgeMultiplierDisablesGate(t *testing.T) {
-	path := writeTempConfig(t, `
+func TestLoadFileRejectsNegativeMaxPredictionAgeMultiplier(t *testing.T) {
+	path := writeTempConfigOverlay(t, `
 max_prediction_age_half_life_multiplier: -1
 `)
-	cfg, err := LoadFile(path)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected negative max prediction age multiplier to fail")
 	}
-	if cfg.MaxPredictionAgeHalfLifeMultiplier != 0 {
-		t.Fatalf("negative max prediction age multiplier normalized to %v, want 0", cfg.MaxPredictionAgeHalfLifeMultiplier)
+	if !strings.Contains(err.Error(), "max_prediction_age_half_life_multiplier") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestLoadFileNoiseOffsetsByBandNormalizesAndFillsDefaults(t *testing.T) {
-	path := writeTempConfig(t, `
+func TestLoadFileRejectsNegativeNoisePenalty(t *testing.T) {
+	path := writeTempConfigOverlay(t, `
 noise_offsets_by_band:
-  quiet:
-    160M: 0
   rural:
     160M: -3
-  suburban:
-    20M: 8
-  urban:
-    20M: 12
-  industrial:
-    6M: 6
 `)
-	cfg, err := LoadFile(path)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected negative noise penalty to fail")
+	}
+	if !strings.Contains(err.Error(), "noise_offsets_by_band.RURAL.160m") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFilePreservesExplicitFT4Zero(t *testing.T) {
+	cfg, err := LoadFile(filepath.Join("..", "data", "config", "path_reliability.yaml"))
 	if err != nil {
-		t.Fatalf("load config: %v", err)
+		t.Fatalf("load shipped config: %v", err)
 	}
-	model := cfg.NoiseModel()
-	if !model.HasClass("quiet") {
-		t.Fatalf("expected quiet class to be valid")
+	if cfg.ModeOffsets.FT4 != 0 {
+		t.Fatalf("expected explicit mode_offsets.ft4=0 to survive load, got %v", cfg.ModeOffsets.FT4)
 	}
-	if got := model.Penalty("RURAL", "160m"); got != 0 {
-		t.Fatalf("expected negative rural override to clamp to 0, got %v", got)
+}
+
+func TestLoadFileRejectsMissingRequiredYAMLSettings(t *testing.T) {
+	cases := []struct {
+		name string
+		path []string
+		want string
+	}{
+		{name: "enabled", path: []string{"enabled"}, want: "enabled"},
+		{name: "display enabled", path: []string{"display_enabled"}, want: "display_enabled"},
+		{name: "ft4 offset", path: []string{"mode_offsets", "ft4"}, want: "mode_offsets.ft4"},
 	}
-	if got := model.Penalty("SUBURBAN", "20m"); got != 8 {
-		t.Fatalf("expected suburban 20m override, got %v", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadFile(writeTempConfigWithoutKey(t, tc.path...))
+			if err == nil {
+				t.Fatalf("expected missing %s to fail", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error to mention %s, got %v", tc.want, err)
+			}
+		})
 	}
-	if got := model.Penalty("URBAN", "6m"); got != 3 {
-		t.Fatalf("expected missing urban 6m to fill from defaults, got %v", got)
+}
+
+func TestLoadFileRejectsNullRequiredYAMLSetting(t *testing.T) {
+	path := writeTempConfigOverlay(t, `
+mode_offsets:
+  ft4:
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected null mode_offsets.ft4 to fail")
 	}
-	if got := model.Penalty("INDUSTRIAL", "6m"); got != 6 {
-		t.Fatalf("expected industrial 6m override, got %v", got)
+	if !strings.Contains(err.Error(), "mode_offsets.ft4") {
+		t.Fatalf("expected error to mention mode_offsets.ft4, got %v", err)
 	}
 }
 

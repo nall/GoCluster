@@ -1,0 +1,305 @@
+package config
+
+import (
+	"fmt"
+	"math"
+	"path/filepath"
+	"reflect"
+	"strings"
+)
+
+const (
+	pathReliabilityConfigFile = "path_reliability.yaml"
+	solarWeatherConfigFile    = "solarweather.yaml"
+	iaruRegionsConfigFile     = "iaru_regions.yaml"
+	iaruModeInferenceFile     = "iaru_mode_inference.yaml"
+	openAIConfigFile          = "openai.yaml"
+)
+
+type configFileClass string
+
+const (
+	configFileMergedRuntime configFileClass = "merged_runtime"
+	configFileFeatureRoot   configFileClass = "feature_root"
+	configFileReference     configFileClass = "reference_table"
+	configFileOptionalTool  configFileClass = "optional_tool"
+)
+
+type configFileSpec struct {
+	class    configFileClass
+	required bool
+}
+
+// configFileRegistry is a fixed startup-owned allowlist for YAML files under
+// data/config. It prevents accidental runtime settings from entering the
+// process through unregistered files or hidden merge behavior.
+var configFileRegistry = map[string]configFileSpec{
+	"app.yaml":                {class: configFileMergedRuntime, required: true},
+	"archive.yaml":            {class: configFileMergedRuntime, required: true},
+	"data.yaml":               {class: configFileMergedRuntime, required: true},
+	"dedupe.yaml":             {class: configFileMergedRuntime, required: true},
+	"floodcontrol.yaml":       {class: configFileMergedRuntime, required: true},
+	"ingest.yaml":             {class: configFileMergedRuntime, required: true},
+	"mode_seeds.yaml":         {class: configFileMergedRuntime, required: true},
+	"peering.yaml":            {class: configFileMergedRuntime, required: true},
+	"pipeline.yaml":           {class: configFileMergedRuntime, required: true},
+	"prop_report.yaml":        {class: configFileMergedRuntime, required: true},
+	"reputation.yaml":         {class: configFileMergedRuntime, required: true},
+	"runtime.yaml":            {class: configFileMergedRuntime, required: true},
+	pathReliabilityConfigFile: {class: configFileFeatureRoot, required: true},
+	solarWeatherConfigFile:    {class: configFileFeatureRoot, required: true},
+	iaruRegionsConfigFile:     {class: configFileReference, required: true},
+	iaruModeInferenceFile:     {class: configFileReference, required: true},
+	openAIConfigFile:          {class: configFileOptionalTool, required: false},
+}
+
+type loadedConfigDir struct {
+	merged      map[string]any
+	files       []string
+	pathsByBase map[string]string
+}
+
+func (l loadedConfigDir) mustPathFor(base string) string {
+	path, ok := l.pathsByBase[strings.ToLower(base)]
+	if !ok {
+		return base
+	}
+	return path
+}
+
+func requireRegisteredConfigFiles(loaded loadedConfigDir) error {
+	for base, spec := range configFileRegistry {
+		if !spec.required {
+			continue
+		}
+		if _, ok := loaded.pathsByBase[base]; !ok {
+			return fmt.Errorf("required config file %q not found in config directory", base)
+		}
+	}
+	return nil
+}
+
+func validateConfigFileTopLevel(file string, spec configFileSpec, doc map[string]any) error {
+	if spec.class != configFileMergedRuntime {
+		return nil
+	}
+	allowed := runtimeTopLevelKeys()
+	for key := range doc {
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("unrecognized top-level config key %q in %s", key, filepath.Base(file))
+		}
+	}
+	return nil
+}
+
+func runtimeTopLevelKeys() map[string]struct{} {
+	out := make(map[string]struct{})
+	t := reflect.TypeOf(Config{})
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		key, ok := yamlFieldName(field)
+		if !ok {
+			continue
+		}
+		out[key] = struct{}{}
+	}
+	return out
+}
+
+var runtimePresenceExemptPaths = map[string]struct{}{
+	// These fields are shared by the flood rail struct but are intentionally
+	// absent from simple rails that are validated by normalizeFloodControlConfig.
+	"flood_control.rails.decall.active_mode":                {},
+	"flood_control.rails.decall.thresholds_by_mode":         {},
+	"flood_control.rails.source_node.active_mode":           {},
+	"flood_control.rails.source_node.thresholds_by_mode":    {},
+	"flood_control.rails.spotter_ip.active_mode":            {},
+	"flood_control.rails.spotter_ip.thresholds_by_mode":     {},
+	"flood_control.rails.dxcall.thresholds_per_source_type": {},
+	"dedup.secondary_window_seconds":                        {},
+	"dedup.secondary_prefer_stronger_snr":                   {},
+	"call_correction.slash_precedence_min_reports":          {},
+}
+
+var runtimeAllowEmptySettings = map[string]struct{}{
+	"telnet.welcome_message":         {},
+	"telnet.dialect_welcome_message": {},
+	"telnet.path_status_message":     {},
+	"peering.topology.db_path":       {},
+	"reputation.ipinfo_api_token":    {},
+}
+
+var runtimeAllowZeroSettings = map[string]struct{}{
+	"ui.refresh_ms":                                                          {},
+	"rbn.keepalive_seconds":                                                  {},
+	"rbn_digital.keepalive_seconds":                                          {},
+	"human_telnet.keepalive_seconds":                                         {},
+	"telnet.broadcast_workers":                                               {},
+	"telnet.broadcast_batch_interval_ms":                                     {},
+	"telnet.keepalive_seconds":                                               {},
+	"telnet.admission_log_sample_rate":                                       {},
+	"telnet.bulletin_dedupe_window_seconds":                                  {},
+	"logging.drop_dedupe_window_seconds":                                     {},
+	"logging.dropped_calls.dedupe_window_seconds":                            {},
+	"archive.cleanup_batch_yield_ms":                                         {},
+	"dedup.cluster_window_seconds":                                           {},
+	"dedup.secondary_fast_window_seconds":                                    {},
+	"dedup.secondary_med_window_seconds":                                     {},
+	"dedup.secondary_slow_window_seconds":                                    {},
+	"pskreporter.workers":                                                    {},
+	"pskreporter.mqtt_inbound_workers":                                       {},
+	"pskreporter.mqtt_inbound_queue_depth":                                   {},
+	"pskreporter.mqtt_qos12_enqueue_timeout_ms":                              {},
+	"dxsummit.startup_backfill_seconds":                                      {},
+	"grid_cache_ttl_seconds":                                                 {},
+	"grid_ttl_days":                                                          {},
+	"peering.keepalive_seconds":                                              {},
+	"peering.config_seconds":                                                 {},
+	"call_correction.recency_seconds_cw":                                     {},
+	"call_correction.recency_seconds_rtty":                                   {},
+	"call_correction.distance3_extra_reports":                                {},
+	"call_correction.distance3_extra_advantage":                              {},
+	"call_correction.confusion_model_weight":                                 {},
+	"call_correction.min_spotter_reliability":                                {},
+	"call_correction.stabilizer_p_delay_confidence_percent":                  {},
+	"call_correction.stabilizer_p_delay_max_checks":                          {},
+	"call_correction.stabilizer_ambiguous_max_checks":                        {},
+	"call_correction.stabilizer_edit_neighbor_max_checks":                    {},
+	"call_correction.family_policy.truncation.relax_advantage.min_advantage": {},
+	"call_correction.bayes_bonus.prior_log_min_milli":                        {},
+	"call_correction.temporal_decoder.min_score":                             {},
+}
+
+var runtimeAllowNegativeSettings = map[string]struct{}{
+	"call_correction.bayes_bonus.prior_log_min_milli": {},
+}
+
+func validateMergedRuntimePresence(raw map[string]any) error {
+	return validateStructPresence(raw, reflect.TypeOf(Config{}), nil)
+}
+
+func validateStructPresence(raw map[string]any, t reflect.Type, prefix []string) error {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		key, ok := yamlFieldName(field)
+		if !ok {
+			continue
+		}
+		path := append(append([]string(nil), prefix...), key)
+		joined := strings.Join(path, ".")
+		if _, exempt := runtimePresenceExemptPaths[joined]; exempt {
+			continue
+		}
+		if !yamlKeyPresent(raw, path...) {
+			return fmt.Errorf("required YAML setting %q is missing", joined)
+		}
+		fieldType := field.Type
+		for fieldType.Kind() == reflect.Pointer {
+			fieldType = fieldType.Elem()
+		}
+		if fieldType.Kind() == reflect.Struct {
+			if err := validateStructPresence(raw, fieldType, path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateConfiguredRuntimeValues(cfg Config) error {
+	if err := validateValueTree(reflect.ValueOf(cfg), reflect.TypeOf(cfg), nil); err != nil {
+		return err
+	}
+	if cfg.Telnet.AdmissionLogSampleRate < 0 || cfg.Telnet.AdmissionLogSampleRate > 1 {
+		return fmt.Errorf("invalid YAML setting %q: must be between 0 and 1", "telnet.admission_log_sample_rate")
+	}
+	return nil
+}
+
+func validateValueTree(value reflect.Value, t reflect.Type, prefix []string) error {
+	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return nil
+		}
+		value = value.Elem()
+		t = value.Type()
+	}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		key, ok := yamlFieldName(field)
+		if !ok {
+			continue
+		}
+		path := append(append([]string(nil), prefix...), key)
+		joined := strings.Join(path, ".")
+		if _, exempt := runtimePresenceExemptPaths[joined]; exempt {
+			continue
+		}
+		fieldValue := value.Field(i)
+		fieldType := field.Type
+		for fieldType.Kind() == reflect.Pointer {
+			if fieldValue.IsNil() {
+				return fmt.Errorf("required YAML setting %q must not be null", joined)
+			}
+			fieldValue = fieldValue.Elem()
+			fieldType = fieldType.Elem()
+		}
+		switch fieldType.Kind() {
+		case reflect.Struct:
+			if err := validateValueTree(fieldValue, fieldType, path); err != nil {
+				return err
+			}
+		case reflect.String:
+			if strings.TrimSpace(fieldValue.String()) == "" {
+				if _, ok := runtimeAllowEmptySettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must not be empty", joined)
+				}
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			v := fieldValue.Int()
+			if v < 0 {
+				if _, ok := runtimeAllowNegativeSettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must be >= 0", joined)
+				}
+			} else if v == 0 {
+				if _, ok := runtimeAllowZeroSettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must be > 0", joined)
+				}
+			}
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if fieldValue.Uint() == 0 {
+				if _, ok := runtimeAllowZeroSettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must be > 0", joined)
+				}
+			}
+		case reflect.Float32, reflect.Float64:
+			f := fieldValue.Float()
+			if math.IsNaN(f) || math.IsInf(f, 0) {
+				return fmt.Errorf("invalid YAML setting %q: must be finite", joined)
+			}
+			if f < 0 {
+				if _, ok := runtimeAllowNegativeSettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must be >= 0", joined)
+				}
+			} else if f == 0 {
+				if _, ok := runtimeAllowZeroSettings[joined]; !ok {
+					return fmt.Errorf("invalid YAML setting %q: must be > 0", joined)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func yamlFieldName(field reflect.StructField) (string, bool) {
+	tag := field.Tag.Get("yaml")
+	name := strings.Split(tag, ",")[0]
+	switch {
+	case name == "-":
+		return "", false
+	case name != "":
+		return name, true
+	default:
+		return field.Name, true
+	}
+}

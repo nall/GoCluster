@@ -8,12 +8,9 @@ import (
 )
 
 func TestLoadRequiresFloodControlFile(t *testing.T) {
-	dir := t.TempDir()
-	cfgText := `dedup:
-  cluster_window_seconds: 120
-`
-	if err := os.WriteFile(filepath.Join(dir, "dedupe.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write dedupe.yaml: %v", err)
+	dir := testConfigDir(t)
+	if err := os.Remove(filepath.Join(dir, "floodcontrol.yaml")); err != nil {
+		t.Fatalf("remove floodcontrol.yaml: %v", err)
 	}
 
 	_, err := Load(dir)
@@ -26,13 +23,11 @@ func TestLoadRequiresFloodControlFile(t *testing.T) {
 }
 
 func TestLoadRejectsIncompleteFloodControlConfig(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	cfgText := `flood_control:
   enabled: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "floodcontrol.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write floodcontrol.yaml: %v", err)
-	}
+	replaceTestConfigFile(t, dir, "floodcontrol.yaml", cfgText)
 
 	_, err := Load(dir)
 	if err == nil {
@@ -44,14 +39,12 @@ func TestLoadRejectsIncompleteFloodControlConfig(t *testing.T) {
 }
 
 func TestLoadAcceptsRequiredFloodControlConfig(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dedup:
   cluster_window_seconds: 120
 `
-	if err := os.WriteFile(filepath.Join(dir, "dedupe.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write dedupe.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "dedupe.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

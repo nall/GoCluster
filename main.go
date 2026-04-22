@@ -55,13 +55,11 @@ import (
 )
 
 const (
-	dedupeEntryBytes          = 32
-	callMetaEntryBytes        = 96
-	sourceModeDelimiter       = "|"
-	defaultConfigPath         = "data/config"
-	pathReliabilityConfigFile = "path_reliability.yaml"
-	solarWeatherConfigFile    = "solarweather.yaml"
-	envConfigPath             = "DXC_CONFIG_PATH"
+	dedupeEntryBytes    = 32
+	callMetaEntryBytes  = 96
+	sourceModeDelimiter = "|"
+	defaultConfigPath   = "data/config"
+	envConfigPath       = "DXC_CONFIG_PATH"
 
 	// envGridDBCheckOnMiss overrides the config-driven grid_db_check_on_miss at runtime.
 	// When true, grid updates may synchronously consult SQLite on cache miss to avoid

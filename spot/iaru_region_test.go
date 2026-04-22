@@ -1,6 +1,11 @@
 package spot
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestResolveIARURegionUsesContinentDefaultsAndOverrides(t *testing.T) {
 	tests := []struct {
@@ -24,5 +29,26 @@ func TestResolveIARURegionUsesContinentDefaultsAndOverrides(t *testing.T) {
 				t.Fatalf("ResolveIARURegion(%d, %q) = %q, want %q", tc.adif, tc.continent, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestLoadIARURegionsFileRejectsUnknownKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "iaru_regions.yaml")
+	data := []byte(`defaults_by_continent:
+  EU: R1
+adif_overrides:
+  291: R2
+unexpected: true
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := LoadIARURegionsFile(path)
+	if err == nil {
+		t.Fatalf("expected unknown key error")
+	}
+	if !strings.Contains(err.Error(), "unexpected") {
+		t.Fatalf("expected error to mention unknown key, got %v", err)
 	}
 }

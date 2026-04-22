@@ -24,6 +24,8 @@ call_correction:
   min_advantage: 1                    # Candidate must exceed the original by this many spotters
   min_confidence_percent: 45          # Candidate supporters must represent at least this percent of unique spotters
   max_edit_distance: 3                # Max allowed Levenshtein distance between original and replacement
+  invalid_action: "broadcast"         # broadcast | suppress when consensus suggests an invalid callsign
+  band_state_overrides: []            # Optional per-band activity-state overrides
 
   # ---------------------------------------------------------------------------
   # 2.5) Call family policy (shared resolver rails)

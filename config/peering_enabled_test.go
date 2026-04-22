@@ -1,13 +1,11 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestPeeringPeerEnabledDefaultsFalseWhenOmitted(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
@@ -15,9 +13,7 @@ func TestPeeringPeerEnabledDefaultsFalseWhenOmitted(t *testing.T) {
     - host: "peer-omitted.example.net"
       port: 7300
 `
-	if err := os.WriteFile(filepath.Join(dir, "peering.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write peering.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "peering.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -32,7 +28,7 @@ func TestPeeringPeerEnabledDefaultsFalseWhenOmitted(t *testing.T) {
 }
 
 func TestPeeringPeerEnabledHonorsExplicitFalse(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
@@ -41,9 +37,7 @@ func TestPeeringPeerEnabledHonorsExplicitFalse(t *testing.T) {
       host: "peer-disabled.example.net"
       port: 7300
 `
-	if err := os.WriteFile(filepath.Join(dir, "peering.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write peering.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "peering.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -58,7 +52,7 @@ func TestPeeringPeerEnabledHonorsExplicitFalse(t *testing.T) {
 }
 
 func TestPeeringPeerEnabledHonorsExplicitTrue(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `peering:
   enabled: true
@@ -67,9 +61,7 @@ func TestPeeringPeerEnabledHonorsExplicitTrue(t *testing.T) {
       host: "peer-enabled.example.net"
       port: 7300
 `
-	if err := os.WriteFile(filepath.Join(dir, "peering.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write peering.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "peering.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

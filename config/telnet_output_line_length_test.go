@@ -1,21 +1,17 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestLoadRejectsShortTelnetOutputLineLength(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   output_line_length: 64
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", config)
 	_, err := Load(dir)
 	if err == nil {
 		t.Fatalf("expected error for short telnet output line length")

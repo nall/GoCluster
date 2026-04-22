@@ -21,6 +21,18 @@ ui:
   v2:
     pages: [overview, ingest, pipeline, events]  # Enabled pages + order
     target_fps: 15                   # Max UI refresh rate
+    event_buffer:
+      max_events: 1000               # Hard cap for retained UI event rows
+      max_bytes_mb: 1                # Hard cap for retained UI event text
+      max_message_bytes: 4096        # Truncate a single event message above this size
+      evict_on_byte_limit: true      # Evict oldest events when byte cap is reached
+      log_drops: true                # Emit log lines when event rows are dropped/truncated
+    debug_buffer:
+      max_events: 5000               # Hard cap for retained UI debug rows
+      max_bytes_mb: 2                # Hard cap for retained UI debug text
+      max_message_bytes: 4096        # Truncate a single debug message above this size
+      evict_on_byte_limit: true      # Evict oldest debug rows when byte cap is reached
+      log_drops: false               # Keep debug truncation/drop chatter out of the system log
     enable_mouse: false              # Mouse support (terminal dependent)
     keybindings:
       use_alternatives: true         # Enable o/i/p/e navigation

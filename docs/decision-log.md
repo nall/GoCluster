@@ -76,3 +76,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0064 | Band-Specific Path Noise Penalties | Accepted | 2026-04-20 | pathreliability, telnet, config | - | - | `docs/decisions/ADR-0064-band-specific-path-noise-penalties.md` |
 | ADR-0065 | Path Reliability Freshness Gate | Accepted | 2026-04-20 | pathreliability, telnet, reports, config | - | - | `docs/decisions/ADR-0065-path-reliability-freshness-gate.md` |
 | ADR-0066 | DXSummit HTTP Ingest | Accepted | 2026-04-21 | dxsummit, config, spot, runtime, docs | - | - | `docs/decisions/ADR-0066-dxsummit-http-ingest.md` |
+| ADR-0067 | Centralized YAML Settings Enforcement | Accepted | 2026-04-22 | config, pathreliability, solarweather, spot, runtime, reports | - | - | `docs/decisions/ADR-0067-centralized-yaml-settings-enforcement.md` |

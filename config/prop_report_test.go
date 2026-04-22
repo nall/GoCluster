@@ -1,20 +1,16 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestPropReportRefreshDefault(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfg := `prop_report:
   enabled: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "prop_report.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "prop_report.yaml", cfg)
 	loaded, err := Load(dir)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -25,15 +21,13 @@ func TestPropReportRefreshDefault(t *testing.T) {
 }
 
 func TestPropReportRefreshInvalid(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfg := `prop_report:
   enabled: true
   refresh_utc: "25:99"
 `
-	if err := os.WriteFile(filepath.Join(dir, "prop_report.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "prop_report.yaml", cfg)
 	if _, err := Load(dir); err == nil {
 		t.Fatalf("expected Load() to fail for invalid prop_report.refresh_utc")
 	}

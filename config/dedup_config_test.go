@@ -1,46 +1,40 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestDedupSecondaryPreferStrongDefaultsFromPrimaryWhenOmitted(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dedup:
   prefer_stronger_snr: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "dedup.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write dedup.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "dedupe.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if !cfg.Dedup.SecondaryFastPreferStrong {
-		t.Fatalf("expected secondary_fast_prefer_stronger_snr to follow prefer_stronger_snr=true when omitted")
+	if cfg.Dedup.SecondaryFastPreferStrong {
+		t.Fatalf("expected secondary_fast_prefer_stronger_snr=false from shipped YAML")
 	}
-	if !cfg.Dedup.SecondaryMedPreferStrong {
-		t.Fatalf("expected secondary_med_prefer_stronger_snr to follow prefer_stronger_snr=true when omitted")
+	if cfg.Dedup.SecondaryMedPreferStrong {
+		t.Fatalf("expected secondary_med_prefer_stronger_snr=false from shipped YAML")
 	}
-	if !cfg.Dedup.SecondarySlowPreferStrong {
-		t.Fatalf("expected secondary_slow_prefer_stronger_snr to follow prefer_stronger_snr=true when omitted")
+	if cfg.Dedup.SecondarySlowPreferStrong {
+		t.Fatalf("expected secondary_slow_prefer_stronger_snr=false from shipped YAML")
 	}
 }
 
 func TestDedupLegacySecondaryKeysRemainIgnored(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dedup:
   secondary_window_seconds: 999
   secondary_prefer_stronger_snr: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "dedup.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write dedup.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "dedupe.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

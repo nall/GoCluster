@@ -3,7 +3,11 @@
 Use two layers:
 
 - Use planning conversation to settle intent, scope, risks, and edge cases.
-- Use `AGENTS.md` as the execution contract once you want implementation to start.
+- Use `AGENTS.md` as the compact execution contract once you want implementation to start.
+
+`AGENTS.md` intentionally stays short so it can be kept in context. Its
+Document Map points to the detailed workflow, code-quality, validation, review,
+decision-memory, and command rules.
 
 ## Start in planning by default
 
@@ -19,6 +23,11 @@ Recommended prompt:
 ```text
 Plan only. Inspect the current code, identify risks and edge cases, and produce a decision-complete approach. Do not implement yet.
 ```
+
+For config, YAML, loader, or defaulting work, ask Codex to include a
+`Config Contract Audit`. The audit should show which YAML files are touched,
+which loader owns them, how missing/null/zero/false values behave, and which
+runtime consumers were checked for re-defaulting.
 
 ## Skip long planning only for clearly small work
 

@@ -23,6 +23,11 @@ metadata or licensing.
 
 Add an optional, disabled-by-default DXSummit HTTP polling client.
 
+Note: ADR-0067 later made checked-in/operator YAML the runtime source of truth.
+The values below document this ADR's original design surface; current startup
+behavior is determined by `data/config/ingest.yaml` and missing DXSummit keys
+fail config load rather than receiving loader defaults.
+
 The YAML surface is:
 
 ```yaml

@@ -1,20 +1,17 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestLoggingDropDedupeWindowDefault(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   enabled: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write app.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -26,14 +23,12 @@ func TestLoggingDropDedupeWindowDefault(t *testing.T) {
 }
 
 func TestLoggingDropDedupeWindowAllowsZero(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   drop_dedupe_window_seconds: 0
 `
-	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write app.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -45,38 +40,34 @@ func TestLoggingDropDedupeWindowAllowsZero(t *testing.T) {
 }
 
 func TestLoggingDropDedupeWindowRejectsNegative(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   drop_dedupe_window_seconds: -1
 `
-	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write app.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
 
 	if _, err := Load(dir); err == nil {
 		t.Fatalf("expected Load() to fail for negative logging.drop_dedupe_window_seconds")
 	}
 }
 
-func TestDroppedCallLoggingDefaultsDisabledWithPerFileLogsEnabled(t *testing.T) {
-	dir := t.TempDir()
+func TestDroppedCallLoggingUsesShippedYAMLWithPerFileLogsEnabled(t *testing.T) {
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   enabled: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write app.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Logging.DroppedCalls.Enabled {
-		t.Fatalf("expected dropped-call logging disabled by default")
+	if !cfg.Logging.DroppedCalls.Enabled {
+		t.Fatalf("expected dropped-call logging enabled from shipped YAML")
 	}
-	if cfg.Logging.DroppedCalls.Dir != filepath.Join("data", "logs", "dropped_calls") {
+	if filepath.Clean(cfg.Logging.DroppedCalls.Dir) != filepath.Join("data", "logs", "dropped_calls") {
 		t.Fatalf("unexpected dropped-call dir %q", cfg.Logging.DroppedCalls.Dir)
 	}
 	if cfg.Logging.DroppedCalls.RetentionDays != 7 {
@@ -91,7 +82,7 @@ func TestDroppedCallLoggingDefaultsDisabledWithPerFileLogsEnabled(t *testing.T) 
 }
 
 func TestDroppedCallLoggingHonorsExplicitToggles(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `logging:
   dropped_calls:
@@ -103,9 +94,7 @@ func TestDroppedCallLoggingHonorsExplicitToggles(t *testing.T) {
     no_license: false
     harmonics: false
 `
-	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write app.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -150,11 +139,9 @@ func TestDroppedCallLoggingRejectsNegativeBounds(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testConfigDir(t)
 			writeRequiredFloodControlFile(t, dir)
-			if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(tc.body), 0o644); err != nil {
-				t.Fatalf("write app.yaml: %v", err)
-			}
+			writeTestConfigOverlay(t, dir, "app.yaml", tc.body)
 			if _, err := Load(dir); err == nil {
 				t.Fatalf("expected Load() to reject %s", tc.name)
 			}

@@ -1,20 +1,16 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestLoadRejectsUnknownTelnetTransport(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	config := `telnet:
   transport: "unsupported"
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(config), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", config)
 	if _, err := Load(dir); err == nil {
 		t.Fatalf("expected error for unknown telnet transport")
 	}

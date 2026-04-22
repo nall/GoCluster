@@ -50,7 +50,20 @@ or
 - Config/metrics/logs/docs affected:
 - Dependency scan evidence: <required for Full rigor>
 
-## 7. Implementation Plan
+## 7. Config Contract Audit
+- Required? yes/no
+- Touched YAML files and classification:
+- Single loader path:
+- Unknown-key behavior:
+- Missing-key behavior:
+- Null behavior:
+- Explicit `0` / `false` behavior:
+- Defaults audit evidence:
+- Downstream consumers reviewed:
+- Consumer-level tests planned:
+- Docs/ADR impact:
+
+## 8. Implementation Plan
 - Objective:
 - In scope:
 - Out of scope:
@@ -62,7 +75,7 @@ or
   2.
 - Rollback note:
 
-## 8. Architecture Note
+## 9. Architecture Note
 - Concurrency model:
 - Ownership/lifetime:
 - Backpressure and queue policy:
@@ -73,7 +86,7 @@ or
 - Determinism guarantees:
 - Alternatives considered:
 
-## 9. User Impact and Determinism Note
+## 10. User Impact and Determinism Note
 - User-visible behavior changes:
 - Operator-visible behavior changes:
 - Slow-client behavior:
@@ -81,13 +94,13 @@ or
 - Reconnect behavior:
 - Determinism statement:
 
-## 10. Decision-memory scan
+## 11. Decision-memory scan
 - Relevant ADRs:
 - Relevant TSRs:
 - Decision refs:
 - If none: `No relevant ADR found` / `No relevant TSR found`
 
-## 11. Implementation slices
+## 12. Implementation slices
 For each milestone:
 - what changed
 - files touched
@@ -95,7 +108,7 @@ For each milestone:
 - result
 - remaining risk before next slice
 
-## 12. Review Pass
+## 13. Review Pass
 - Findings by severity:
 - Confirmed fixes:
 - Rerun checks:
@@ -103,13 +116,13 @@ For each milestone:
 If no material findings:
 - `Review Pass findings: none material`
 
-## 13. Tests and checker results
+## 14. Tests and checker results
 - Command:
 - Purpose:
 - Result:
 - Incremental or final:
 
-## 14. Performance evidence
+## 15. Performance evidence
 - Required? yes/no
 - If yes:
   - benchmark results
@@ -117,22 +130,23 @@ If no material findings:
   - pprof highlights
   - conclusion
 
-## 15. Documentation and README
+## 16. Documentation and README
 - README impact: Required | Not required
 - README action:
 - Docs/comments updated:
 
-## 16. ADR/TSR update
+## 17. ADR/TSR update
 - ADR created/updated:
 - TSR created/updated:
 - or `No decision change`
 
-## 17. Self-Audit
+## 18. Self-Audit
 Use:
 - Scope completeness: PASS|FAIL|N/A - note
 - Dependency coverage: PASS|FAIL|N/A - note
 - Contract disclosure: PASS|FAIL|N/A - note
 - Correctness/protocol semantics: PASS|FAIL|N/A - note
+- Config contract integrity: PASS|FAIL|N/A - note
 - Concurrency/lifecycle: PASS|FAIL|N/A - note
 - Backpressure/drop/disconnect semantics: PASS|FAIL|N/A - note
 - Resource bounds: PASS|FAIL|N/A - note
@@ -145,11 +159,12 @@ Use:
 - Traceability completeness: PASS|FAIL|N/A - note
 - Validation block completeness: PASS|FAIL|N/A - note
 
-## 18. PR-style summary
+## 19. PR-style summary
 - Summary:
 - Tradeoffs:
 - Risks and mitigations:
 - Contracts and compatibility:
+- Config contract audit:
 - User impact and determinism:
 - Observability impact:
 - README impact:
@@ -166,7 +181,7 @@ For every Scope Ledger item that was `Agreed` or `Pending` at the start of imple
 - Docs/comments:
 - Decision refs:
 
-## 19. Validation block
+## 20. Validation block
 Validation Score: X/6
 Failed items: none | <comma-separated failed item numbers/names>
 Auto-fail conditions triggered: no | yes (<conditions>)

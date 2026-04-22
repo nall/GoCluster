@@ -19,6 +19,8 @@ Review focus:
 - correctness
 - protocol/format compatibility
 - hidden behavior drift
+- YAML schema, required-key, null, and sentinel-value behavior
+- hidden runtime defaults or downstream config re-defaulting
 - edge cases
 - concurrency and lifecycle safety
 - cancellation and shutdown
@@ -40,6 +42,7 @@ After the Review Pass, produce a Self-Audit with pass/fail for each category bel
 - Dependency impact coverage
 - Contract and user-visible behavior disclosure
 - Correctness and protocol semantics
+- Config contract integrity
 - Concurrency, cancellation, deadlines, and shutdown
 - Backpressure, queue, drop, and disconnect policy
 - Resource bounds
@@ -66,6 +69,7 @@ Required sections:
 - Tradeoffs
 - Risks and mitigations
 - Contracts and compatibility
+- Config contract audit
 - User impact and determinism
 - Observability impact
 - README impact

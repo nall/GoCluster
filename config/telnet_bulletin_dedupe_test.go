@@ -1,14 +1,12 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestLoadAppliesTelnetBulletinDedupeDefaults(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 
 	cfg, err := Load(dir)
@@ -24,14 +22,12 @@ func TestLoadAppliesTelnetBulletinDedupeDefaults(t *testing.T) {
 }
 
 func TestLoadAllowsDisabledTelnetBulletinDedupe(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `telnet:
   bulletin_dedupe_window_seconds: 0
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -40,20 +36,18 @@ func TestLoadAllowsDisabledTelnetBulletinDedupe(t *testing.T) {
 	if got := cfg.Telnet.BulletinDedupeWindowSeconds; got != 0 {
 		t.Fatalf("expected disabled bulletin dedupe window 0, got %d", got)
 	}
-	if got := cfg.Telnet.BulletinDedupeMaxEntries; got != 0 {
-		t.Fatalf("expected omitted max to stay 0 when disabled, got %d", got)
+	if got := cfg.Telnet.BulletinDedupeMaxEntries; got != 4096 {
+		t.Fatalf("expected configured max entries to remain 4096 when window disables dedupe, got %d", got)
 	}
 }
 
 func TestLoadRejectsNegativeTelnetBulletinDedupeWindow(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `telnet:
   bulletin_dedupe_window_seconds: -1
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", cfgText)
 
 	_, err := Load(dir)
 	if err == nil {
@@ -65,15 +59,13 @@ func TestLoadRejectsNegativeTelnetBulletinDedupeWindow(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidTelnetBulletinDedupeMaxEntriesWhenEnabled(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `telnet:
   bulletin_dedupe_window_seconds: 60
   bulletin_dedupe_max_entries: 0
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", cfgText)
 
 	_, err := Load(dir)
 	if err == nil {
@@ -85,15 +77,13 @@ func TestLoadRejectsInvalidTelnetBulletinDedupeMaxEntriesWhenEnabled(t *testing.
 }
 
 func TestLoadAcceptsExplicitTelnetBulletinDedupeSettings(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `telnet:
   bulletin_dedupe_window_seconds: 120
   bulletin_dedupe_max_entries: 64
 `
-	if err := os.WriteFile(filepath.Join(dir, "runtime.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write runtime.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "runtime.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

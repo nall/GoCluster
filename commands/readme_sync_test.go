@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"dxcluster/config"
-	"dxcluster/pathreliability"
 )
 
 const (
@@ -24,10 +23,7 @@ func TestReadmeDefaultGoHelpBlockMatchesProcessor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load shipped config: %v", err)
 	}
-	pathCfg, err := pathreliability.LoadFile(filepath.Join(repoRoot, "data", "config", "path_reliability.yaml"))
-	if err != nil {
-		t.Fatalf("load shipped path reliability config: %v", err)
-	}
+	pathCfg := cfg.PathReliability
 
 	p := NewProcessor(nil, nil, nil, nil, nil, nil,
 		WithDedupeHelp(DedupeHelpConfig{

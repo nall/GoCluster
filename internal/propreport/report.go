@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,9 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"dxcluster/config"
 	"dxcluster/internal/openaiutil"
+	"dxcluster/internal/yamlconfig"
 	"dxcluster/pathreliability"
-	"gopkg.in/yaml.v3"
 )
 
 type Logger interface {
@@ -29,6 +31,7 @@ type Options struct {
 	LogPath          string
 	JSONOut          string
 	ReportOut        string
+	ConfigDir        string
 	PathConfigPath   string
 	OpenAIConfigPath string
 	NoLLM            bool
@@ -157,6 +160,15 @@ type openAIConfig struct {
 	MaxTokens    int     `yaml:"max_tokens"`
 	Temperature  float64 `yaml:"temperature"`
 	SystemPrompt string  `yaml:"system_prompt"`
+}
+
+var requiredOpenAIConfigPaths = []yamlconfig.Path{
+	{"api_key"},
+	{"model"},
+	{"endpoint"},
+	{"max_tokens"},
+	{"temperature"},
+	{"system_prompt"},
 }
 
 type weightBins struct {
@@ -425,17 +437,56 @@ func maxInt(vals []int) int {
 
 func loadOpenAIConfig(path string) (openAIConfig, error) {
 	if strings.TrimSpace(path) == "" {
-		return openAIConfig{}, nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return openAIConfig{}, err
+		return openAIConfig{}, fmt.Errorf("OpenAI config path is required")
 	}
 	var cfg openAIConfig
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+	if err := yamlconfig.DecodeFile(path, &cfg, requiredOpenAIConfigPaths); err != nil {
 		return openAIConfig{}, err
 	}
+	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
+	cfg.Model = strings.TrimSpace(cfg.Model)
+	cfg.Endpoint = strings.TrimSpace(cfg.Endpoint)
+	cfg.SystemPrompt = strings.TrimSpace(cfg.SystemPrompt)
+	if cfg.Model == "" {
+		return openAIConfig{}, fmt.Errorf("openai.yaml model must not be empty")
+	}
+	if cfg.Endpoint == "" {
+		return openAIConfig{}, fmt.Errorf("openai.yaml endpoint must not be empty")
+	}
+	parsed, err := url.ParseRequestURI(cfg.Endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return openAIConfig{}, fmt.Errorf("openai.yaml endpoint must be an absolute URL")
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return openAIConfig{}, fmt.Errorf("openai.yaml endpoint scheme must be http or https")
+	}
+	if cfg.MaxTokens <= 0 {
+		return openAIConfig{}, fmt.Errorf("openai.yaml max_tokens must be > 0")
+	}
+	if math.IsNaN(cfg.Temperature) || math.IsInf(cfg.Temperature, 0) || cfg.Temperature < 0 {
+		return openAIConfig{}, fmt.Errorf("openai.yaml temperature must be >= 0")
+	}
+	if cfg.SystemPrompt == "" {
+		return openAIConfig{}, fmt.Errorf("openai.yaml system_prompt must not be empty")
+	}
+	if cfg.APIKey == "" && strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
+		return openAIConfig{}, fmt.Errorf("OpenAI API key missing; set openai.yaml api_key or OPENAI_API_KEY")
+	}
 	return cfg, nil
+}
+
+func resolveConfigDir(configDir, legacyPath string) string {
+	resolved := strings.TrimSpace(configDir)
+	if legacy := strings.TrimSpace(legacyPath); legacy != "" {
+		resolved = legacy
+	}
+	if resolved == "" {
+		resolved = filepath.Join("data", "config")
+	}
+	if strings.EqualFold(filepath.Base(resolved), "path_reliability.yaml") {
+		resolved = filepath.Dir(resolved)
+	}
+	return resolved
 }
 
 func buildModelContext(cfg pathreliability.Config, bands []string) modelContext {
@@ -537,19 +588,25 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 		reportOut = filepath.Join("data", "reports", fmt.Sprintf("prop-%s.md", date.Format("2006-01-02")))
 	}
 
-	pathConfigPath := strings.TrimSpace(opts.PathConfigPath)
-	if pathConfigPath == "" {
-		pathConfigPath = filepath.Join("data", "config", "path_reliability.yaml")
-	}
+	configDir := resolveConfigDir(opts.ConfigDir, opts.PathConfigPath)
 	openAIConfigPath := strings.TrimSpace(opts.OpenAIConfigPath)
 	if openAIConfigPath == "" {
 		openAIConfigPath = filepath.Join("data", "config", "openai.yaml")
 	}
 
-	pathCfg, err := pathreliability.LoadFile(pathConfigPath)
+	cfg, err := config.Load(configDir)
 	if err != nil {
-		logf("Warning: failed to load path reliability config (%s): %v", pathConfigPath, err)
-		pathCfg = pathreliability.DefaultConfig()
+		return result, fmt.Errorf("load config directory for path model context %q: %w", configDir, err)
+	}
+	pathCfg := cfg.PathReliability
+
+	var openaiCfg openAIConfig
+	if !opts.NoLLM {
+		var err error
+		openaiCfg, err = loadOpenAIConfig(openAIConfigPath)
+		if err != nil {
+			return result, fmt.Errorf("load OpenAI config %q: %w", openAIConfigPath, err)
+		}
 	}
 
 	entries, err := parseLog(logPath)
@@ -949,29 +1006,24 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 
 	finalReport := buildFinalReport(summary)
 	if !opts.NoLLM {
-		openaiCfg, err := loadOpenAIConfig(openAIConfigPath)
+		reqCtx := ctx
+		if _, ok := reqCtx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			reqCtx, cancel = context.WithTimeout(reqCtx, 60*time.Second)
+			defer cancel()
+		}
+		llmText, err := openaiutil.Generate(reqCtx, openaiutil.Config{
+			APIKey:       openaiCfg.APIKey,
+			Model:        openaiCfg.Model,
+			Endpoint:     openaiCfg.Endpoint,
+			MaxTokens:    openaiCfg.MaxTokens,
+			Temperature:  openaiCfg.Temperature,
+			SystemPrompt: openaiCfg.SystemPrompt,
+		}, string(jsonBytes))
 		if err != nil {
-			logf("Warning: failed to load OpenAI config (%s): %v", openAIConfigPath, err)
-		} else {
-			reqCtx := ctx
-			if _, ok := reqCtx.Deadline(); !ok {
-				var cancel context.CancelFunc
-				reqCtx, cancel = context.WithTimeout(reqCtx, 60*time.Second)
-				defer cancel()
-			}
-			llmText, err := openaiutil.Generate(reqCtx, openaiutil.Config{
-				APIKey:       openaiCfg.APIKey,
-				Model:        openaiCfg.Model,
-				Endpoint:     openaiCfg.Endpoint,
-				MaxTokens:    openaiCfg.MaxTokens,
-				Temperature:  openaiCfg.Temperature,
-				SystemPrompt: openaiCfg.SystemPrompt,
-			}, string(jsonBytes))
-			if err != nil {
-				logf("Warning: OpenAI request failed: %v", err)
-			} else if strings.TrimSpace(llmText) != "" {
-				finalReport += "\n\nLLM narrative\n\n" + strings.TrimSpace(llmText) + "\n"
-			}
+			logf("Warning: OpenAI request failed: %v", err)
+		} else if strings.TrimSpace(llmText) != "" {
+			finalReport += "\n\nLLM narrative\n\n" + strings.TrimSpace(llmText) + "\n"
 		}
 	}
 

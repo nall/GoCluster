@@ -1,18 +1,14 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestCustomSCPHistoryAndStaticHorizonDefaults(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	pipeline := "call_correction:\n  custom_scp:\n    enabled: true\n"
-	if err := os.WriteFile(filepath.Join(dir, "pipeline.yaml"), []byte(pipeline), 0o644); err != nil {
-		t.Fatalf("write pipeline.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "pipeline.yaml", pipeline)
 
 	cfg, err := Load(dir)
 	if err != nil {

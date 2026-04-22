@@ -9,6 +9,7 @@ This rubric is designed to catch false-complete work:
 - missing dependency analysis
 - missing or overstated validation
 - hidden behavior changes
+- config/schema changes that skip YAML contract review
 - missing docs, review, or traceability
 
 A task can compile and still fail this rubric.
@@ -70,6 +71,7 @@ Score `1` only if all are true:
   - config, metrics, logs, or docs affected
 - If `Full` rigor applied, Codex included:
   `Dependency scan evidence: <commands/steps>; reviewed files/packages: <list>`
+- For config/schema work, Codex included a `Config Contract Audit`.
 
 Score `0` if any are true:
 - Codex coded without a concrete current-state read of the system.
@@ -77,6 +79,7 @@ Score `0` if any are true:
 - Upstream or downstream impact was skipped.
 - Shared components or interfaces were not examined when clearly relevant.
 - A Full-rigor task lacked `Dependency scan evidence`.
+- Config/schema work omitted the `Config Contract Audit`.
 
 ### 4) Pre-code design discipline
 Score `1` only if, before coding, Codex provided all of the following:
@@ -85,6 +88,8 @@ Score `1` only if, before coding, Codex provided all of the following:
 - a distinct `Implementation Plan`
 - a short `Architecture Note`
 - a `User Impact and Determinism Note`
+- for config/schema work, a `Config Contract Audit` that covers required-key,
+  null, explicit `0`, explicit `false`, defaults, and downstream consumers
 
 The plan must include:
 - objective
@@ -173,6 +178,9 @@ Mark the task non-compliant regardless of numeric score if any of the following 
 7. Codex left placeholders, stubs, `TODO`, or deferred-hardening markers in touched files.
 8. Codex failed to include Scope-to-Code Traceability for approved scope items.
 9. Codex omitted the exact final 3-line validation block.
+10. Codex changed YAML/config/schema/defaulting behavior without a Config Contract Audit.
+11. Codex introduced or preserved a runtime fallback for a YAML-owned setting without explicitly documenting and approving that exception.
+12. Codex changed documented zero/false sentinel behavior without consumer-level regression tests.
 
 ## Waivers
 Waivers are allowed only when explicit, narrowly scoped, and time-bounded.
@@ -191,6 +199,7 @@ If the waived item is part of an automatic fail condition, the task still fails 
 - Skill checked
 - Current state understood
 - Dependencies scanned
+- Config Contract Audit completed when config/schema/defaulting behavior changed
 - Pre-code design stated
 - Tests and checks run
 - Review Pass completed
@@ -225,4 +234,4 @@ Required final block present: Yes / No
 Block content:
 Validation Score: 
 Failed items: 
-Auto-fail conditions triggered: 
+Auto-fail conditions triggered:

@@ -1,20 +1,16 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestReputationIPInfoBooleansDefaultTrueWhenOmitted(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `reputation:
   enabled: true
 `
-	if err := os.WriteFile(filepath.Join(dir, "reputation.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write reputation.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "reputation.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -38,7 +34,7 @@ func TestReputationIPInfoBooleansDefaultTrueWhenOmitted(t *testing.T) {
 }
 
 func TestReputationIPInfoBooleansHonorExplicitFalse(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `reputation:
   enabled: true
@@ -48,9 +44,7 @@ func TestReputationIPInfoBooleansHonorExplicitFalse(t *testing.T) {
   ipinfo_pebble_cleanup: false
   ipinfo_pebble_compact: false
 `
-	if err := os.WriteFile(filepath.Join(dir, "reputation.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write reputation.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "reputation.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

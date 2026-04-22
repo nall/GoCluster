@@ -1,6 +1,7 @@
 package solarweather
 
 import (
+	"dxcluster/internal/yamlconfig"
 	"dxcluster/strutil"
 	"fmt"
 	"math"
@@ -8,8 +9,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config holds tunables for solar/geomagnetic override gating.
@@ -32,6 +31,51 @@ type Config struct {
 	gLevels  []gLevel
 	rMaxHold time.Duration
 	levelErr error
+}
+
+var requiredConfigPaths = []yamlconfig.Path{
+	{"enabled"},
+	{"fetch_interval_seconds"},
+	{"request_timeout_seconds"},
+	{"sun", "cache_seconds"},
+	{"sun", "twilight_degrees"},
+	{"sun", "daylight_enter"},
+	{"sun", "daylight_exit"},
+	{"sun", "near_terminator_hold"},
+	{"daylight", "cross_norm_tiny"},
+	{"daylight", "d_small_rad"},
+	{"daylight", "d_antipodal_rad"},
+	{"daylight", "eps_base_rad"},
+	{"daylight", "eps_scale"},
+	{"high_lat", "use_kp_boundary"},
+	{"high_lat", "fixed_l_edge_deg"},
+	{"high_lat", "l_edge_min_deg"},
+	{"high_lat", "l_edge_max_deg"},
+	{"high_lat", "l_edge_slope_deg_per_kp"},
+	{"high_lat", "enter_max_abs_offset_deg"},
+	{"high_lat", "exit_max_abs_offset_deg"},
+	{"high_lat", "enter_frac"},
+	{"high_lat", "exit_frac"},
+	{"high_lat", "m_tiny"},
+	{"gate_cache", "max_entries"},
+	{"gate_cache", "ttl_seconds"},
+	{"goes", "url"},
+	{"goes", "energy_band"},
+	{"goes", "max_age_seconds"},
+	{"kp", "url"},
+	{"kp", "max_age_seconds"},
+	{"r_levels"},
+	{"r_levels", "*", "name"},
+	{"r_levels", "*", "min_flux_wm2"},
+	{"r_levels", "*", "hold_minutes"},
+	{"r_levels", "*", "bands"},
+	{"g_levels"},
+	{"g_levels", "*", "name"},
+	{"g_levels", "*", "min_kp"},
+	{"g_levels", "*", "bands"},
+	{"glyphs", "r"},
+	{"glyphs", "g"},
+	{"path_key_include_band"},
 }
 
 // SunConfig controls solar-position caching and twilight thresholds.
@@ -119,12 +163,17 @@ type gLevel struct {
 	BandMask bandMask
 }
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 // DefaultConfig returns a pinned default configuration.
 func DefaultConfig() Config {
 	cfg := Config{
-		Enabled:           false,
-		FetchIntervalSec:  60,
-		RequestTimeoutSec: 10,
+		Enabled:            false,
+		FetchIntervalSec:   60,
+		RequestTimeoutSec:  10,
+		PathKeyIncludeBand: boolPtr(true),
 		Sun: SunConfig{
 			CacheSeconds:       60,
 			TwilightDegrees:    0,
@@ -209,131 +258,118 @@ func DefaultConfig() Config {
 	return cfg
 }
 
-// normalize fills defaults and clamps invalid values.
+// normalize validates relationship constraints and rebuilds derived level caches.
 func (c *Config) normalize() {
+	_ = c.finalize()
+}
+
+func (c *Config) finalize() error {
 	if c == nil {
-		return
+		return nil
 	}
-	def := DefaultConfig()
 	if c.FetchIntervalSec <= 0 {
-		c.FetchIntervalSec = def.FetchIntervalSec
+		return fmt.Errorf("fetch_interval_seconds must be > 0")
 	}
 	if c.RequestTimeoutSec <= 0 {
-		c.RequestTimeoutSec = def.RequestTimeoutSec
+		return fmt.Errorf("request_timeout_seconds must be > 0")
 	}
 	if c.Sun.CacheSeconds <= 0 {
-		c.Sun.CacheSeconds = def.Sun.CacheSeconds
+		return fmt.Errorf("sun.cache_seconds must be > 0")
 	}
-	if c.Sun.DaylightEnter <= 0 {
-		c.Sun.DaylightEnter = def.Sun.DaylightEnter
-	}
-	if c.Sun.DaylightExit <= 0 {
-		c.Sun.DaylightExit = def.Sun.DaylightExit
+	if c.Sun.DaylightEnter < c.Sun.DaylightExit {
+		return fmt.Errorf("sun.daylight_enter must be >= sun.daylight_exit")
 	}
 	if c.Daylight.CrossNormTiny <= 0 {
-		c.Daylight.CrossNormTiny = def.Daylight.CrossNormTiny
+		return fmt.Errorf("daylight.cross_norm_tiny must be > 0")
 	}
 	if c.Daylight.DSmallRad <= 0 {
-		c.Daylight.DSmallRad = def.Daylight.DSmallRad
+		return fmt.Errorf("daylight.d_small_rad must be > 0")
 	}
 	if c.Daylight.DAntipodalRad <= 0 {
-		c.Daylight.DAntipodalRad = def.Daylight.DAntipodalRad
+		return fmt.Errorf("daylight.d_antipodal_rad must be > 0")
 	}
 	if c.Daylight.EpsBaseRad <= 0 {
-		c.Daylight.EpsBaseRad = def.Daylight.EpsBaseRad
+		return fmt.Errorf("daylight.eps_base_rad must be > 0")
 	}
 	if c.Daylight.EpsScale <= 0 {
-		c.Daylight.EpsScale = def.Daylight.EpsScale
+		return fmt.Errorf("daylight.eps_scale must be > 0")
 	}
 	if c.HighLat.FixedLEdgeDeg <= 0 {
-		c.HighLat.FixedLEdgeDeg = def.HighLat.FixedLEdgeDeg
+		return fmt.Errorf("high_lat.fixed_l_edge_deg must be > 0")
 	}
 	if c.HighLat.LEdgeMinDeg <= 0 {
-		c.HighLat.LEdgeMinDeg = def.HighLat.LEdgeMinDeg
+		return fmt.Errorf("high_lat.l_edge_min_deg must be > 0")
 	}
 	if c.HighLat.LEdgeMaxDeg <= 0 {
-		c.HighLat.LEdgeMaxDeg = def.HighLat.LEdgeMaxDeg
+		return fmt.Errorf("high_lat.l_edge_max_deg must be > 0")
+	}
+	if c.HighLat.LEdgeMaxDeg < c.HighLat.LEdgeMinDeg {
+		return fmt.Errorf("high_lat.l_edge_max_deg must be >= high_lat.l_edge_min_deg")
 	}
 	if c.HighLat.LEdgeSlopeDegPerK <= 0 {
-		c.HighLat.LEdgeSlopeDegPerK = def.HighLat.LEdgeSlopeDegPerK
+		return fmt.Errorf("high_lat.l_edge_slope_deg_per_kp must be > 0")
 	}
 	if c.HighLat.EnterMaxAbsOffset <= 0 {
-		c.HighLat.EnterMaxAbsOffset = def.HighLat.EnterMaxAbsOffset
+		return fmt.Errorf("high_lat.enter_max_abs_offset_deg must be > 0")
 	}
 	if c.HighLat.ExitMaxAbsOffset <= 0 {
-		c.HighLat.ExitMaxAbsOffset = def.HighLat.ExitMaxAbsOffset
+		return fmt.Errorf("high_lat.exit_max_abs_offset_deg must be > 0")
 	}
 	if c.HighLat.EnterFrac <= 0 {
-		c.HighLat.EnterFrac = def.HighLat.EnterFrac
+		return fmt.Errorf("high_lat.enter_frac must be > 0")
 	}
 	if c.HighLat.ExitFrac <= 0 {
-		c.HighLat.ExitFrac = def.HighLat.ExitFrac
+		return fmt.Errorf("high_lat.exit_frac must be > 0")
 	}
 	if c.HighLat.MTiny <= 0 {
-		c.HighLat.MTiny = def.HighLat.MTiny
+		return fmt.Errorf("high_lat.m_tiny must be > 0")
 	}
 	if c.GateCache.MaxEntries <= 0 {
-		c.GateCache.MaxEntries = def.GateCache.MaxEntries
+		return fmt.Errorf("gate_cache.max_entries must be > 0")
 	}
 	if c.GateCache.TTLSeconds <= 0 {
-		c.GateCache.TTLSeconds = def.GateCache.TTLSeconds
+		return fmt.Errorf("gate_cache.ttl_seconds must be > 0")
 	}
 	c.GOES.URL = strings.TrimSpace(c.GOES.URL)
 	if c.GOES.URL == "" {
-		c.GOES.URL = def.GOES.URL
+		return fmt.Errorf("goes.url must not be empty")
 	}
 	if strings.TrimSpace(c.GOES.EnergyBand) == "" {
-		c.GOES.EnergyBand = def.GOES.EnergyBand
+		return fmt.Errorf("goes.energy_band must not be empty")
 	}
 	if c.GOES.MaxAgeSec <= 0 {
-		c.GOES.MaxAgeSec = def.GOES.MaxAgeSec
+		return fmt.Errorf("goes.max_age_seconds must be > 0")
 	}
 	c.Kp.URL = strings.TrimSpace(c.Kp.URL)
 	if c.Kp.URL == "" {
-		c.Kp.URL = def.Kp.URL
+		return fmt.Errorf("kp.url must not be empty")
 	}
 	if c.Kp.MaxAgeSec <= 0 {
-		c.Kp.MaxAgeSec = def.Kp.MaxAgeSec
+		return fmt.Errorf("kp.max_age_seconds must be > 0")
 	}
 	if strings.TrimSpace(c.Glyphs.R) == "" {
-		c.Glyphs.R = def.Glyphs.R
+		return fmt.Errorf("glyphs.r must not be empty")
 	}
 	if strings.TrimSpace(c.Glyphs.G) == "" {
-		c.Glyphs.G = def.Glyphs.G
+		return fmt.Errorf("glyphs.g must not be empty")
 	}
 	if c.PathKeyIncludeBand == nil {
-		v := true
-		c.PathKeyIncludeBand = &v
+		return fmt.Errorf("path_key_include_band must be set")
 	}
 
-	rInput := c.RLevels
-	if len(rInput) == 0 {
-		rInput = def.RLevels
-	}
-	rLevels, rMaxHold, rErr := normalizeRLevels(rInput)
+	rLevels, rMaxHold, rErr := normalizeRLevels(c.RLevels)
 	if rErr != nil {
-		c.levelErr = rErr
-		fallbackLevels, fallbackMaxHold, fallbackErr := normalizeRLevels(def.RLevels)
-		if fallbackErr == nil {
-			rLevels, rMaxHold = fallbackLevels, fallbackMaxHold
-		}
+		return rErr
 	}
 	c.rLevels = rLevels
 	c.rMaxHold = rMaxHold
 
-	gInput := c.GLevels
-	if len(gInput) == 0 {
-		gInput = def.GLevels
-	}
-	gLevels, gErr := normalizeGLevels(gInput)
+	gLevels, gErr := normalizeGLevels(c.GLevels)
 	if gErr != nil {
-		c.levelErr = gErr
-		fallbackLevels, fallbackErr := normalizeGLevels(def.GLevels)
-		if fallbackErr == nil {
-			gLevels = fallbackLevels
-		}
+		return gErr
 	}
 	c.gLevels = gLevels
+	return nil
 }
 
 func normalizeRLevels(input []RLevel) ([]rLevel, time.Duration, error) {
@@ -345,7 +381,7 @@ func normalizeRLevels(input []RLevel) ([]rLevel, time.Duration, error) {
 	for i, lvl := range input {
 		name := strutil.NormalizeUpper(lvl.Name)
 		if name == "" {
-			name = fmt.Sprintf("R%d", i+2)
+			return nil, 0, fmt.Errorf("r_levels[%d] name must not be empty", i)
 		}
 		if lvl.MinFluxWM2 <= 0 {
 			return nil, 0, fmt.Errorf("r_levels[%d] min_flux_wm2 must be > 0", i)
@@ -385,7 +421,7 @@ func normalizeGLevels(input []GLevel) ([]gLevel, error) {
 	for i, lvl := range input {
 		name := strutil.NormalizeUpper(lvl.Name)
 		if name == "" {
-			name = fmt.Sprintf("G%d", i+2)
+			return nil, fmt.Errorf("g_levels[%d] name must not be empty", i)
 		}
 		if lvl.MinKp <= 0 {
 			return nil, fmt.Errorf("g_levels[%d] min_kp must be > 0", i)
@@ -409,25 +445,30 @@ func normalizeGLevels(input []GLevel) ([]gLevel, error) {
 	return levels, nil
 }
 
-// LoadFile loads YAML config and applies defaults.
+// LoadFile loads YAML config, validates required YAML-owned settings, and builds derived level caches.
 func LoadFile(path string) (Config, error) {
-	cfg := DefaultConfig()
+	var cfg Config
 	if strings.TrimSpace(path) == "" {
-		return cfg, nil
+		return cfg, fmt.Errorf("solar weather config path is required")
 	}
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
 	}
-	if err := yaml.Unmarshal(bs, &cfg); err != nil {
+	if err := yamlconfig.DecodeBytes(path, bs, &cfg, requiredConfigPaths); err != nil {
 		return cfg, err
 	}
-	cfg.normalize()
+	if err := cfg.finalize(); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
 // Validate performs sanity checks on the configuration.
 func (c Config) Validate() error {
+	if err := c.finalize(); err != nil {
+		return err
+	}
 	if c.levelErr != nil {
 		return c.levelErr
 	}

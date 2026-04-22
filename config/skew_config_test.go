@@ -1,23 +1,16 @@
 package config
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 // Purpose: Verify skew min_abs_skew defaults to 1 when omitted.
 // Key aspects: Ensures selection threshold is active by default.
 // Upstream: go test.
 // Downstream: Load.
 func TestSkewMinAbsSkewDefault(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "data.yaml")
 	cfgText := "skew:\n  enabled: true\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "data.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -33,13 +26,10 @@ func TestSkewMinAbsSkewDefault(t *testing.T) {
 // Upstream: go test.
 // Downstream: Load.
 func TestSkewMinAbsSkewOverride(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "data.yaml")
 	cfgText := "skew:\n  enabled: true\n  min_abs_skew: 1.25\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "data.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {

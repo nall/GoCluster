@@ -145,14 +145,14 @@ func (s *propReportScheduler) logf(format string, args ...any) {
 }
 
 type propReportGenerator struct {
-	pathConfig   string
+	configDir    string
 	openAIConfig string
 	logger       *log.Logger
 }
 
 func newPropReportGenerator(configDir string, logger *log.Logger) *propReportGenerator {
 	return &propReportGenerator{
-		pathConfig:   filepath.Join(configDir, "path_reliability.yaml"),
+		configDir:    configDir,
 		openAIConfig: filepath.Join(configDir, "openai.yaml"),
 		logger:       logger,
 	}
@@ -171,7 +171,7 @@ func (g *propReportGenerator) Run(ctx context.Context, job propReportJob) error 
 		LogPath:          job.LogPath,
 		JSONOut:          filepath.Join("data", "reports", fmt.Sprintf("prop-%s.json", job.Date.Format(propReportDateLayout))),
 		ReportOut:        filepath.Join("data", "reports", fmt.Sprintf("prop-%s.md", job.Date.Format(propReportDateLayout))),
-		PathConfigPath:   g.pathConfig,
+		ConfigDir:        g.configDir,
 		OpenAIConfigPath: g.openAIConfig,
 		NoLLM:            false,
 		Logger:           g.logger,

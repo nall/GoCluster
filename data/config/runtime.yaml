@@ -47,8 +47,10 @@ telnet:
     <CONTEXT> input is too long (maximum <MAX_LEN> characters).
   input_invalid_char_message: |
     <CONTEXT> input may only contain <ALLOWED>.
+  dialect_welcome_message: ""
   dialect_source_default_label: "default"
   dialect_source_persisted_label: "persisted"
+  path_status_message: ""
 
   duplicate_login_message: |
     Another login with your call. This session is being closed (multiple logins are not allowed).

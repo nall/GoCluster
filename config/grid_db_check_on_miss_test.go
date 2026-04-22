@@ -1,18 +1,10 @@
 package config
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func TestGridDBCheckOnMissDefaultsTrue(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "grid.yaml")
-	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -27,12 +19,9 @@ func TestGridDBCheckOnMissDefaultsTrue(t *testing.T) {
 }
 
 func TestGridDBCheckOnMissAllowsFalse(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "grid.yaml")
-	if err := os.WriteFile(path, []byte("grid_db_check_on_miss: false\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "data.yaml", "grid_db_check_on_miss: false\n")
 
 	cfg, err := Load(dir)
 	if err != nil {

@@ -160,14 +160,11 @@ The shipped threshold table is:
 | USB | 22 | 17 | 13 | 10 |
 | LSB | 22 | 17 | 13 | 10 |
 
-## Shipped Config Versus Code Defaults
+## Config Ownership
 
-The package also defines built-in defaults in [`config.go`](config.go). Those defaults are safety fallbacks, not always the same as the repo's shipped `data/config/path_reliability.yaml`.
+Runtime path reliability settings are owned by [`../data/config/path_reliability.yaml`](../data/config/path_reliability.yaml). Startup loads that file through the central config registry and fails if required settings are missing or malformed.
 
-When documenting current operator behavior:
-
-- use the shipped config for "what this repo does out of the box"
-- use the code defaults only when explicitly discussing fallback behavior
+`DefaultConfig()` remains a package-local test/helper baseline for constructing in-memory fixtures. It is not a runtime fallback, and production behavior should be documented from YAML.
 
 ## Solar Overrides
 

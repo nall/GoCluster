@@ -95,10 +95,6 @@ func normalizeNoiseOffsetsByBand(in map[string]map[string]float64, defaults map[
 	return out
 }
 
-func mergeProvidedNoiseOffsetsByBand(provided map[string]map[string]float64, defaults map[string]map[string]float64) map[string]map[string]float64 {
-	return normalizeNoiseOffsetsByBand(provided, defaults)
-}
-
 func clampNoisePenalty(penalty float64) float64 {
 	if penalty < 0 {
 		return 0
@@ -235,6 +231,46 @@ func validateProvidedNoiseOffsetsByBand(table map[string]map[string]float64) err
 	for _, class := range canonicalNoiseClasses {
 		if _, ok := seen[class]; !ok {
 			return fmt.Errorf("noise_offsets_by_band missing required class %s", class)
+		}
+	}
+	return nil
+}
+
+func validateNoiseOffsetsByBandForBands(table map[string]map[string]float64, allowedBands []string) error {
+	if err := validateProvidedNoiseOffsetsByBand(table); err != nil {
+		return err
+	}
+	requiredBands := make(map[string]struct{}, len(allowedBands))
+	for _, band := range allowedBands {
+		key := normalizeBand(band)
+		if key == "" {
+			return fmt.Errorf("allowed_bands contains empty band")
+		}
+		requiredBands[key] = struct{}{}
+	}
+	if len(requiredBands) == 0 {
+		return fmt.Errorf("allowed_bands must not be empty")
+	}
+	for class, bands := range table {
+		classKey := strutil.NormalizeUpper(class)
+		seenBands := make(map[string]struct{}, len(bands))
+		for band, penalty := range bands {
+			bandKey := normalizeBand(band)
+			if bandKey == "" {
+				return fmt.Errorf("noise_offsets_by_band.%s contains empty band", classKey)
+			}
+			if _, ok := requiredBands[bandKey]; !ok {
+				return fmt.Errorf("noise_offsets_by_band.%s contains unsupported band %s", classKey, band)
+			}
+			if penalty < 0 {
+				return fmt.Errorf("noise_offsets_by_band.%s.%s must be >= 0", classKey, bandKey)
+			}
+			seenBands[bandKey] = struct{}{}
+		}
+		for band := range requiredBands {
+			if _, ok := seenBands[band]; !ok {
+				return fmt.Errorf("noise_offsets_by_band.%s missing required band %s", classKey, band)
+			}
 		}
 	}
 	return nil

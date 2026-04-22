@@ -1,14 +1,12 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestLoadDXSummitDefaultsAndOverrides(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
 	cfgText := `dxsummit:
   enabled: true
@@ -18,9 +16,7 @@ func TestLoadDXSummitDefaultsAndOverrides(t *testing.T) {
   lookback_seconds: 300
   include_bands: ["hf", "VHF", " UHF "]
 `
-	if err := os.WriteFile(filepath.Join(dir, "ingest.yaml"), []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write ingest.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "ingest.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -108,11 +104,9 @@ func TestLoadRejectsInvalidDXSummitConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testConfigDir(t)
 			writeRequiredFloodControlFile(t, dir)
-			if err := os.WriteFile(filepath.Join(dir, "ingest.yaml"), []byte(tt.body), 0o644); err != nil {
-				t.Fatalf("write ingest.yaml: %v", err)
-			}
+			writeTestConfigOverlay(t, dir, "ingest.yaml", tt.body)
 			_, err := Load(dir)
 			if err == nil {
 				t.Fatal("expected Load() error")

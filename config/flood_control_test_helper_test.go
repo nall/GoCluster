@@ -1,10 +1,6 @@
 package config
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 const requiredFloodControlConfig = `flood_control:
   enabled: true
@@ -85,7 +81,5 @@ const requiredFloodControlConfig = `flood_control:
 
 func writeRequiredFloodControlFile(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "floodcontrol.yaml"), []byte(requiredFloodControlConfig), 0o644); err != nil {
-		t.Fatalf("write floodcontrol.yaml: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "floodcontrol.yaml", requiredFloodControlConfig)
 }

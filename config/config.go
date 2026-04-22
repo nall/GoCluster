@@ -1,8 +1,10 @@
-// Package config loads the cluster's YAML configuration, normalizes defaults,
-// and exposes a strongly typed struct other packages rely on at startup.
+// Package config loads the cluster's YAML configuration, validates required
+// settings, and exposes a strongly typed struct other packages rely on at
+// startup.
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"net/url"
@@ -12,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"dxcluster/pathreliability"
+	"dxcluster/solarweather"
 	"dxcluster/strutil"
 
 	"gopkg.in/yaml.v3"
@@ -118,10 +122,9 @@ func normalizeTelnetHandshakeMode(value TelnetHandshakeMode) (TelnetHandshakeMod
 	}
 }
 
-// Config represents the complete cluster configuration. The struct maps
-// directly to the YAML files on disk (merged from a config directory) and is
-// enriched with defaults during Load so downstream packages can assume sane,
-// non-zero values.
+// Config represents the complete startup configuration built from data/config.
+// Merged runtime files populate the main YAML tree; feature-root files populate
+// typed fields below without changing their file-local YAML shapes.
 type Config struct {
 	Server              ServerConfig         `yaml:"server"`
 	Telnet              TelnetConfig         `yaml:"telnet"`
@@ -166,7 +169,9 @@ type Config struct {
 	GridDBCheckOnMiss *bool `yaml:"grid_db_check_on_miss"`
 	GridTTLDays       int   `yaml:"grid_ttl_days"`
 	// GridPreflightTimeoutMS is ignored for the Pebble grid store (retained for compatibility).
-	GridPreflightTimeoutMS int `yaml:"grid_preflight_timeout_ms"`
+	GridPreflightTimeoutMS int                    `yaml:"grid_preflight_timeout_ms"`
+	PathReliability        pathreliability.Config `yaml:"-"`
+	SolarWeather           solarweather.Config    `yaml:"-"`
 	// LoadedFrom is populated by Load with the path or directory used to build
 	// this configuration. It is not driven by YAML.
 	LoadedFrom string `yaml:"-"`
@@ -777,6 +782,8 @@ type DedupConfig struct {
 	SecondaryMedPreferStrong   bool `yaml:"secondary_med_prefer_stronger_snr"`  // keep max SNR in med secondary buckets
 	SecondarySlowPreferStrong  bool `yaml:"secondary_slow_prefer_stronger_snr"` // keep max SNR in slow secondary buckets
 	OutputBufferSize           int  `yaml:"output_buffer_size"`                 // channel capacity for dedup output
+	LegacySecondaryWindow      int  `yaml:"secondary_window_seconds"`           // deprecated: accepted only so Load can warn and ignore it
+	LegacySecondaryPreferSNR   bool `yaml:"secondary_prefer_stronger_snr"`      // deprecated: accepted only so Load can warn and ignore it
 }
 
 // FilterConfig holds default filter behavior for new users.
@@ -818,7 +825,8 @@ type CallCorrectionConfig struct {
 	BandStateOverrides []BandStateOverride `yaml:"band_state_overrides"`
 	// FamilyPolicy groups slash/truncation family precedence behavior and
 	// telnet output suppression bounds.
-	FamilyPolicy CallCorrectionFamilyPolicyConfig `yaml:"family_policy"`
+	FamilyPolicy                    CallCorrectionFamilyPolicyConfig `yaml:"family_policy"`
+	LegacySlashPrecedenceMinReports int                              `yaml:"slash_precedence_min_reports"` // deprecated: family_policy.slash_precedence_min_reports wins
 	// MinConsensusReports defines how many other unique spotters
 	// must agree on an alternate callsign before we consider correcting it.
 	MinConsensusReports int `yaml:"min_consensus_reports"`
@@ -1436,11 +1444,12 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 	}
 }
 
-// Load reads configuration from a YAML directory (or a single YAML file if a file
-// path is explicitly supplied), applies defaults, and validates key fields so the
-// rest of the cluster can rely on a consistent baseline.
+// Load reads configuration from a YAML directory, validates required settings,
+// and normalizes derived relationships so the rest of the cluster can rely on a
+// consistent baseline.
 // Purpose: Load and normalize the cluster configuration from a directory.
-// Key aspects: Supports directory merge; applies defaults and validates values.
+// Key aspects: Uses the filename registry; rejects unknown/missing settings and
+// invalid values before startup.
 // Upstream: main.go startup.
 // Downstream: loadConfigDir, mergeYAMLMaps, normalize* helpers.
 func Load(path string) (*Config, error) {
@@ -1453,28 +1462,46 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config path %q must be a directory containing YAML files", path)
 	}
 
-	merged, files, err := loadConfigDir(path)
+	loaded, err := loadConfigDir(path)
 	if err != nil {
 		return nil, err
 	}
-	if err := requireConfigFile(files, "floodcontrol.yaml"); err != nil {
+	if err := requireRegisteredConfigFiles(loaded); err != nil {
 		return nil, err
 	}
-	raw := merged
-	data, err := yaml.Marshal(merged)
+	raw := loaded.merged
+	if err := validateMergedRuntimePresence(raw); err != nil {
+		return nil, err
+	}
+	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render merged config from %q: %w", path, err)
 	}
 	// Store the directory we loaded from to aid downstream diagnostics.
-	if len(files) > 0 {
+	if len(loaded.files) > 0 {
 		path = filepath.Clean(path)
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file %q: %w", path, err)
 	}
 	cfg.LoadedFrom = filepath.Clean(path)
+	if err := validateConfiguredRuntimeValues(cfg); err != nil {
+		return nil, err
+	}
+	pathCfg, err := pathreliability.LoadFile(loaded.mustPathFor(pathReliabilityConfigFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s: %w", pathReliabilityConfigFile, err)
+	}
+	cfg.PathReliability = pathCfg
+	solarCfg, err := solarweather.LoadFile(loaded.mustPathFor(solarWeatherConfigFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s: %w", solarWeatherConfigFile, err)
+	}
+	cfg.SolarWeather = solarCfg
 
 	presence := captureLoadRawPresence(raw)
 
@@ -1542,8 +1569,8 @@ func normalizeUIConfig(cfg *Config, raw map[string]any, presence loadRawPresence
 	default:
 		return fmt.Errorf("invalid ui.mode %q: must be ansi, tview, tview-v2, or headless", cfg.UI.Mode)
 	}
-	if cfg.UI.RefreshMS <= 0 {
-		cfg.UI.RefreshMS = 250
+	if cfg.UI.RefreshMS < 0 {
+		return fmt.Errorf("invalid ui.refresh_ms %d (must be >= 0)", cfg.UI.RefreshMS)
 	}
 	if cfg.UI.PaneLines.Stats <= 0 {
 		cfg.UI.PaneLines.Stats = 8
@@ -1634,8 +1661,9 @@ func normalizeDroppedCallLoggingConfig(cfg *Config, presence loadRawPresence) er
 }
 
 func normalizeFeedConfig(cfg *Config, presence loadRawPresence) {
-	// Feed buffers and keepalives need deterministic defaults because callers
-	// assume these are always normalized after config.Load returns.
+	// Feed buffers need deterministic defaults because callers assume these are
+	// always normalized after config.Load returns. Keepalives are YAML-owned; an
+	// explicit 0 disables them.
 	if cfg.RBN.SlotBuffer <= 0 {
 		cfg.RBN.SlotBuffer = 4000
 	}
@@ -1653,15 +1681,6 @@ func normalizeFeedConfig(cfg *Config, presence loadRawPresence) {
 	}
 	if cfg.HumanTelnet.KeepaliveSec < 0 {
 		cfg.HumanTelnet.KeepaliveSec = 0
-	}
-	if cfg.RBN.KeepaliveSec == 0 {
-		cfg.RBN.KeepaliveSec = 240
-	}
-	if cfg.RBNDigital.KeepaliveSec == 0 {
-		cfg.RBNDigital.KeepaliveSec = cfg.RBN.KeepaliveSec
-	}
-	if cfg.HumanTelnet.KeepaliveSec == 0 {
-		cfg.HumanTelnet.KeepaliveSec = 240
 	}
 	if cfg.PSKReporter.Workers < 0 {
 		cfg.PSKReporter.Workers = 0
@@ -2554,8 +2573,8 @@ func normalizeTelnetConfig(cfg *Config, presence loadRawPresence) error {
 	if cfg.Telnet.WriterBatchWaitMS <= 0 {
 		cfg.Telnet.WriterBatchWaitMS = 5
 	}
-	if cfg.Telnet.BroadcastBatchIntervalMS <= 0 {
-		cfg.Telnet.BroadcastBatchIntervalMS = 250
+	if cfg.Telnet.BroadcastBatchIntervalMS < 0 {
+		return fmt.Errorf("invalid telnet.broadcast_batch_interval_ms %d (must be >= 0)", cfg.Telnet.BroadcastBatchIntervalMS)
 	}
 	if cfg.Telnet.KeepaliveSeconds < 0 {
 		cfg.Telnet.KeepaliveSeconds = 0
@@ -2607,12 +2626,6 @@ func normalizeTelnetConfig(cfg *Config, presence loadRawPresence) error {
 	}
 	if cfg.Telnet.AdmissionLogIntervalSeconds <= 0 {
 		cfg.Telnet.AdmissionLogIntervalSeconds = 10
-	}
-	if cfg.Telnet.AdmissionLogSampleRate < 0 {
-		cfg.Telnet.AdmissionLogSampleRate = 0
-	}
-	if cfg.Telnet.AdmissionLogSampleRate > 1 {
-		cfg.Telnet.AdmissionLogSampleRate = 1
 	}
 	if cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval <= 0 {
 		cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval = 20
@@ -2715,14 +2728,11 @@ func normalizePeeringConfig(cfg *Config) error {
 	} else {
 		return fmt.Errorf("invalid peering.telnet_transport %q (expected %q or %q)", cfg.Peering.TelnetTransport, TelnetTransportNative, TelnetTransportZiutek)
 	}
-	if cfg.Peering.KeepaliveSeconds <= 0 {
-		// Default to a short heartbeat to keep remote DXSpider peers from idling us out.
-		// Applies to both PC92 (pc9x) and PC51 (legacy) keepalives.
-		cfg.Peering.KeepaliveSeconds = 30
+	if cfg.Peering.KeepaliveSeconds < 0 {
+		return fmt.Errorf("invalid peering.keepalive_seconds %d (must be >= 0)", cfg.Peering.KeepaliveSeconds)
 	}
-	if cfg.Peering.ConfigSeconds <= 0 {
-		// Periodic PC92 C "config" refresh; DXSpider peers purge config after missing several periods.
-		cfg.Peering.ConfigSeconds = 180
+	if cfg.Peering.ConfigSeconds < 0 {
+		return fmt.Errorf("invalid peering.config_seconds %d (must be >= 0)", cfg.Peering.ConfigSeconds)
 	}
 	if cfg.Peering.WriteQueueSize <= 0 {
 		cfg.Peering.WriteQueueSize = 256
@@ -3187,13 +3197,14 @@ func normalizeReputationConfig(cfg *Config, presence loadRawPresence) {
 // Key aspects: Sorted file order provides deterministic overrides.
 // Upstream: Load.
 // Downstream: yaml.Unmarshal, mergeYAMLMaps.
-func loadConfigDir(path string) (map[string]any, []string, error) {
+func loadConfigDir(path string) (loadedConfigDir, error) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read config directory %q: %w", path, err)
+		return loadedConfigDir{}, fmt.Errorf("failed to read config directory %q: %w", path, err)
 	}
 
 	files := make([]string, 0, len(entries))
+	pathsByBase := make(map[string]string, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -3202,26 +3213,47 @@ func loadConfigDir(path string) (map[string]any, []string, error) {
 		if ext != ".yaml" && ext != ".yml" {
 			continue
 		}
-		files = append(files, filepath.Join(path, entry.Name()))
+		base := strings.ToLower(entry.Name())
+		if _, ok := configFileRegistry[base]; !ok {
+			return loadedConfigDir{}, fmt.Errorf("unrecognized config file %q in %q", entry.Name(), path)
+		}
+		if _, exists := pathsByBase[base]; exists {
+			return loadedConfigDir{}, fmt.Errorf("duplicate config file %q in %q", entry.Name(), path)
+		}
+		file := filepath.Join(path, entry.Name())
+		files = append(files, file)
+		pathsByBase[base] = file
 	}
 	sort.Strings(files)
 	if len(files) == 0 {
-		return nil, nil, fmt.Errorf("no YAML files found in config directory %q", path)
+		return loadedConfigDir{}, fmt.Errorf("no YAML files found in config directory %q", path)
 	}
 
 	merged := make(map[string]any)
 	for _, file := range files {
+		base := strings.ToLower(filepath.Base(file))
+		spec := configFileRegistry[base]
+		if spec.class != configFileMergedRuntime {
+			continue
+		}
 		data, err := os.ReadFile(file)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read config file %q: %w", file, err)
+			return loadedConfigDir{}, fmt.Errorf("failed to read config file %q: %w", file, err)
 		}
 		var doc map[string]any
 		if err := yaml.Unmarshal(data, &doc); err != nil {
-			return nil, nil, fmt.Errorf("failed to parse config file %q: %w", file, err)
+			return loadedConfigDir{}, fmt.Errorf("failed to parse config file %q: %w", file, err)
+		}
+		if err := validateConfigFileTopLevel(file, spec, doc); err != nil {
+			return loadedConfigDir{}, err
 		}
 		merged = mergeYAMLMaps(merged, doc)
 	}
-	return merged, files, nil
+	return loadedConfigDir{
+		merged:      merged,
+		files:       files,
+		pathsByBase: pathsByBase,
+	}, nil
 }
 
 // Purpose: Deep-merge nested YAML maps.
@@ -3244,19 +3276,6 @@ func mergeYAMLMaps(dst, src map[string]any) map[string]any {
 		dst[key] = val
 	}
 	return dst
-}
-
-func requireConfigFile(files []string, requiredBase string) error {
-	requiredBase = strings.TrimSpace(requiredBase)
-	if requiredBase == "" {
-		return nil
-	}
-	for _, file := range files {
-		if strings.EqualFold(filepath.Base(file), requiredBase) {
-			return nil
-		}
-	}
-	return fmt.Errorf("required config file %q not found in config directory", requiredBase)
 }
 
 // Print prints a human-readable configuration summary.

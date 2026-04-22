@@ -27,6 +27,24 @@ Anything with meaningful blast radius, uncertain impact, or operational conseque
 
 When in doubt, choose Non-trivial.
 
+## Approval and pre-code gates
+Required before every change:
+- confirm the current Scope Ledger version and the status of each item
+- classify the task as Small or Non-trivial
+- record `Skill check: selected <skill>` or `Skill check: none applicable`
+
+For Non-trivial changes:
+- do not edit files, propose diffs, run formatters, or run full checker suites until the user has replied with the exact approval token: `Approved vN`
+- record `Ledger status: Approved vN found: yes/no`
+- do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval
+- every scope change after approval requires a new ledger version
+
+Before code, explicitly identify:
+- impacted contracts, or `No contract changes`
+- user-visible behavior changes, or `No user-visible behavior changes`
+- README impact: `Required` or `Not required`
+- checker set and validation command order
+
 ## Git preflight
 Required for every Non-trivial change:
 - record branch name
@@ -105,6 +123,26 @@ Required output:
 - config/metrics/logs/docs affected
 - exact one-line evidence block:
   `Dependency scan evidence: <repo search commands/steps used>; reviewed files/packages: <list>`
+
+## Config Contract Audit
+Required when a task touches YAML files, config structs, config loaders,
+normalizers, runtime defaults, reference tables, operator settings, or optional
+tool/secret config.
+
+Config/schema changes require Full dependency rigor unless they are strictly
+local test fixture changes.
+
+Required output:
+- touched YAML files and classification
+- single loader path for each file
+- unknown-key, missing-key, null, `0`, and `false` behavior
+- defaults audit evidence
+- downstream consumers reviewed
+- tests proving loader behavior and consumer behavior
+- README/config docs/ADR impact
+
+The audit must distinguish YAML-owned operator settings from validation
+constants, algorithm constants, compatibility boundaries, and test fixtures.
 
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.

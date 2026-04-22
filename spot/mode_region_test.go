@@ -1,6 +1,11 @@
 package spot
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestClassifyRegionalMode(t *testing.T) {
 	tests := []struct {
@@ -28,5 +33,35 @@ func TestClassifyRegionalMode(t *testing.T) {
 				t.Fatalf("ClassifyRegionalMode(%0.1f, %q) = (%q, %q), want (%q, %q)", tc.freq, tc.region, got.Mode, got.Provenance, tc.wantMode, tc.wantProv)
 			}
 		})
+	}
+}
+
+func TestLoadIARUModeInferenceFileRejectsUnknownKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "iaru_mode_inference.yaml")
+	data := []byte(`voice_mode_by_band:
+  40m: LSB
+unknown_region_cw_safe:
+  40m:
+    - from_khz: 7000
+      to_khz: 7040
+      class: cw_safe
+regions:
+  R1:
+    40m:
+      - from_khz: 7000
+        to_khz: 7040
+        class: cw_safe
+unexpected: true
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := LoadIARUModeInferenceFile(path)
+	if err == nil {
+		t.Fatalf("expected unknown key error")
+	}
+	if !strings.Contains(err.Error(), "unexpected") {
+		t.Fatalf("expected error to mention unknown key, got %v", err)
 	}
 }

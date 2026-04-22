@@ -1,23 +1,16 @@
 package config
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 // Purpose: Verify archive cleanup batch defaults are applied when omitted.
 // Key aspects: Loads minimal YAML and inspects normalized config values.
 // Upstream: go test.
 // Downstream: Load.
 func TestArchiveCleanupBatchDefaults(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "archive.yaml")
 	cfgText := "archive:\n  enabled: true\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "archive.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -26,8 +19,8 @@ func TestArchiveCleanupBatchDefaults(t *testing.T) {
 	if cfg.Archive.CleanupBatchSize != 2000 {
 		t.Fatalf("expected cleanup_batch_size=2000, got %d", cfg.Archive.CleanupBatchSize)
 	}
-	if cfg.Archive.CleanupBatchYieldMS != 5 {
-		t.Fatalf("expected cleanup_batch_yield_ms=5, got %d", cfg.Archive.CleanupBatchYieldMS)
+	if cfg.Archive.CleanupBatchYieldMS != 50 {
+		t.Fatalf("expected cleanup_batch_yield_ms=50 from shipped YAML, got %d", cfg.Archive.CleanupBatchYieldMS)
 	}
 }
 
@@ -36,13 +29,10 @@ func TestArchiveCleanupBatchDefaults(t *testing.T) {
 // Upstream: go test.
 // Downstream: Load.
 func TestArchiveCleanupBatchOverrides(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "archive.yaml")
 	cfgText := "archive:\n  cleanup_batch_size: 500\n  cleanup_batch_yield_ms: 0\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "archive.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -61,13 +51,10 @@ func TestArchiveCleanupBatchOverrides(t *testing.T) {
 // Upstream: go test.
 // Downstream: Load.
 func TestArchiveSynchronousDefault(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "archive.yaml")
 	cfgText := "archive:\n  enabled: true\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "archive.yaml", cfgText)
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -83,13 +70,10 @@ func TestArchiveSynchronousDefault(t *testing.T) {
 // Upstream: go test.
 // Downstream: Load.
 func TestArchiveSynchronousInvalid(t *testing.T) {
-	dir := t.TempDir()
+	dir := testConfigDir(t)
 	writeRequiredFloodControlFile(t, dir)
-	path := filepath.Join(dir, "archive.yaml")
 	cfgText := "archive:\n  synchronous: \"fast\"\n"
-	if err := os.WriteFile(path, []byte(cfgText), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeTestConfigOverlay(t, dir, "archive.yaml", cfgText)
 
 	if _, err := Load(dir); err == nil {
 		t.Fatalf("expected Load() to fail for invalid archive.synchronous")

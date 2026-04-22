@@ -1678,72 +1678,73 @@ const (
 
 // ServerOptions configures the telnet server instance.
 type ServerOptions struct {
-	Port                     int
-	WelcomeMessage           string
-	DuplicateLoginMsg        string
-	LoginGreeting            string
-	LoginPrompt              string
-	LoginEmptyMessage        string
-	LoginInvalidMessage      string
-	InputTooLongMessage      string
-	InputInvalidCharMessage  string
-	DialectWelcomeMessage    string
-	DialectSourceDefault     string
-	DialectSourcePersisted   string
-	PathStatusMessage        string
-	ClusterCall              string
-	MaxConnections           int
-	BroadcastWorkers         int
-	BroadcastQueue           int
-	WorkerQueue              int
-	ClientBuffer             int
-	ControlQueue             int
-	BulletinDedupeWindow     time.Duration
-	BulletinDedupeMaxEntries int
-	BroadcastBatchInterval   time.Duration
-	WriterBatchMaxBytes      int
-	WriterBatchWait          time.Duration
-	RejectWorkers            int
-	RejectQueueSize          int
-	RejectWriteDeadline      time.Duration
-	KeepaliveSeconds         int
-	HandshakeMode            string
-	Transport                string
-	EchoMode                 string
-	ReadIdleTimeout          time.Duration
-	LoginTimeout             time.Duration
-	MaxPreloginSessions      int
-	PreloginTimeout          time.Duration
-	AcceptRatePerIP          float64
-	AcceptBurstPerIP         int
-	AcceptRatePerSubnet      float64
-	AcceptBurstPerSubnet     int
-	AcceptRateGlobal         float64
-	AcceptBurstGlobal        int
-	AcceptRatePerASN         float64
-	AcceptBurstPerASN        int
-	AcceptRatePerCountry     float64
-	AcceptBurstPerCountry    int
-	PreloginConcurrencyPerIP int
-	AdmissionLogInterval     time.Duration
-	AdmissionLogSampleRate   float64
-	AdmissionLogMaxLines     int
-	LoginLineLimit           int
-	CommandLineLimit         int
-	DropExtremeRate          float64
-	DropExtremeWindow        time.Duration
-	DropExtremeMinAttempts   int
-	ReputationGate           *reputation.Gate
-	PathPredictor            *pathreliability.Predictor
-	PathDisplayEnabled       bool
-	SolarWeather             *solarweather.Manager
-	NoiseModel               pathreliability.NoiseModel
-	GridLookup               func(string) (string, bool, bool)
-	CTYLookup                func() *cty.CTYDatabase
-	DedupeFastEnabled        bool
-	DedupeMedEnabled         bool
-	DedupeSlowEnabled        bool
-	NearbyLoginWarning       string
+	Port                      int
+	WelcomeMessage            string
+	DuplicateLoginMsg         string
+	LoginGreeting             string
+	LoginPrompt               string
+	LoginEmptyMessage         string
+	LoginInvalidMessage       string
+	InputTooLongMessage       string
+	InputInvalidCharMessage   string
+	DialectWelcomeMessage     string
+	DialectSourceDefault      string
+	DialectSourcePersisted    string
+	PathStatusMessage         string
+	ClusterCall               string
+	MaxConnections            int
+	BroadcastWorkers          int
+	BroadcastQueue            int
+	WorkerQueue               int
+	ClientBuffer              int
+	ControlQueue              int
+	BulletinDedupeWindow      time.Duration
+	BulletinDedupeMaxEntries  int
+	BroadcastBatchInterval    time.Duration
+	BroadcastBatchIntervalSet bool
+	WriterBatchMaxBytes       int
+	WriterBatchWait           time.Duration
+	RejectWorkers             int
+	RejectQueueSize           int
+	RejectWriteDeadline       time.Duration
+	KeepaliveSeconds          int
+	HandshakeMode             string
+	Transport                 string
+	EchoMode                  string
+	ReadIdleTimeout           time.Duration
+	LoginTimeout              time.Duration
+	MaxPreloginSessions       int
+	PreloginTimeout           time.Duration
+	AcceptRatePerIP           float64
+	AcceptBurstPerIP          int
+	AcceptRatePerSubnet       float64
+	AcceptBurstPerSubnet      int
+	AcceptRateGlobal          float64
+	AcceptBurstGlobal         int
+	AcceptRatePerASN          float64
+	AcceptBurstPerASN         int
+	AcceptRatePerCountry      float64
+	AcceptBurstPerCountry     int
+	PreloginConcurrencyPerIP  int
+	AdmissionLogInterval      time.Duration
+	AdmissionLogSampleRate    float64
+	AdmissionLogMaxLines      int
+	LoginLineLimit            int
+	CommandLineLimit          int
+	DropExtremeRate           float64
+	DropExtremeWindow         time.Duration
+	DropExtremeMinAttempts    int
+	ReputationGate            *reputation.Gate
+	PathPredictor             *pathreliability.Predictor
+	PathDisplayEnabled        bool
+	SolarWeather              *solarweather.Manager
+	NoiseModel                pathreliability.NoiseModel
+	GridLookup                func(string) (string, bool, bool)
+	CTYLookup                 func() *cty.CTYDatabase
+	DedupeFastEnabled         bool
+	DedupeMedEnabled          bool
+	DedupeSlowEnabled         bool
+	NearbyLoginWarning        string
 }
 
 // NewServer creates a new telnet server
@@ -1871,7 +1872,7 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 	if config.ControlQueue <= 0 {
 		config.ControlQueue = defaultControlQueueSize
 	}
-	if config.BroadcastBatchInterval <= 0 {
+	if config.BroadcastBatchInterval <= 0 && !config.BroadcastBatchIntervalSet {
 		config.BroadcastBatchInterval = defaultBroadcastBatchInterval
 	}
 	if config.WriterBatchMaxBytes <= 0 {
@@ -1981,9 +1982,6 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 	}
 	if config.PathPredictor == nil {
 		config.PathDisplayEnabled = false
-	}
-	if config.NoiseModel.Empty() {
-		config.NoiseModel = pathreliability.DefaultConfig().NoiseModel()
 	}
 	if strings.TrimSpace(config.NearbyLoginWarning) == "" {
 		config.NearbyLoginWarning = nearbyLoginWarningMsg

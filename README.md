@@ -90,18 +90,18 @@ Supported bands:
 - Deduplicates and fans out spots to telnet clients with per-user filters.
 - Optionally derives path-reliability glyphs from recent reports between your grid and the DX grid.
 
-The main operator-facing configuration lives in [`data/config`](data/config). The config directory layout is described in [`data/config/README.md`](data/config/README.md).
+The main operator-facing configuration lives in [`data/config`](data/config). Startup uses an explicit filename registry, rejects unknown YAML files/keys, and fails fast when required YAML-owned settings or reference tables are missing. Documented zero sentinels, such as disabled keepalives or immediate broadcast delivery, are preserved as operator choices rather than replaced by code defaults. The config directory layout is described in [`data/config/README.md`](data/config/README.md).
 
 ## Dropped Call Logs
 
-`logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. It is disabled by default. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.
+`logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. The shipped config enables it; set `logging.dropped_calls.enabled: false` to disable those files. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.
 
 Each entry uses the same timestamped daily-file logger as the system log and records only the ingestion source, dropped role, reason, call, DE, DX, mode, and a short detail field. Frequency, category, and dashboard text are intentionally omitted.
 
 ```yaml
 logging:
   dropped_calls:
-    enabled: false
+    enabled: true
     dir: "data/logs/dropped_calls"
     retention_days: 7
     dedupe_window_seconds: 120
@@ -131,6 +131,7 @@ logging:
 5. Log in with your callsign and type `HELP`.
 
 You can point the server at another config directory with `DXC_CONFIG_PATH`.
+The propagation-report tool uses the same directory with `-config-dir`; the older `-path-config` flag remains only as a compatibility alias.
 
 ## Dedupe Policies
 
@@ -275,7 +276,7 @@ Implementation-heavy material now lives next to the relevant code:
 - [`commands/README.md`](commands/README.md) - HELP source of truth, dialects, and command/filter behavior
 - [`telnet/README.md`](telnet/README.md) - login flow, output lines, dedupe, `NEARBY`, path display, and filter persistence
 - [`spot/README.md`](spot/README.md) - confidence calculation, correction flow, and FT policy knobs
-- [`pathreliability/README.md`](pathreliability/README.md) - path bucket math and shipped versus fallback tuning
+- [`pathreliability/README.md`](pathreliability/README.md) - path bucket math and shipped YAML tuning
 - [`rbn/README.md`](rbn/README.md) - structural RBN parsing and comment handoff
 - [`pskreporter/README.md`](pskreporter/README.md) - MQTT normalization, path-only modes, and FT frequency handling
 - [`dxsummit/README.md`](dxsummit/README.md) - HTTP polling, DXSummit source markers, and HF/VHF/UHF scope

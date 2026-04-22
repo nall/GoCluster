@@ -204,18 +204,7 @@ func (r *clusterRuntime) setupLoggingAndUI() bool {
 }
 
 func (r *clusterRuntime) loadPathReliabilityConfig() {
-	pathCfgPath := filepath.Join(r.configSource, pathReliabilityConfigFile)
-	pathCfg, err := pathreliability.LoadFile(pathCfgPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			pathCfg = pathreliability.DefaultConfig()
-			pathCfg.Enabled = false
-			log.Printf("Path reliability config not found at %s; feature disabled", pathCfgPath)
-		} else {
-			log.Printf("Warning: failed to load path reliability config (%s): %v", pathCfgPath, err)
-			pathCfg = pathreliability.DefaultConfig()
-		}
-	}
+	pathCfg := r.cfg.PathReliability
 	allowedBands, allowedBandSet := normalizeAllowedBands(pathCfg.AllowedBands)
 	pathPredictor := pathreliability.NewPredictor(pathCfg, allowedBands)
 	if pathCfg.Enabled {
@@ -231,23 +220,7 @@ func (r *clusterRuntime) loadPathReliabilityConfig() {
 }
 
 func (r *clusterRuntime) loadSolarWeatherConfig() {
-	solarCfgPath := filepath.Join(r.configSource, solarWeatherConfigFile)
-	solarCfg, err := solarweather.LoadFile(solarCfgPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			solarCfg = solarweather.DefaultConfig()
-			solarCfg.Enabled = false
-			log.Printf("Solar weather config not found at %s; overrides disabled", solarCfgPath)
-		} else {
-			log.Printf("Warning: failed to load solar weather config (%s): %v", solarCfgPath, err)
-			solarCfg = solarweather.DefaultConfig()
-		}
-	}
-	if err := solarCfg.Validate(); err != nil {
-		log.Printf("Warning: invalid solar weather config: %v; overrides disabled", err)
-		solarCfg.Enabled = false
-	}
-	r.solarCfg = solarCfg
+	r.solarCfg = r.cfg.SolarWeather
 }
 
 func (r *clusterRuntime) configureSurface() {
@@ -376,6 +349,9 @@ func (r *clusterRuntime) initializeCallCacheAndMeta() {
 }
 
 func (r *clusterRuntime) initializeReferenceData() bool {
+	if !r.loadYAMLReferenceTables() {
+		return false
+	}
 	r.initializeULSAndCTY()
 	r.initializeCorrectionModels()
 	r.initializeObservabilityState()
@@ -386,6 +362,20 @@ func (r *clusterRuntime) initializeReferenceData() bool {
 		return false
 	}
 	r.initializeSkewStore()
+	return true
+}
+
+func (r *clusterRuntime) loadYAMLReferenceTables() bool {
+	iaruPath := filepath.Join(r.configSource, "iaru_regions.yaml")
+	if err := spot.LoadIARURegionsFile(iaruPath); err != nil {
+		log.Printf("Failed to load required IARU region table %s: %v", iaruPath, err)
+		return false
+	}
+	modePath := filepath.Join(r.configSource, "iaru_mode_inference.yaml")
+	if err := spot.LoadIARUModeInferenceFile(modePath); err != nil {
+		log.Printf("Failed to load required IARU mode inference table %s: %v", modePath, err)
+		return false
+	}
 	return true
 }
 
@@ -899,71 +889,72 @@ func (r *clusterRuntime) initializeTelnetServer() bool {
 
 func (r *clusterRuntime) buildTelnetServerOptions() telnet.ServerOptions {
 	return telnet.ServerOptions{
-		Port:                     r.cfg.Telnet.Port,
-		WelcomeMessage:           r.cfg.Telnet.WelcomeMessage,
-		DuplicateLoginMsg:        r.cfg.Telnet.DuplicateLoginMsg,
-		LoginGreeting:            r.cfg.Telnet.LoginGreeting,
-		LoginPrompt:              r.cfg.Telnet.LoginPrompt,
-		LoginEmptyMessage:        r.cfg.Telnet.LoginEmptyMessage,
-		LoginInvalidMessage:      r.cfg.Telnet.LoginInvalidMessage,
-		InputTooLongMessage:      r.cfg.Telnet.InputTooLongMessage,
-		InputInvalidCharMessage:  r.cfg.Telnet.InputInvalidCharMessage,
-		DialectWelcomeMessage:    r.cfg.Telnet.DialectWelcomeMessage,
-		DialectSourceDefault:     r.cfg.Telnet.DialectSourceDefaultLabel,
-		DialectSourcePersisted:   r.cfg.Telnet.DialectSourcePersistedLabel,
-		PathStatusMessage:        r.cfg.Telnet.PathStatusMessage,
-		ClusterCall:              r.cfg.Server.NodeID,
-		MaxConnections:           r.cfg.Telnet.MaxConnections,
-		BroadcastWorkers:         r.cfg.Telnet.BroadcastWorkers,
-		BroadcastQueue:           r.cfg.Telnet.BroadcastQueue,
-		WorkerQueue:              r.cfg.Telnet.WorkerQueue,
-		ClientBuffer:             r.cfg.Telnet.ClientBuffer,
-		ControlQueue:             r.cfg.Telnet.ControlQueueSize,
-		BulletinDedupeWindow:     time.Duration(r.cfg.Telnet.BulletinDedupeWindowSeconds) * time.Second,
-		BulletinDedupeMaxEntries: r.cfg.Telnet.BulletinDedupeMaxEntries,
-		BroadcastBatchInterval:   time.Duration(r.cfg.Telnet.BroadcastBatchIntervalMS) * time.Millisecond,
-		WriterBatchMaxBytes:      r.cfg.Telnet.WriterBatchMaxBytes,
-		WriterBatchWait:          time.Duration(r.cfg.Telnet.WriterBatchWaitMS) * time.Millisecond,
-		RejectWorkers:            r.cfg.Telnet.RejectWorkers,
-		RejectQueueSize:          r.cfg.Telnet.RejectQueueSize,
-		RejectWriteDeadline:      time.Duration(r.cfg.Telnet.RejectWriteDeadlineMS) * time.Millisecond,
-		Transport:                r.cfg.Telnet.Transport,
-		EchoMode:                 r.cfg.Telnet.EchoMode,
-		HandshakeMode:            string(r.cfg.Telnet.SkipHandshake),
-		ReadIdleTimeout:          time.Duration(r.cfg.Telnet.ReadIdleTimeoutSeconds) * time.Second,
-		LoginTimeout:             time.Duration(r.cfg.Telnet.LoginTimeoutSeconds) * time.Second,
-		MaxPreloginSessions:      r.cfg.Telnet.MaxPreloginSessions,
-		PreloginTimeout:          time.Duration(r.cfg.Telnet.PreloginTimeoutSeconds) * time.Second,
-		AcceptRatePerIP:          r.cfg.Telnet.AcceptRatePerIP,
-		AcceptBurstPerIP:         r.cfg.Telnet.AcceptBurstPerIP,
-		AcceptRatePerSubnet:      r.cfg.Telnet.AcceptRatePerSubnet,
-		AcceptBurstPerSubnet:     r.cfg.Telnet.AcceptBurstPerSubnet,
-		AcceptRateGlobal:         r.cfg.Telnet.AcceptRateGlobal,
-		AcceptBurstGlobal:        r.cfg.Telnet.AcceptBurstGlobal,
-		AcceptRatePerASN:         r.cfg.Telnet.AcceptRatePerASN,
-		AcceptBurstPerASN:        r.cfg.Telnet.AcceptBurstPerASN,
-		AcceptRatePerCountry:     r.cfg.Telnet.AcceptRatePerCountry,
-		AcceptBurstPerCountry:    r.cfg.Telnet.AcceptBurstPerCountry,
-		PreloginConcurrencyPerIP: r.cfg.Telnet.PreloginConcurrencyPerIP,
-		AdmissionLogInterval:     time.Duration(r.cfg.Telnet.AdmissionLogIntervalSeconds) * time.Second,
-		AdmissionLogSampleRate:   r.cfg.Telnet.AdmissionLogSampleRate,
-		AdmissionLogMaxLines:     r.cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval,
-		LoginLineLimit:           r.cfg.Telnet.LoginLineLimit,
-		CommandLineLimit:         r.cfg.Telnet.CommandLineLimit,
-		DropExtremeRate:          r.cfg.Telnet.DropExtremeRate,
-		DropExtremeWindow:        time.Duration(r.cfg.Telnet.DropExtremeWindowSeconds) * time.Second,
-		DropExtremeMinAttempts:   r.cfg.Telnet.DropExtremeMinAttempts,
-		ReputationGate:           r.repGate,
-		PathPredictor:            r.pathPredictor,
-		PathDisplayEnabled:       r.pathCfg.DisplayEnabled,
-		NoiseModel:               r.pathCfg.NoiseModel(),
-		GridLookup:               r.gridLookup,
-		CTYLookup:                r.ctyLookup,
-		DedupeFastEnabled:        r.secondaryFast != nil,
-		DedupeMedEnabled:         r.secondaryMed != nil,
-		DedupeSlowEnabled:        r.secondarySlow != nil,
-		NearbyLoginWarning:       r.cfg.Telnet.NearbyLoginWarning,
-		SolarWeather:             r.solarMgr,
+		Port:                      r.cfg.Telnet.Port,
+		WelcomeMessage:            r.cfg.Telnet.WelcomeMessage,
+		DuplicateLoginMsg:         r.cfg.Telnet.DuplicateLoginMsg,
+		LoginGreeting:             r.cfg.Telnet.LoginGreeting,
+		LoginPrompt:               r.cfg.Telnet.LoginPrompt,
+		LoginEmptyMessage:         r.cfg.Telnet.LoginEmptyMessage,
+		LoginInvalidMessage:       r.cfg.Telnet.LoginInvalidMessage,
+		InputTooLongMessage:       r.cfg.Telnet.InputTooLongMessage,
+		InputInvalidCharMessage:   r.cfg.Telnet.InputInvalidCharMessage,
+		DialectWelcomeMessage:     r.cfg.Telnet.DialectWelcomeMessage,
+		DialectSourceDefault:      r.cfg.Telnet.DialectSourceDefaultLabel,
+		DialectSourcePersisted:    r.cfg.Telnet.DialectSourcePersistedLabel,
+		PathStatusMessage:         r.cfg.Telnet.PathStatusMessage,
+		ClusterCall:               r.cfg.Server.NodeID,
+		MaxConnections:            r.cfg.Telnet.MaxConnections,
+		BroadcastWorkers:          r.cfg.Telnet.BroadcastWorkers,
+		BroadcastQueue:            r.cfg.Telnet.BroadcastQueue,
+		WorkerQueue:               r.cfg.Telnet.WorkerQueue,
+		ClientBuffer:              r.cfg.Telnet.ClientBuffer,
+		ControlQueue:              r.cfg.Telnet.ControlQueueSize,
+		BulletinDedupeWindow:      time.Duration(r.cfg.Telnet.BulletinDedupeWindowSeconds) * time.Second,
+		BulletinDedupeMaxEntries:  r.cfg.Telnet.BulletinDedupeMaxEntries,
+		BroadcastBatchInterval:    time.Duration(r.cfg.Telnet.BroadcastBatchIntervalMS) * time.Millisecond,
+		BroadcastBatchIntervalSet: true,
+		WriterBatchMaxBytes:       r.cfg.Telnet.WriterBatchMaxBytes,
+		WriterBatchWait:           time.Duration(r.cfg.Telnet.WriterBatchWaitMS) * time.Millisecond,
+		RejectWorkers:             r.cfg.Telnet.RejectWorkers,
+		RejectQueueSize:           r.cfg.Telnet.RejectQueueSize,
+		RejectWriteDeadline:       time.Duration(r.cfg.Telnet.RejectWriteDeadlineMS) * time.Millisecond,
+		Transport:                 r.cfg.Telnet.Transport,
+		EchoMode:                  r.cfg.Telnet.EchoMode,
+		HandshakeMode:             string(r.cfg.Telnet.SkipHandshake),
+		ReadIdleTimeout:           time.Duration(r.cfg.Telnet.ReadIdleTimeoutSeconds) * time.Second,
+		LoginTimeout:              time.Duration(r.cfg.Telnet.LoginTimeoutSeconds) * time.Second,
+		MaxPreloginSessions:       r.cfg.Telnet.MaxPreloginSessions,
+		PreloginTimeout:           time.Duration(r.cfg.Telnet.PreloginTimeoutSeconds) * time.Second,
+		AcceptRatePerIP:           r.cfg.Telnet.AcceptRatePerIP,
+		AcceptBurstPerIP:          r.cfg.Telnet.AcceptBurstPerIP,
+		AcceptRatePerSubnet:       r.cfg.Telnet.AcceptRatePerSubnet,
+		AcceptBurstPerSubnet:      r.cfg.Telnet.AcceptBurstPerSubnet,
+		AcceptRateGlobal:          r.cfg.Telnet.AcceptRateGlobal,
+		AcceptBurstGlobal:         r.cfg.Telnet.AcceptBurstGlobal,
+		AcceptRatePerASN:          r.cfg.Telnet.AcceptRatePerASN,
+		AcceptBurstPerASN:         r.cfg.Telnet.AcceptBurstPerASN,
+		AcceptRatePerCountry:      r.cfg.Telnet.AcceptRatePerCountry,
+		AcceptBurstPerCountry:     r.cfg.Telnet.AcceptBurstPerCountry,
+		PreloginConcurrencyPerIP:  r.cfg.Telnet.PreloginConcurrencyPerIP,
+		AdmissionLogInterval:      time.Duration(r.cfg.Telnet.AdmissionLogIntervalSeconds) * time.Second,
+		AdmissionLogSampleRate:    r.cfg.Telnet.AdmissionLogSampleRate,
+		AdmissionLogMaxLines:      r.cfg.Telnet.AdmissionLogMaxReasonLinesPerInterval,
+		LoginLineLimit:            r.cfg.Telnet.LoginLineLimit,
+		CommandLineLimit:          r.cfg.Telnet.CommandLineLimit,
+		DropExtremeRate:           r.cfg.Telnet.DropExtremeRate,
+		DropExtremeWindow:         time.Duration(r.cfg.Telnet.DropExtremeWindowSeconds) * time.Second,
+		DropExtremeMinAttempts:    r.cfg.Telnet.DropExtremeMinAttempts,
+		ReputationGate:            r.repGate,
+		PathPredictor:             r.pathPredictor,
+		PathDisplayEnabled:        r.pathCfg.DisplayEnabled,
+		NoiseModel:                r.pathCfg.NoiseModel(),
+		GridLookup:                r.gridLookup,
+		CTYLookup:                 r.ctyLookup,
+		DedupeFastEnabled:         r.secondaryFast != nil,
+		DedupeMedEnabled:          r.secondaryMed != nil,
+		DedupeSlowEnabled:         r.secondarySlow != nil,
+		NearbyLoginWarning:        r.cfg.Telnet.NearbyLoginWarning,
+		SolarWeather:              r.solarMgr,
 	}
 }
 

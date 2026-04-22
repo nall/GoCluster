@@ -1,7 +1,8 @@
 package spot
 
 import (
-	"log"
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,53 +31,10 @@ type iaruRegionTable struct {
 var (
 	iaruRegionOnce sync.Once
 	iaruRegions    iaruRegionTable
+	iaruRegionsSet bool
 )
 
 const iaruRegionPath = "data/config/iaru_regions.yaml"
-
-var builtInRegionDefaults = map[string]IARURegion{
-	"AF": IARURegion1,
-	"AS": IARURegion3,
-	"EU": IARURegion1,
-	"NA": IARURegion2,
-	"OC": IARURegion3,
-	"SA": IARURegion2,
-}
-
-var builtInRegionOverrides = map[int]IARURegion{
-	10:  IARURegion3, // Amsterdam & St. Paul Is.
-	14:  IARURegion1, // Armenia
-	15:  IARURegion1, // Asiatic Russia
-	18:  IARURegion1, // Azerbaijan
-	33:  IARURegion3, // Chagos Islands
-	75:  IARURegion1, // Georgia
-	111: IARURegion3, // Heard Island
-	130: IARURegion1, // Kazakhstan
-	135: IARURegion1, // Kyrgyzstan
-	131: IARURegion3, // Kerguelen Islands
-	207: IARURegion3, // Rodriguez Island
-	215: IARURegion1, // Cyprus
-	262: IARURegion1, // Tajikistan
-	280: IARURegion1, // Turkmenistan
-	283: IARURegion1, // UK Base Areas on Cyprus
-	292: IARURegion1, // Uzbekistan
-	304: IARURegion1, // Bahrain
-	330: IARURegion1, // Iran
-	333: IARURegion1, // Iraq
-	336: IARURegion1, // Israel
-	342: IARURegion1, // Jordan
-	348: IARURegion1, // Kuwait
-	354: IARURegion1, // Lebanon
-	363: IARURegion1, // Mongolia
-	370: IARURegion1, // Oman
-	376: IARURegion1, // Qatar
-	378: IARURegion1, // Saudi Arabia
-	384: IARURegion1, // Syria
-	390: IARURegion1, // Asiatic Turkey
-	391: IARURegion1, // United Arab Emirates
-	492: IARURegion1, // Yemen
-	510: IARURegion1, // Palestine
-}
 
 // NormalizeIARURegion normalizes a config/runtime region token to R1/R2/R3.
 func NormalizeIARURegion(region string) IARURegion {
@@ -92,35 +50,61 @@ func NormalizeIARURegion(region string) IARURegion {
 	}
 }
 
+// LoadIARURegionsFile replaces the startup-owned IARU region table from YAML.
+// Runtime startup calls this with the active config directory so region policy
+// cannot silently fall back to built-in tables.
+func LoadIARURegionsFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var table iaruRegionTable
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&table); err != nil {
+		return fmt.Errorf("parse IARU region map %s: %w", path, err)
+	}
+	if err := validateIARURegionTable(table); err != nil {
+		return fmt.Errorf("validate IARU region map %s: %w", path, err)
+	}
+	iaruRegions = table
+	iaruRegionsSet = true
+	return nil
+}
+
+func validateIARURegionTable(table iaruRegionTable) error {
+	if len(table.DefaultsByContinent) == 0 {
+		return fmt.Errorf("defaults_by_continent must not be empty")
+	}
+	for continent, region := range table.DefaultsByContinent {
+		if strings.TrimSpace(continent) == "" {
+			return fmt.Errorf("defaults_by_continent contains empty continent")
+		}
+		if NormalizeIARURegion(region) == IARURegionUnknown {
+			return fmt.Errorf("defaults_by_continent.%s has invalid region %q", continent, region)
+		}
+	}
+	for adif, region := range table.ADIFOverrides {
+		if adif <= 0 {
+			return fmt.Errorf("adif_overrides contains invalid ADIF %d", adif)
+		}
+		if NormalizeIARURegion(region) == IARURegionUnknown {
+			return fmt.Errorf("adif_overrides.%d has invalid region %q", adif, region)
+		}
+	}
+	return nil
+}
+
 func loadIARURegions() {
 	iaruRegionOnce.Do(func() {
-		iaruRegions.DefaultsByContinent = make(map[string]string, len(builtInRegionDefaults))
-		iaruRegions.ADIFOverrides = make(map[int]string, len(builtInRegionOverrides))
-		for continent, region := range builtInRegionDefaults {
-			iaruRegions.DefaultsByContinent[continent] = string(region)
+		if iaruRegionsSet {
+			return
 		}
-		for adif, region := range builtInRegionOverrides {
-			iaruRegions.ADIFOverrides[adif] = string(region)
-		}
-
 		paths := []string{iaruRegionPath, filepath.Join("..", iaruRegionPath)}
 		for _, path := range paths {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			var table iaruRegionTable
-			if err := yaml.Unmarshal(data, &table); err != nil {
-				log.Printf("Warning: unable to parse IARU region map (%s): %v", path, err)
+			if err := LoadIARURegionsFile(path); err == nil {
 				return
 			}
-			if len(table.DefaultsByContinent) > 0 {
-				iaruRegions.DefaultsByContinent = table.DefaultsByContinent
-			}
-			if len(table.ADIFOverrides) > 0 {
-				iaruRegions.ADIFOverrides = table.ADIFOverrides
-			}
-			return
 		}
 	})
 }
