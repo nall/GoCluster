@@ -1,6 +1,8 @@
 # docs/change-workflow.md
 
-This document defines the full workflow for Non-trivial tasks and the deeper rules behind `AGENTS.md`.
+This document is written for Codex. When `AGENTS.md` sends you here, read the applicable sections before code.
+
+It defines the full workflow for Non-trivial tasks and the deeper rules behind `AGENTS.md`.
 
 ## Core principle
 For Non-trivial work, do not go directly from idea to code. Move through:
@@ -21,6 +23,10 @@ When using the Codex VS Code extension:
 ## Task classification
 ### Small
 A task is Small only if it is tightly localized and does not change contracts, concurrency/lifecycle, operational behavior, or shared interfaces.
+
+When a Small task changes code, state a brief classification justification before
+editing. The justification should name why the change is localized, why blast
+radius is low, and why no Non-trivial triggers apply.
 
 ### Non-trivial
 Anything with meaningful blast radius, uncertain impact, or operational consequences is Non-trivial.
@@ -44,6 +50,26 @@ Before code, explicitly identify:
 - user-visible behavior changes, or `No user-visible behavior changes`
 - README impact: `Required` or `Not required`
 - checker set and validation command order
+
+## Workflow-drift audit
+Required when editing any workflow contract, validation rule, runbook, review
+checklist, Codex guidance, or repo-managed skill, including:
+- `AGENTS.md`
+- `VALIDATION.md`
+- `docs/change-workflow.md`
+- `docs/review-checklist.md`
+- `docs/dev-runbook.md`
+- `docs/code-quality.md`
+- `docs/WORKING_WITH_CODEX.md`
+- `codex-skills/**/SKILL.md`
+
+Audit requirements:
+- preserve exact strings that other workflow docs or users rely on
+- check that moved or shortened rules remain reachable from `AGENTS.md`
+- verify that skill triggers, validation rules, runbook commands, and review
+  expectations do not contradict each other
+- run targeted text checks for the key workflow phrases touched by the change
+- report the audit result in the final summary
 
 ## Git preflight
 Required for every Non-trivial change:
@@ -196,6 +222,9 @@ State explicitly:
 - Do not sneak in opportunistic cleanup unless it is required for correctness or clarity and is called out explicitly.
 
 ## Testing and checker discipline
+Use `docs/dev-runbook.md` as the required checker source for Non-trivial
+closeout. The list below is the minimum baseline, not the full command set.
+
 At minimum:
 - `go test ./...`
 - `go vet ./...`

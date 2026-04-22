@@ -1,6 +1,8 @@
 # docs/dev-runbook.md
 
 This runbook defines the expected validation commands and when to use them.
+For Non-trivial closeout, this file is the required checker source; do not rely
+only on the abbreviated baseline in `AGENTS.md`.
 
 ## Principles
 - Run the smallest useful check early, then broaden.

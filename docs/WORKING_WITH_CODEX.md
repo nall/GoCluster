@@ -1,5 +1,7 @@
 # Working with Codex in `gocluster`
 
+Audience: the human operator working with Codex. For Codex's executor-facing rules, use `AGENTS.md`.
+
 Use two layers:
 
 - Use planning conversation to settle intent, scope, risks, and edge cases.
