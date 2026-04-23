@@ -80,6 +80,9 @@ telnet:
   drop_extreme_window_seconds: 30  # Sliding window for extreme drop evaluation
   drop_extreme_min_attempts: 100   # Minimum attempts before extreme drop disconnect
 
+who_spots_me:
+  window_minutes: 10               # Rolling window for WHOSPOTSME accepted-observation totals
+
 # Default filters applied to new users
 filter:
   default_modes:

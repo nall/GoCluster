@@ -89,6 +89,7 @@ type clusterRuntime struct {
 
 	recentBandStore spot.RecentSupportStore
 	customSCPStore  *spot.CustomSCPStore
+	whoSpotsMeStore *spot.WhoSpotsMeStore
 
 	gridStoreHandle   *gridStoreHandle
 	gridDBCheckOnMiss bool
@@ -358,6 +359,7 @@ func (r *clusterRuntime) initializeReferenceData() bool {
 	if !r.initializeSignalResolverAndRecentStore() {
 		return false
 	}
+	r.initializeWhoSpotsMeStore()
 	if !r.initializeGridStore() {
 		return false
 	}
@@ -617,6 +619,13 @@ func (r *clusterRuntime) initializeSignalResolverAndRecentStore() bool {
 	return true
 }
 
+func (r *clusterRuntime) initializeWhoSpotsMeStore() {
+	window := time.Duration(r.cfg.WhoSpotsMe.WindowMinutes) * time.Minute
+	store := spot.NewWhoSpotsMeStore(window)
+	store.StartCleanup()
+	r.whoSpotsMeStore = store
+}
+
 func (r *clusterRuntime) initializeGridStore() bool {
 	gridOpts := gridstore.Options{
 		CacheSizeBytes:        int64(r.cfg.GridBlockCacheMB) << 20,
@@ -849,6 +858,11 @@ func (r *clusterRuntime) initializeServices() bool {
 			MedWindowSeconds:  r.cfg.Dedup.SecondaryMedWindowSeconds,
 			SlowWindowSeconds: r.cfg.Dedup.SecondarySlowWindowSeconds,
 		}),
+		commands.WithWhoSpotsMeHelp(commands.WhoSpotsMeHelpConfig{
+			Configured:    true,
+			WindowMinutes: r.cfg.WhoSpotsMe.WindowMinutes,
+		}),
+		commands.WithWhoSpotsMe(r.whoSpotsMeStore),
 		commands.WithBadCallReporter(r.reportBadCallDrop),
 	)
 	if !r.initializeTelnetServer() {
@@ -1032,6 +1046,7 @@ func (r *clusterRuntime) startOutputPipeline() {
 		r.confusionModel,
 		r.recentBandStore,
 		r.customSCPStore,
+		r.whoSpotsMeStore,
 		r.cfg.RBN.KeepSSIDSuffix,
 		r.archiveWriter,
 		&r.lastOutput,
@@ -1296,6 +1311,9 @@ func (r *clusterRuntime) shutdown() {
 	if r.recentBandStore != nil {
 		r.recentBandStore.StopCleanup()
 	}
+	if r.whoSpotsMeStore != nil {
+		r.whoSpotsMeStore.StopCleanup()
+	}
 	if r.signalResolver != nil {
 		r.signalResolver.Stop()
 	}
@@ -1354,6 +1372,9 @@ func (r *clusterRuntime) close() {
 		_ = r.customSCPStore.Close()
 	} else if r.recentBandStore != nil {
 		r.recentBandStore.StopCleanup()
+	}
+	if r.whoSpotsMeStore != nil {
+		r.whoSpotsMeStore.StopCleanup()
 	}
 	if r.refresher != nil {
 		r.refresher.Stop()

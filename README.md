@@ -15,6 +15,7 @@ SHOW DX - Alias of SHOW MYDX.
 SH DX - Alias of SHOW DX.
 SHOW MYDX - Show filtered spot history.
 SHOW DXCC - Look up DXCC/ADIF and zones.
+WHOSPOTSME - Show recent spotter countries.
 SHOW DEDUPE - Show dedupe policy.
 SET DEDUPE - Select dedupe policy.
 SET DIAG - Toggle diagnostic comments.

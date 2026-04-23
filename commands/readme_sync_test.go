@@ -32,6 +32,10 @@ func TestReadmeDefaultGoHelpBlockMatchesProcessor(t *testing.T) {
 			MedWindowSeconds:  cfg.Dedup.SecondaryMedWindowSeconds,
 			SlowWindowSeconds: cfg.Dedup.SecondarySlowWindowSeconds,
 		}),
+		WithWhoSpotsMeHelp(WhoSpotsMeHelpConfig{
+			Configured:    true,
+			WindowMinutes: cfg.WhoSpotsMe.WindowMinutes,
+		}),
 		WithPathGlyphHelp(PathGlyphHelpConfig{
 			Enabled:      pathCfg.DisplayEnabled,
 			High:         pathCfg.GlyphSymbols.High,

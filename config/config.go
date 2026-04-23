@@ -128,6 +128,7 @@ func normalizeTelnetHandshakeMode(value TelnetHandshakeMode) (TelnetHandshakeMod
 type Config struct {
 	Server              ServerConfig         `yaml:"server"`
 	Telnet              TelnetConfig         `yaml:"telnet"`
+	WhoSpotsMe          WhoSpotsMeConfig     `yaml:"who_spots_me"`
 	UI                  UIConfig             `yaml:"ui"`
 	Logging             LoggingConfig        `yaml:"logging"`
 	PropReport          PropReportConfig     `yaml:"prop_report"`
@@ -303,6 +304,12 @@ type TelnetConfig struct {
 	DropExtremeWindowSeconds int `yaml:"drop_extreme_window_seconds"`
 	// DropExtremeMinAttempts gates extreme drop checks until this many attempts accrue.
 	DropExtremeMinAttempts int `yaml:"drop_extreme_min_attempts"`
+}
+
+// WhoSpotsMeConfig controls the rolling observation window used by the
+// WHOSPOTSME telnet command.
+type WhoSpotsMeConfig struct {
+	WindowMinutes int `yaml:"window_minutes"`
 }
 
 // ReputationConfig controls the passwordless telnet reputation gate.
@@ -2660,6 +2667,9 @@ func normalizeTelnetConfig(cfg *Config, presence loadRawPresence) error {
 	if cfg.Telnet.OutputLineLength < 65 {
 		return fmt.Errorf("invalid telnet.output_line_length %d (minimum 65)", cfg.Telnet.OutputLineLength)
 	}
+	if cfg.WhoSpotsMe.WindowMinutes < 1 || cfg.WhoSpotsMe.WindowMinutes > 60 {
+		return fmt.Errorf("invalid who_spots_me.window_minutes %d (must be between 1 and 60)", cfg.WhoSpotsMe.WindowMinutes)
+	}
 	if transport, ok := normalizeTelnetTransport(cfg.Telnet.Transport); ok {
 		cfg.Telnet.Transport = transport
 	} else {
@@ -3306,6 +3316,7 @@ func (c *Config) Print() {
 	fmt.Printf("Telnet bulletins: dedupe_window=%ds dedupe_max_entries=%d\n",
 		c.Telnet.BulletinDedupeWindowSeconds,
 		c.Telnet.BulletinDedupeMaxEntries)
+	fmt.Printf("Who spots me: window=%dm\n", c.WhoSpotsMe.WindowMinutes)
 	fmt.Printf("Telnet Tier-A: prelogin_max=%d prelogin_timeout=%ds ip_rate=%.2f/s ip_burst=%d subnet_rate=%.2f/s subnet_burst=%d global_rate=%.2f/s global_burst=%d ip_concurrency=%d\n",
 		c.Telnet.MaxPreloginSessions,
 		c.Telnet.PreloginTimeoutSeconds,

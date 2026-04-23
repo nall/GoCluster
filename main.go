@@ -1307,6 +1307,7 @@ func processOutputSpots(
 	confusionModel *spot.ConfusionModel,
 	recentBandStore spot.RecentSupportStore,
 	customSCPStore *spot.CustomSCPStore,
+	whoSpotsMeStore *spot.WhoSpotsMeStore,
 	broadcastKeepSSID bool,
 	archiveWriter *archive.Writer,
 	lastOutput *atomic.Int64,
@@ -1348,6 +1349,7 @@ func processOutputSpots(
 		confusionModel,
 		recentBandStore,
 		customSCPStore,
+		whoSpotsMeStore,
 		broadcastKeepSSID,
 		archiveWriter,
 		lastOutput,
@@ -2516,6 +2518,34 @@ func recordRecentBandObservation(s *spot.Spot, store spot.RecentSupportStore, cu
 	for _, key := range keys {
 		legacyStore.Record(key, band, mode, spotter, seenAt)
 	}
+}
+
+// recordWhoSpotsMeObservation records accepted observations for WHOSPOTSME
+// using cluster acceptance time rather than source timestamps so the rolling
+// window reflects what this node has recently admitted.
+func recordWhoSpotsMeObservation(s *spot.Spot, store *spot.WhoSpotsMeStore, seenAt time.Time) {
+	if s == nil || store == nil || s.IsBeacon || s.IsTestSpotter {
+		return
+	}
+	call := s.DXCallNorm
+	if call == "" {
+		call = s.DXCall
+	}
+	if call == "" {
+		return
+	}
+	band := s.BandNorm
+	if band == "" || band == "???" {
+		band = spot.FreqToBand(s.Frequency)
+	}
+	if band == "" || band == "???" {
+		return
+	}
+	continent := s.DEContinentNorm
+	if continent == "" {
+		continent = s.DEMetadata.Continent
+	}
+	store.Record(call, band, s.DEMetadata.ADIF, continent, seenAt)
 }
 
 // Purpose: Apply confidence floor only when confidence is still unknown.

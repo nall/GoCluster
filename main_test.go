@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1134,6 +1135,59 @@ func TestRecentBandAdmissionNonStabilizerRecordsInMainPath(t *testing.T) {
 	recordRecentBandObservation(s, store, nil, cfg)
 	if count := recentBandSupportCountForSpot(store, s, now); count != 1 {
 		t.Fatalf("expected one recent support on non-stabilizer path, got %d", count)
+	}
+}
+
+func TestRecordWhoSpotsMeObservationRecordsAcceptedSpot(t *testing.T) {
+	store := spot.NewWhoSpotsMeStoreWithOptions(spot.WhoSpotsMeOptions{
+		Window:               10 * time.Second,
+		Shards:               1,
+		MaxEntries:           16,
+		MaxCountriesPerEntry: 8,
+		CleanupInterval:      time.Hour,
+	})
+	now := time.Unix(500, 0).UTC()
+	s := spot.NewSpot("K1ABC", "DL1AAA", 14020.0, "CW")
+	s.DEMetadata.ADIF = 230
+	s.DEMetadata.Continent = "EU"
+	s.EnsureNormalized()
+
+	recordWhoSpotsMeObservation(s, store, now)
+	got := store.CountryCountsByContinent("K1ABC", "20m", now)
+	want := map[string][]spot.WhoSpotsMeCountryCount{
+		"EU": {{ADIF: 230, Count: 1}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("who-spots-me counts mismatch: got %#v want %#v", got, want)
+	}
+}
+
+func TestRecordWhoSpotsMeObservationSkipsRejectedShapes(t *testing.T) {
+	store := spot.NewWhoSpotsMeStoreWithOptions(spot.WhoSpotsMeOptions{
+		Window:               10 * time.Second,
+		Shards:               1,
+		MaxEntries:           16,
+		MaxCountriesPerEntry: 8,
+		CleanupInterval:      time.Hour,
+	})
+	now := time.Unix(600, 0).UTC()
+
+	testSpotter := spot.NewSpot("K1ABC", "DL1AAA", 14020.0, "CW")
+	testSpotter.DEMetadata.ADIF = 230
+	testSpotter.DEMetadata.Continent = "EU"
+	testSpotter.IsTestSpotter = true
+	testSpotter.EnsureNormalized()
+	recordWhoSpotsMeObservation(testSpotter, store, now)
+
+	beacon := spot.NewSpot("K1ABC/B", "DL1AAA", 14020.0, "CW")
+	beacon.DEMetadata.ADIF = 230
+	beacon.DEMetadata.Continent = "EU"
+	beacon.IsBeacon = true
+	beacon.EnsureNormalized()
+	recordWhoSpotsMeObservation(beacon, store, now)
+
+	if got := store.CountryCountsByContinent("K1ABC", "20m", now); got != nil {
+		t.Fatalf("expected rejected shapes to be skipped, got %#v", got)
 	}
 }
 

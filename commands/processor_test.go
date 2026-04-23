@@ -18,6 +18,11 @@ type fakeArchive struct {
 	err   error
 }
 
+type fakeWhoSpotsMeQuerier struct {
+	window time.Duration
+	counts map[string]map[string]map[string][]spot.WhoSpotsMeCountryCount
+}
+
 func (f *fakeArchive) Recent(limit int) ([]*spot.Spot, error) {
 	if f == nil || f.err != nil {
 		return nil, f.err
@@ -55,6 +60,25 @@ func takeRecent(spots []*spot.Spot, limit int) []*spot.Spot {
 		return append([]*spot.Spot(nil), spots...)
 	}
 	return append([]*spot.Spot(nil), spots[:limit]...)
+}
+
+func (f *fakeWhoSpotsMeQuerier) Window() time.Duration {
+	if f == nil {
+		return 0
+	}
+	return f.window
+}
+
+func (f *fakeWhoSpotsMeQuerier) CountryCountsByContinent(call, band string, _ time.Time) map[string][]spot.WhoSpotsMeCountryCount {
+	if f == nil {
+		return nil
+	}
+	call = spot.NormalizeCallsign(call)
+	band = spot.NormalizeBand(band)
+	if byBand, ok := f.counts[call]; ok {
+		return byBand[band]
+	}
+	return nil
 }
 
 func TestDXCommandQueuesSpot(t *testing.T) {
@@ -680,11 +704,16 @@ func TestHelpLineWidth(t *testing.T) {
 		MedWindowSeconds:  305,
 		SlowWindowSeconds: 489,
 	}))
+	pWithWhoSpotsMe := NewProcessor(nil, nil, nil, nil, nil, nil, WithWhoSpotsMeHelp(WhoSpotsMeHelpConfig{
+		Configured:    true,
+		WindowMinutes: 10,
+	}))
 	helps := []string{
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "classic"),
 		pWithPathGlyphs.ProcessCommandForClient("HELP", "N2WQ", "", nil, "go"),
 		pWithDedupeWindows.ProcessCommandForClient("HELP SHOW DEDUPE", "N2WQ", "", nil, "go"),
 		pWithDedupeWindows.ProcessCommandForClient("HELP SET DEDUPE", "N2WQ", "", nil, "go"),
+		pWithWhoSpotsMe.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP DX", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go"),
@@ -725,6 +754,11 @@ func TestHelpTopicGoDialect(t *testing.T) {
 	if !strings.Contains(resp, "Aliases:") || !strings.Contains(resp, "SHOW DX -") {
 		t.Fatalf("expected SHOW DX aliases, got %q", resp)
 	}
+
+	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "go")
+	if !strings.Contains(resp, "Usage: WHOSPOTSME <band>") {
+		t.Fatalf("expected WHOSPOTSME usage, got %q", resp)
+	}
 }
 
 func TestHelpTopicCCDialect(t *testing.T) {
@@ -754,6 +788,11 @@ func TestHelpTopicCCDialect(t *testing.T) {
 	if !strings.Contains(resp, "SHOW/DX - Alias of SHOW MYDX") {
 		t.Fatalf("expected HELP SHOW DX to map to SHOW/DX in cc, got %q", resp)
 	}
+
+	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "cc")
+	if !strings.Contains(resp, "Usage: WHOSPOTSME <band>") {
+		t.Fatalf("expected WHOSPOTSME usage in cc, got %q", resp)
+	}
 }
 
 func TestHelpEntriesGoDialect(t *testing.T) {
@@ -768,6 +807,7 @@ func TestHelpEntriesGoDialect(t *testing.T) {
 		{"SHOW DX", []string{"SHOW DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
+		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME <band>"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DIAG", []string{"SET DIAG - Toggle diagnostic comments", "Usage: SET DIAG <ON|OFF>"}},
@@ -798,6 +838,7 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		{"SHOW/DX", []string{"SHOW/DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW/DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
+		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME <band>"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DIAG", []string{"SET DIAG - Toggle diagnostic comments", "Usage: SET DIAG <ON|OFF>"}},
@@ -836,6 +877,72 @@ func assertHelpContains(t *testing.T, topic string, resp string, contains []stri
 		if !strings.Contains(resp, want) {
 			t.Fatalf("help %q missing %q in %q", topic, want, resp)
 		}
+	}
+}
+
+func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
+	ctyDB := loadTestCTY(t)
+	querier := &fakeWhoSpotsMeQuerier{
+		window: 10 * time.Minute,
+		counts: map[string]map[string]map[string][]spot.WhoSpotsMeCountryCount{
+			"W1AW": {
+				"20m": {
+					"EU": []spot.WhoSpotsMeCountryCount{
+						{ADIF: 230, Count: 42},
+						{ADIF: 223, Count: 35},
+						{ADIF: 227, Count: 22},
+						{ADIF: 248, Count: 22},
+						{ADIF: 281, Count: 18},
+						{ADIF: 275, Count: 10},
+					},
+					"NA": []spot.WhoSpotsMeCountryCount{
+						{ADIF: 291, Count: 57},
+						{ADIF: 1, Count: 21},
+						{ADIF: 50, Count: 8},
+					},
+				},
+			},
+		},
+	}
+	p := NewProcessor(nil, nil, nil, func() *cty.CTYDatabase { return ctyDB }, nil, nil,
+		WithWhoSpotsMe(querier),
+		WithWhoSpotsMeHelp(WhoSpotsMeHelpConfig{
+			Configured:    true,
+			WindowMinutes: 10,
+		}),
+	)
+
+	resp := p.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW", "", nil, "go")
+	if !strings.Contains(resp, "WHOSPOTSME 20M (last 10m):") {
+		t.Fatalf("expected heading with window, got %q", resp)
+	}
+	if !strings.Contains(resp, "  AF:  (no data)\n") {
+		t.Fatalf("expected no-data row, got %q", resp)
+	}
+	if !strings.Contains(resp, "  EU:  ADIF230(42) ADIF223(35) ADIF227(22) I(22) ADIF281(18)\n") {
+		t.Fatalf("expected capped EU row, got %q", resp)
+	}
+	if !strings.Contains(resp, "  NA:  K(57) K1(21) ADIF50(8)\n") {
+		t.Fatalf("expected NA row, got %q", resp)
+	}
+}
+
+func TestWhoSpotsMeCommandUsageAndAvailability(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("WHOSPOTSME", "W1AW", "", nil, "go")
+	if resp != "Usage: WHOSPOTSME <band>\n" {
+		t.Fatalf("expected usage for missing band, got %q", resp)
+	}
+
+	resp = p.ProcessCommandForClient("WHOSPOTSME BADBAND", "W1AW", "", nil, "go")
+	if resp != "Usage: WHOSPOTSME <band>\n" {
+		t.Fatalf("expected usage for invalid band, got %q", resp)
+	}
+
+	resp = p.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW", "", nil, "go")
+	if resp != "WHOSPOTSME is not available.\n" {
+		t.Fatalf("expected unavailable response without store, got %q", resp)
 	}
 }
 

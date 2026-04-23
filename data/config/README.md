@@ -9,7 +9,7 @@ Configuration is split by concern so you only edit the relevant file:
 - `pipeline.yaml` - call correction, harmonics, spot policy.
 - `data.yaml` - CTY/FCC/skew sources, grid DB tuning, and H3 table path.
 - `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
-- `runtime.yaml` - telnet server settings, buffer capacity, and filter defaults.
+- `runtime.yaml` - telnet server settings, WHOSPOTSME window, buffer capacity, and filter defaults.
 - `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.
 - `peering.yaml` - DXSpider peer configuration (inbound/outbound, ACLs, topology cache).
 - `iaru_regions.yaml` - DXCC/ADIF to IARU region mapping used by final regional mode policy.

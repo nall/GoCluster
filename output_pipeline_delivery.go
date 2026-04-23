@@ -99,6 +99,7 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 		return
 	}
 	recordRecentBandObservation(delayed, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+	recordWhoSpotsMeObservation(delayed, p.whoSpotsMeStore, time.Now().UTC())
 	allowFast, allowMed, allowSlow := p.computeTelnetAllows(delayed)
 	delayedSnapshot := delayed.SnapshotForAsync()
 	if delayedSnapshot == nil {
@@ -185,6 +186,7 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 		plan.allowFast, plan.allowMed, plan.allowSlow = p.computeTelnetAllows(s)
 		plan.archivePeerAllowMed = plan.allowMed
 		recordRecentBandObservation(s, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+		recordWhoSpotsMeObservation(s, p.whoSpotsMeStore, time.Now().UTC())
 		p.recordFTRecentBandObservation(s)
 		if ctx.hasStabilizerResolverKey && p.signalResolver != nil {
 			plan.familySnapshot, plan.familySnapshotOK = p.signalResolver.Lookup(ctx.stabilizerResolverKey)
@@ -242,6 +244,7 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 	}
 	if shouldRecordRecentBandInMainLoop(p.stabilizerEnabled, !plan.telnetDeliverNow) {
 		recordRecentBandObservation(s, p.recentBandStore, p.customSCPStore, p.correctionCfg)
+		recordWhoSpotsMeObservation(s, p.whoSpotsMeStore, time.Now().UTC())
 		p.recordFTRecentBandObservation(s)
 	}
 	if plan.telnetDeliverNow && !plan.allowFast && !plan.allowMed && !plan.allowSlow {

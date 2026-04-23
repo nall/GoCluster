@@ -80,3 +80,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0068 | EVENT Comment Tags and Filter Contract | Superseded | 2026-04-22 | spot, filter, telnet, archive, commands, docs | - | ADR-0070 | `docs/decisions/ADR-0068-event-comment-tags-and-filter-contract.md` |
 | ADR-0069 | Single Spot Taxonomy YAML | Accepted | 2026-04-22 | spot, config, filter, telnet, pskreporter, pathreliability | - | - | `docs/decisions/ADR-0069-single-spot-taxonomy-yaml.md` |
 | ADR-0070 | EVENT Filters Preserve Untagged Spots | Accepted | 2026-04-23 | filter, telnet, commands, docs | ADR-0068 | - | `docs/decisions/ADR-0070-event-filters-preserve-untagged-spots.md` |
+| ADR-0071 | WHOSPOTSME Rolling Country Summary | Accepted | 2026-04-23 | commands, config, main output pipeline, spot | - | - | `docs/decisions/ADR-0071-whospotsme-rolling-country-summary.md` |

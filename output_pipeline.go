@@ -56,6 +56,7 @@ type outputPipeline struct {
 	confusionModel          *spot.ConfusionModel
 	recentBandStore         spot.RecentSupportStore
 	customSCPStore          *spot.CustomSCPStore
+	whoSpotsMeStore         *spot.WhoSpotsMeStore
 	broadcastKeepSSID       bool
 	archiveWriter           *archive.Writer
 	lastOutput              *atomic.Int64
@@ -119,6 +120,7 @@ func newOutputPipeline(
 	confusionModel *spot.ConfusionModel,
 	recentBandStore spot.RecentSupportStore,
 	customSCPStore *spot.CustomSCPStore,
+	whoSpotsMeStore *spot.WhoSpotsMeStore,
 	broadcastKeepSSID bool,
 	archiveWriter *archive.Writer,
 	lastOutput *atomic.Int64,
@@ -160,6 +162,7 @@ func newOutputPipeline(
 		confusionModel:          confusionModel,
 		recentBandStore:         recentBandStore,
 		customSCPStore:          customSCPStore,
+		whoSpotsMeStore:         whoSpotsMeStore,
 		broadcastKeepSSID:       broadcastKeepSSID,
 		archiveWriter:           archiveWriter,
 		lastOutput:              lastOutput,

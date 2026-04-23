@@ -26,6 +26,11 @@ type archiveReader interface {
 	RecentFiltered(limit int, match func(*spot.Spot) bool) ([]*spot.Spot, error)
 }
 
+type whoSpotsMeQuerier interface {
+	Window() time.Duration
+	CountryCountsByContinent(call, band string, now time.Time) map[string][]spot.WhoSpotsMeCountryCount
+}
+
 // PathGlyphHelpConfig carries the configured telnet path glyph display mapping
 // into HELP rendering. It is a startup snapshot, so Processor never performs
 // config I/O or depends on runtime reload behavior.
@@ -48,6 +53,13 @@ type DedupeHelpConfig struct {
 	SlowWindowSeconds int
 }
 
+// WhoSpotsMeHelpConfig carries the configured WHOSPOTSME rolling window into
+// HELP rendering.
+type WhoSpotsMeHelpConfig struct {
+	Configured    bool
+	WindowMinutes int
+}
+
 // ProcessorOption customizes Processor construction without widening the core
 // command-call surface.
 type ProcessorOption func(*Processor)
@@ -59,16 +71,18 @@ type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, deta
 // Processor handles telnet command parsing and replies that rely on shared state
 // (recent spots in the archive).
 type Processor struct {
-	spotBuffer    *buffer.RingBuffer
-	archive       archiveReader
-	spotInput     chan<- *spot.Spot
-	ctyLookup     func() *cty.CTYDatabase
-	prefixIdx     *prefixIndex
-	repGate       *reputation.Gate
-	repReport     func(reputation.DropEvent)
-	badCallReport BadCallReporter
-	pathGlyphHelp PathGlyphHelpConfig
-	dedupeHelp    DedupeHelpConfig
+	spotBuffer     *buffer.RingBuffer
+	archive        archiveReader
+	spotInput      chan<- *spot.Spot
+	ctyLookup      func() *cty.CTYDatabase
+	prefixIdx      *prefixIndex
+	repGate        *reputation.Gate
+	repReport      func(reputation.DropEvent)
+	badCallReport  BadCallReporter
+	pathGlyphHelp  PathGlyphHelpConfig
+	dedupeHelp     DedupeHelpConfig
+	whoSpotsMe     whoSpotsMeQuerier
+	whoSpotsMeHelp WhoSpotsMeHelpConfig
 }
 
 // NewProcessor constructs a command processor bound to shared spot state.
@@ -115,6 +129,27 @@ func WithDedupeHelp(cfg DedupeHelpConfig) ProcessorOption {
 	}
 }
 
+// WithWhoSpotsMe installs the WHOSPOTSME query backend.
+func WithWhoSpotsMe(store whoSpotsMeQuerier) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.whoSpotsMe = store
+	}
+}
+
+// WithWhoSpotsMeHelp configures HELP text for WHOSPOTSME using the effective
+// runtime window from YAML.
+func WithWhoSpotsMeHelp(cfg WhoSpotsMeHelpConfig) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.whoSpotsMeHelp = cfg
+	}
+}
+
 // WithBadCallReporter installs an optional callback for callsign-validation
 // drops in manually entered DX commands.
 func WithBadCallReporter(reporter BadCallReporter) ProcessorOption {
@@ -155,6 +190,9 @@ func (p *Processor) ProcessCommandForClient(cmd string, spotter string, spotterI
 	}
 	if strings.EqualFold(fields[0], "DX") {
 		return p.handleDX(fields, spotter, spotterIP)
+	}
+	if strings.EqualFold(fields[0], "WHOSPOTSME") {
+		return p.handleWhoSpotsMe(fields[1:], spotter)
 	}
 
 	// Split into parts
@@ -203,7 +241,7 @@ func (p *Processor) ProcessCommandForClient(cmd string, spotter string, spotterI
 // Downstream: filter.SupportedModes, spot.SupportedBandNames.
 func (p *Processor) handleHelp(dialect string, topic string) string {
 	dialect = normalizeDialectString(dialect)
-	catalog := buildHelpCatalog(dialect, p.dedupeHelp)
+	catalog := buildHelpCatalog(dialect, p.dedupeHelp, p.whoSpotsMeHelp)
 	normalized := normalizeHelpTopic(dialect, topic)
 	if normalized != "" {
 		if entry, ok := catalog.lookup(normalized); ok {
@@ -259,7 +297,7 @@ func (c helpCatalog) lookup(topic string) (helpEntry, bool) {
 	return entry, ok
 }
 
-func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
+func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHelp WhoSpotsMeHelpConfig) helpCatalog {
 	catalog := helpCatalog{
 		entries: make(map[string]helpEntry),
 		aliases: make(map[string]string),
@@ -324,6 +362,14 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 		},
 	)
 	add("SHOW DXCC", "SHOW DXCC - Look up DXCC/ADIF and zones.", showDXCCLines)
+
+	whoSpotsMeLines := helpEntryLines(
+		"WHOSPOTSME - Show recent spotter countries for your call.",
+		[]string{"WHOSPOTSME <band>"},
+		nil,
+		whoSpotsMeHelpNotes(whoSpotsMeHelp),
+	)
+	add("WHOSPOTSME", "WHOSPOTSME - Show recent spotter countries.", whoSpotsMeLines)
 
 	showDedupeLines := helpEntryLines(
 		"SHOW DEDUPE - Show your broadcast dedupe policy.",
@@ -568,6 +614,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 			"SH/DX",
 			"SHOW MYDX",
 			"SHOW DXCC",
+			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
 			"SET DIAG",
@@ -693,6 +740,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 			"SH DX",
 			"SHOW MYDX",
 			"SHOW DXCC",
+			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
 			"SET DIAG",
@@ -723,6 +771,8 @@ func normalizeHelpTopic(dialect string, topic string) string {
 		return "PASS NEARBY"
 	case strings.HasPrefix(upper, "SHOW DXCC"):
 		return "SHOW DXCC"
+	case strings.HasPrefix(upper, "WHOSPOTSME"):
+		return "WHOSPOTSME"
 	case strings.HasPrefix(upper, "SHOW MYDX"):
 		return "SHOW MYDX"
 	case strings.HasPrefix(upper, "SHOW DEDUPE"):
@@ -1078,6 +1128,10 @@ func showDXUsage(dialect string) string {
 
 func showHistoryUsage(command string) string {
 	return fmt.Sprintf("Usage: %s [count 1-250] | %s <prefix|callsign> [count 1-250]\n", command, command)
+}
+
+func whoSpotsMeUsage() string {
+	return "Usage: WHOSPOTSME <band>\n"
 }
 
 const (
@@ -1537,6 +1591,108 @@ func (p *Processor) handleShowDXCC(args []string) string {
 	return b.String()
 }
 
+func (p *Processor) handleWhoSpotsMe(args []string, spotter string) string {
+	if len(args) != 1 {
+		return whoSpotsMeUsage()
+	}
+	call := spot.NormalizeCallsign(strings.TrimSpace(spotter))
+	band := spot.NormalizeBand(strings.TrimSpace(args[0]))
+	if call == "" {
+		return noLoggedUserMsg
+	}
+	if band == "" || band == "???" || !spot.IsValidBand(band) {
+		return whoSpotsMeUsage()
+	}
+	if p.whoSpotsMe == nil {
+		return "WHOSPOTSME is not available.\n"
+	}
+
+	now := time.Now().UTC()
+	counts := p.whoSpotsMe.CountryCountsByContinent(call, band, now)
+	windowMinutes := p.whoSpotsMeHelp.WindowMinutes
+	if windowMinutes <= 0 {
+		if window := p.whoSpotsMe.Window(); window > 0 {
+			windowMinutes = int(window / time.Minute)
+		}
+	}
+
+	var db *cty.CTYDatabase
+	if p.ctyLookup != nil {
+		db = p.ctyLookup()
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "WHOSPOTSME %s", strings.ToUpper(band))
+	if windowMinutes > 0 {
+		fmt.Fprintf(&b, " (last %dm)", windowMinutes)
+	}
+	b.WriteString(":\n")
+	for _, continent := range filter.SupportedContinents {
+		b.WriteString("  ")
+		b.WriteString(continent)
+		b.WriteString(":  ")
+		display := p.formatWhoSpotsMeCountries(db, counts[continent])
+		if len(display) == 0 {
+			b.WriteString("(no data)")
+		} else {
+			for i, item := range display {
+				if i > 0 {
+					b.WriteByte(' ')
+				}
+				fmt.Fprintf(&b, "%s(%d)", item.label, item.count)
+			}
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+type whoSpotsMeDisplayCountry struct {
+	label string
+	count int
+	adif  int
+}
+
+func (p *Processor) formatWhoSpotsMeCountries(db *cty.CTYDatabase, counts []spot.WhoSpotsMeCountryCount) []whoSpotsMeDisplayCountry {
+	if len(counts) == 0 {
+		return nil
+	}
+	display := make([]whoSpotsMeDisplayCountry, 0, len(counts))
+	for _, item := range counts {
+		if item.Count <= 0 {
+			continue
+		}
+		display = append(display, whoSpotsMeDisplayCountry{
+			label: p.whoSpotsMeCountryLabel(db, item.ADIF),
+			count: item.Count,
+			adif:  item.ADIF,
+		})
+	}
+	sort.Slice(display, func(i, j int) bool {
+		if display[i].count != display[j].count {
+			return display[i].count > display[j].count
+		}
+		if display[i].label != display[j].label {
+			return display[i].label < display[j].label
+		}
+		return display[i].adif < display[j].adif
+	})
+	if len(display) > 5 {
+		display = display[:5]
+	}
+	return display
+}
+
+func (p *Processor) whoSpotsMeCountryLabel(db *cty.CTYDatabase, adif int) string {
+	if adif <= 0 {
+		return "ADIF0"
+	}
+	if prefix := p.prefixIdx.primary(db, adif); prefix != "" {
+		return prefix
+	}
+	return fmt.Sprintf("ADIF%d", adif)
+}
+
 func (p *Processor) lookupPortableDXCC(queryRaw string) (*cty.CTYDatabase, string, *cty.PrefixInfo, string) {
 	if p.ctyLookup == nil {
 		return nil, "", nil, "CTY database is not available.\n"
@@ -1585,6 +1741,36 @@ func (p *prefixIndex) siblings(db *cty.CTYDatabase, adif int, current string) []
 		out = append(out, pref)
 	}
 	return out
+}
+
+func (p *prefixIndex) primary(db *cty.CTYDatabase, adif int) string {
+	if p == nil || db == nil || adif <= 0 {
+		return ""
+	}
+	p.mu.Lock()
+	if p.db != db {
+		p.adifToPrefixes = buildPrefixMap(db)
+		p.db = db
+	}
+	prefixes := p.adifToPrefixes[adif]
+	p.mu.Unlock()
+	if len(prefixes) == 0 {
+		return ""
+	}
+	return prefixes[0]
+}
+
+func whoSpotsMeHelpNotes(cfg WhoSpotsMeHelpConfig) []string {
+	windowNote := "Uses the configured rolling window of accepted observations."
+	if cfg.Configured && cfg.WindowMinutes > 0 {
+		windowNote = fmt.Sprintf("Uses the last %d minutes of accepted observations.", cfg.WindowMinutes)
+	}
+	return []string{
+		windowNote,
+		"Counts accepted observations before secondary broadcast dedupe.",
+		"Counts are totals, not unique spotters.",
+		"Shows up to 5 DXCC prefixes per continent for your logged-in callsign.",
+	}
 }
 
 func buildPrefixMap(db *cty.CTYDatabase) map[int][]string {
