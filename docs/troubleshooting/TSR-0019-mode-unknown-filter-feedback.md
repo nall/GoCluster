@@ -31,7 +31,7 @@ The root cause was operator feedback, not filter matching. MODE commands use add
 
 ## Fix or mitigation
 
-MODE command responses now say which modes were enabled or rejected, include an explicit effective MODE list, and warn when the effective MODE filter hides `UNKNOWN`. `SHOW FILTER` also warns when `UNKNOWN` is hidden. EVENT feedback follows the same display rule and explicitly reports whether no-event spots pass or are hidden.
+MODE command responses now say which modes were enabled or rejected, include an explicit effective MODE list, and warn when the effective MODE filter hides `UNKNOWN`. `SHOW FILTER` also warns when `UNKNOWN` is hidden. EVENT feedback follows the same display rule and reports that no-event spots pass the EVENT domain.
 
 ## Why an ADR was or was not required
 

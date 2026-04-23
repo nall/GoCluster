@@ -38,7 +38,8 @@ If an item appears in both lists, block wins.
 
 ALL keyword (type-scoped):
 PASS <type> ALL - allow everything for that type
-REJECT <type> ALL - block everything for that type
+REJECT <type> ALL - block everything for most types
+REJECT EVENT ALL - block only tagged EVENT spots
 RESET FILTER resets all filters to configured defaults for new users.
 
 Feature toggles (not list-based):
@@ -65,6 +66,8 @@ Event filters:
   EVENT recognizes the taxonomy EVENT families as standalone comment tokens or
     acronym-prefixed references such as POTA-1234. Only the event family is
     filtered; the reference remains in the comment.
+  Spots with no recognized EVENT tag are not affected by EVENT filters,
+    including REJECT EVENT ALL.
 
 Path reliability glyphs:
   ">" - HIGH: favorable path.
@@ -171,7 +174,7 @@ WWV, WCY, and `TO ALL` announcement bulletins have a separate server-wide duplic
 
 ## EVENT Filtering
 
-`PASS EVENT` and `REJECT EVENT` filter spots by comment-derived activation/event family. Supported families come from `data/config/spot_taxonomy.yaml`; the shipped config defines `LLOTA`, `IOTA`, `POTA`, `SOTA`, and `WWFF`.
+`PASS EVENT` and `REJECT EVENT` filter spots by comment-derived activation/event family. Supported families come from `data/config/spot_taxonomy.yaml`; the shipped config defines `LLOTA`, `IOTA`, `POTA`, `SOTA`, and `WWFF`. Spots with no recognized EVENT tag are not affected by EVENT filters.
 
 Event recognition is intentionally family-level. A comment token such as `POTA` or `POTA-1234` marks the spot as `POTA`; the reference text stays in the comment and is not a separate filter key. Slash forms such as `POTA/SOTA` and event-specific reference grammars without the acronym prefix are not interpreted by this filter.
 
@@ -180,7 +183,7 @@ Useful commands:
 - `PASS EVENT POTA,SOTA` shows spots tagged with either family.
 - `REJECT EVENT WWFF` hides WWFF-tagged spots.
 - `PASS EVENT ALL` disables EVENT filtering.
-- `REJECT EVENT ALL` blocks every spot, including spots with no event tag.
+- `REJECT EVENT ALL` hides all EVENT-tagged spots; spots with no event tag still pass this filter domain.
 
 ## MODE And EVENT Taxonomy
 

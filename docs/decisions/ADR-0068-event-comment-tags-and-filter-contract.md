@@ -1,6 +1,6 @@
 # ADR-0068: EVENT Comment Tags and Filter Contract
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-04-22
 - Decision Origin: Design
 
@@ -84,3 +84,4 @@ same command and YAML shape as other filter domains.
   - `telnet/README.md`
 - Related TSRs:
 - Supersedes / superseded by:
+  - Superseded by ADR-0070

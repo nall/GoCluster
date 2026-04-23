@@ -414,7 +414,7 @@ func TestSourceFilters(t *testing.T) {
 	}
 }
 
-func TestEventAllowListRequiresMatchingEvent(t *testing.T) {
+func TestEventAllowListFiltersOnlyTaggedSpots(t *testing.T) {
 	f := NewFilter()
 	f.SetEvent("POTA", true)
 
@@ -431,8 +431,8 @@ func TestEventAllowListRequiresMatchingEvent(t *testing.T) {
 	}
 
 	none := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
-	if f.Matches(none) {
-		t.Fatalf("expected eventless spot to fail explicit EVENT allowlist")
+	if !f.Matches(none) {
+		t.Fatalf("expected eventless spot to pass explicit EVENT allowlist")
 	}
 }
 
@@ -448,15 +448,37 @@ func TestEventRejectWinsOverAllowList(t *testing.T) {
 	}
 }
 
-func TestRejectEventAllBlocksEventlessSpots(t *testing.T) {
+func TestRejectEventAllBlocksTaggedOnly(t *testing.T) {
 	f := NewFilter()
 	f.ResetEvents()
 	f.BlockAllEvents = true
 	f.AllEvents = false
 
 	none := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
-	if f.Matches(none) {
-		t.Fatalf("expected REJECT EVENT ALL to reject eventless spot")
+	if !f.Matches(none) {
+		t.Fatalf("expected REJECT EVENT ALL to allow eventless spot")
+	}
+
+	pota := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	pota.Events = spot.EventPOTA
+	if f.Matches(pota) {
+		t.Fatalf("expected REJECT EVENT ALL to reject tagged spot")
+	}
+}
+
+func TestRejectEventListDoesNotRejectEventlessSpots(t *testing.T) {
+	f := NewFilter()
+	f.SetEvent("POTA", false)
+
+	none := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	if !f.Matches(none) {
+		t.Fatalf("expected REJECT EVENT POTA to allow eventless spot")
+	}
+
+	pota := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "CW")
+	pota.Events = spot.EventPOTA
+	if f.Matches(pota) {
+		t.Fatalf("expected REJECT EVENT POTA to reject tagged POTA spot")
 	}
 }
 

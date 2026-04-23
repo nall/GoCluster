@@ -403,8 +403,8 @@ type Filter struct {
 	BlockAllModes        bool            // If true, reject all modes
 	AllSources           bool            // If true, accept all source categories (except blocked)
 	BlockAllSources      bool            // If true, reject all sources
-	AllEvents            bool            // If true, accept all event families (except blocked)
-	BlockAllEvents       bool            // If true, reject all spots, including eventless spots
+	AllEvents            bool            // If true, accept all tagged event families (except blocked)
+	BlockAllEvents       bool            // If true, reject all tagged event spots; eventless spots pass
 	Confidence           map[string]bool // Allowed confidence glyphs (whitelist when non-empty)
 	BlockConfidence      map[string]bool // Blocked confidence glyphs
 	AllConfidence        bool            // If true, accept all confidence glyphs (except blocked)
@@ -1626,6 +1626,9 @@ func passesStringFilter(token string, allow map[string]bool, block map[string]bo
 }
 
 func passesEventFilter(events spot.EventMask, allow map[string]bool, block map[string]bool, allowAll, blockAll bool) bool {
+	if events == 0 {
+		return true
+	}
 	if blockAll {
 		return false
 	}
@@ -1848,7 +1851,7 @@ func (f *Filter) String() string {
 	}
 
 	if f.BlockAllEvents {
-		parts = append(parts, "Event: NONE (no spots will pass)")
+		parts = append(parts, "Event: NONE (event-tagged spots blocked)")
 	} else if f.AllEvents || len(f.Events) == 0 {
 		parts = append(parts, "Event: ALL")
 	} else {
@@ -1856,7 +1859,7 @@ func (f *Filter) String() string {
 		if len(events) > 0 {
 			parts = append(parts, "Event: "+strings.Join(events, ", "))
 		} else {
-			parts = append(parts, "Event: NONE (no spots will pass)")
+			parts = append(parts, "Event: NONE (event-tagged spots blocked)")
 		}
 	}
 

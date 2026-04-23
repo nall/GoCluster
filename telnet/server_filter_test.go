@@ -628,8 +628,8 @@ func TestEventEffectiveOutputListsEnabledEventsAndEventlessStatus(t *testing.T) 
 	if !strings.Contains(resp, "Events enabled: POTA") {
 		t.Fatalf("expected event enable status, got: %q", resp)
 	}
-	if !strings.Contains(resp, "Effective EVENT: POTA; no-event spots: hidden") {
-		t.Fatalf("expected explicit POTA-only EVENT line with eventless hidden, got: %q", resp)
+	if !strings.Contains(resp, "Effective EVENT: POTA; no-event spots: pass") {
+		t.Fatalf("expected explicit POTA-only EVENT line with eventless pass, got: %q", resp)
 	}
 	if strings.Contains(resp, "allow=") || strings.Contains(resp, "only:") {
 		t.Fatalf("expected effective EVENT output to hide raw allow/block rule text, got: %q", resp)
@@ -660,8 +660,11 @@ func TestEventEffectiveOutputListsEnabledEventsAndEventlessStatus(t *testing.T) 
 	if !handled {
 		t.Fatalf("expected REJECT EVENT ALL to be handled")
 	}
-	if !strings.Contains(resp, "Effective EVENT: NONE; no-event spots: hidden") {
-		t.Fatalf("expected no EVENT families and eventless hidden, got: %q", resp)
+	if !strings.Contains(resp, "All event-tagged spots rejected") {
+		t.Fatalf("expected tagged-event rejection status, got: %q", resp)
+	}
+	if !strings.Contains(resp, "Effective EVENT: NONE; no-event spots: pass") {
+		t.Fatalf("expected no EVENT families and eventless pass, got: %q", resp)
 	}
 }
 
@@ -757,7 +760,7 @@ func TestRejectCommands(t *testing.T) {
 			cmd:  "REJECT EVENT ALL",
 			check: func(t *testing.T, f *filter.Filter) {
 				if !f.BlockAllEvents || f.AllEvents {
-					t.Fatalf("expected all events blocked after REJECT EVENT ALL")
+					t.Fatalf("expected all tagged events blocked after REJECT EVENT ALL")
 				}
 			},
 		},
@@ -1160,7 +1163,7 @@ func TestShowFilterEventEffectiveOutput(t *testing.T) {
 	if !handled {
 		t.Fatalf("expected SHOW FILTER to be handled")
 	}
-	if !strings.Contains(resp, "EVENT: enabled=POTA; no-event spots=hidden") {
+	if !strings.Contains(resp, "EVENT: enabled=POTA; no-event spots=pass") {
 		t.Fatalf("expected SHOW FILTER to show explicit EVENT state, got: %q", resp)
 	}
 	if strings.Contains(resp, "EVENT: allow=") {

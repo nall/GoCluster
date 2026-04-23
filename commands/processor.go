@@ -949,7 +949,8 @@ func filterHelpLines(dialect string) []string {
 		"",
 		"ALL keyword (type-scoped):",
 		"PASS <type> ALL - allow everything for that type",
-		"REJECT <type> ALL - block everything for that type",
+		"REJECT <type> ALL - block everything for most types",
+		"REJECT EVENT ALL - block only tagged EVENT spots",
 		"RESET FILTER resets all filters to configured defaults for new users.",
 		"",
 		"Feature toggles (not list-based):",
@@ -973,6 +974,7 @@ func filterHelpLines(dialect string) []string {
 	}
 	lines = append(lines, "", "Event filters:")
 	lines = append(lines, wrapTextLines("EVENT recognizes the taxonomy EVENT families as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "  ", "    ")...)
+	lines = append(lines, wrapTextLines("Spots with no recognized EVENT tag are not affected by EVENT filters, including REJECT EVENT ALL.", helpMaxWidth, "  ", "    ")...)
 	if strings.EqualFold(strings.TrimSpace(dialect), "cc") {
 		ccModeLine := "SET/<MODE> | SET/NO<MODE> (" + strings.Join(spot.CCShortcutModes(), ", ") + ")"
 		lines = append(lines,

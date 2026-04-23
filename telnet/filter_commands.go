@@ -681,7 +681,7 @@ func newEventHandler() *domainHandler {
 						f.BlockAllEvents = true
 						f.AllEvents = false
 					})
-					return formatEventMutationResponse(c, "All events blocked"), true
+					return formatEventMutationResponse(c, "All event-tagged spots rejected"), true
 				}
 				events := parseEventList(value)
 				if len(events) == 0 {
@@ -1570,7 +1570,7 @@ func snapshotEventFilter(f *filter.Filter) allowBlockSnapshot {
 }
 
 func eventlessSpotsVisible(f *filter.Filter) bool {
-	return f != nil && !f.BlockAllEvents && f.AllEvents
+	return f != nil
 }
 
 func snapshotAllowBlockStrings(allowAll, blockAll bool, allow, block map[string]bool, supported []string) allowBlockSnapshot {
