@@ -988,7 +988,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		if dash != nil {
 			dash.SetStats(lines)
 			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, recentBandStore, ctyState, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
-				rbnLive, pskLive, p92Live, rbnCWLive, rbnFTLive, peerSessions, peerSSIDs,
+				rbnLive, pskLive, p92Live,
 				ingestSources,
 				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4,
 				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63,
@@ -4198,9 +4198,6 @@ func buildOverviewLines(
 	telnetSrv *telnet.Server,
 	clusterCall string,
 	rbnLive, pskLive, p92Live bool,
-	rbnCWLive, rbnFTLive bool,
-	peerSessions int,
-	peerSSIDs []string,
 	ingestSources []dashboardIngestSource,
 	rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4 uint64,
 	pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63 uint64,

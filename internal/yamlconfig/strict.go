@@ -89,7 +89,7 @@ func requirePath(node *yaml.Node, path Path, rendered []string) error {
 		case yaml.MappingNode:
 			for i := 0; i+1 < len(node.Content); i += 2 {
 				key := node.Content[i].Value
-				childPath := append(rendered, key)
+				childPath := appendPathPart(rendered, key)
 				if err := requirePath(node.Content[i+1], path[1:], childPath); err != nil {
 					return err
 				}
@@ -112,6 +112,11 @@ func requirePath(node *yaml.Node, path Path, rendered []string) error {
 
 func isNull(node *yaml.Node) bool {
 	return node == nil || (node.Kind == yaml.ScalarNode && node.Tag == "!!null")
+}
+
+func appendPathPart(path []string, part string) []string {
+	out := append([]string(nil), path...)
+	return append(out, part)
 }
 
 func appendIndex(path []string, index int) []string {

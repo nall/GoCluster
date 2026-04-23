@@ -260,7 +260,9 @@ func DefaultConfig() Config {
 
 // normalize validates relationship constraints and rebuilds derived level caches.
 func (c *Config) normalize() {
-	_ = c.finalize()
+	if err := c.finalize(); err != nil {
+		return
+	}
 }
 
 func (c *Config) finalize() error {

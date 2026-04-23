@@ -621,11 +621,11 @@ func (c *Client) handlePayload(payload []byte) {
 func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spot {
 	// Validate required fields
 	if msg.SenderCall == "" {
-		c.reportBadCall("DX", "missing_callsign", msg.SenderCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical, "source_parser")
+		c.reportBadCall("DX", "missing_callsign", msg.SenderCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical)
 		return nil
 	}
 	if msg.ReceiverCall == "" {
-		c.reportBadCall("DE", "missing_callsign", msg.ReceiverCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical, "source_parser")
+		c.reportBadCall("DE", "missing_callsign", msg.ReceiverCall, msg.ReceiverCall, msg.SenderCall, modeInfo.canonical)
 		return nil
 	}
 	if msg.Frequency == 0 {
@@ -641,12 +641,12 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	deCall := norm.deCall
 	if !spot.IsValidNormalizedCallsign(dxCall) {
 		// log.Printf("PSKReporter: invalid DX call %s", msg.SenderCall) // noisy: caller requested silence
-		c.reportBadCall("DX", "invalid_callsign", msg.SenderCall, deCall, msg.SenderCall, norm.modeUpper, "source_parser")
+		c.reportBadCall("DX", "invalid_callsign", msg.SenderCall, deCall, msg.SenderCall, norm.modeUpper)
 		return nil
 	}
 	if !spot.IsValidNormalizedCallsign(deCall) {
 		// log.Printf("PSKReporter: invalid DE call %s", msg.ReceiverCall) // noisy: caller requested silence
-		c.reportBadCall("DE", "invalid_callsign", msg.ReceiverCall, msg.ReceiverCall, dxCall, norm.modeUpper, "source_parser")
+		c.reportBadCall("DE", "invalid_callsign", msg.ReceiverCall, msg.ReceiverCall, dxCall, norm.modeUpper)
 		return nil
 	}
 
@@ -714,7 +714,7 @@ func (c *Client) convertToSpot(msg *PSKRMessage, modeInfo pskModeInfo) *spot.Spo
 	return s
 }
 
-func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail string) {
+func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode string) {
 	if c == nil {
 		return
 	}
@@ -724,7 +724,7 @@ func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail 
 	if reporter == nil {
 		return
 	}
-	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, detail)
+	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, "source_parser")
 }
 
 func (c *Client) badCallSource() string {

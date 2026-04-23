@@ -858,7 +858,7 @@ func appendNotes(lines []string, notes []string, width int) []string {
 	}
 	lines = append(lines, "Notes:")
 	for _, note := range notes {
-		lines = append(lines, wrapTextLines(note, width, "  ", "  ")...)
+		lines = append(lines, wrapTextLines(note, width, "  ")...)
 	}
 	return lines
 }
@@ -898,11 +898,12 @@ func wrapLabelList(label string, items []string, width int) []string {
 	return lines
 }
 
-func wrapTextLines(text string, width int, indentFirst string, indentNext string) []string {
+func wrapTextLines(text string, width int, indentNext string) []string {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
 	}
+	const indentFirst = "  "
 	if width <= 0 {
 		return []string{indentFirst + text}
 	}
@@ -970,11 +971,11 @@ func filterHelpLines(dialect string) []string {
 		"C - The call was corrected.",
 		"B - A correction was attempted, but base-call or CTY validation failed, so the original call was kept.",
 	} {
-		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
+		lines = append(lines, wrapTextLines(note, helpMaxWidth, "    ")...)
 	}
 	lines = append(lines, "", "Event filters:")
-	lines = append(lines, wrapTextLines("EVENT recognizes the taxonomy EVENT families as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "  ", "    ")...)
-	lines = append(lines, wrapTextLines("Spots with no recognized EVENT tag are not affected by EVENT filters, including REJECT EVENT ALL.", helpMaxWidth, "  ", "    ")...)
+	lines = append(lines, wrapTextLines("EVENT recognizes the taxonomy EVENT families as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "    ")...)
+	lines = append(lines, wrapTextLines("Spots with no recognized EVENT tag are not affected by EVENT filters, including REJECT EVENT ALL.", helpMaxWidth, "    ")...)
 	if strings.EqualFold(strings.TrimSpace(dialect), "cc") {
 		ccModeLine := "SET/<MODE> | SET/NO<MODE> (" + strings.Join(spot.CCShortcutModes(), ", ") + ")"
 		lines = append(lines,
@@ -1016,7 +1017,7 @@ func pathGlyphHelpLines(cfg PathGlyphHelpConfig) []string {
 		fmt.Sprintf("%s - INSUFFICIENT: not enough recent evidence.", quoteHelpGlyph(cfg.Insufficient)),
 		"PATH filters use HIGH, MEDIUM, LOW, UNLIKELY, INSUFFICIENT.",
 	} {
-		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
+		lines = append(lines, wrapTextLines(note, helpMaxWidth, "    ")...)
 	}
 	return lines
 }

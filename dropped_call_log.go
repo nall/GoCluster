@@ -42,6 +42,7 @@ type droppedCallLogger struct {
 
 func newDroppedCallLogger(cfg config.DroppedCallLoggingConfig) (*droppedCallLogger, error) {
 	if !cfg.Enabled {
+		//nolint:nilnil // Disabled logging intentionally means no logger and no setup error.
 		return nil, nil
 	}
 	logger := &droppedCallLogger{}

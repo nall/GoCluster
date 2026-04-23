@@ -738,7 +738,7 @@ func (c *Client) parseSpot(line string) {
 
 	deCallRaw, freqFromCall, freqOK := extractCallAndFreq(tokens[2])
 	if strings.TrimSpace(deCallRaw) == "" {
-		c.reportBadCall("DE", "missing_callsign", deCallRaw, deCallRaw, "", "", "source_parser")
+		c.reportBadCall("DE", "missing_callsign", deCallRaw, deCallRaw, "", "")
 		log.Printf("RBN spot missing spotter callsign: %s", line)
 		return
 	}
@@ -778,18 +778,18 @@ func (c *Client) parseSpot(line string) {
 		return
 	}
 	if dxCall == "" {
-		c.reportBadCall("DX", "no_valid_dx", "", deCall, "", "", "source_parser")
+		c.reportBadCall("DX", "no_valid_dx", "", deCall, "", "")
 		return
 	}
 
 	parsed := spot.ParseSpotComment(buildComment(tokens, consumed), freq)
 	mode := parsed.Mode
 	if !spot.IsValidNormalizedCallsign(dxCall) {
-		c.reportBadCall("DX", "invalid_callsign", dxCall, deCall, dxCall, mode, "source_parser")
+		c.reportBadCall("DX", "invalid_callsign", dxCall, deCall, dxCall, mode)
 		return
 	}
 	if !spot.IsValidNormalizedCallsign(deCall) {
-		c.reportBadCall("DE", "invalid_callsign", deCallRaw, deCallRaw, dxCall, mode, "source_parser")
+		c.reportBadCall("DE", "invalid_callsign", deCallRaw, deCallRaw, dxCall, mode)
 		return
 	}
 	if !c.minimalParse && strings.TrimSpace(mode) == "" {
@@ -915,7 +915,7 @@ func (c *Client) HealthSnapshot() HealthSnapshot {
 	return snap
 }
 
-func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail string) {
+func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode string) {
 	if c == nil {
 		return
 	}
@@ -925,7 +925,7 @@ func (c *Client) reportBadCall(role, reason, call, deCall, dxCall, mode, detail 
 	if reporter == nil {
 		return
 	}
-	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, detail)
+	reporter(c.badCallSource(), role, reason, call, deCall, dxCall, mode, "source_parser")
 }
 
 func (c *Client) badCallSource() string {
