@@ -1,4 +1,4 @@
-package main
+package cluster
 
 import (
 	"context"
@@ -43,7 +43,7 @@ import (
 // performs the explicit signal-driven stops, and close replays the former defer
 // chain order for background services and durable resources.
 type clusterRuntime struct {
-	versionInfo  binaryVersion
+	versionInfo  BuildInfo
 	cfg          *config.Config
 	configSource string
 
@@ -145,7 +145,7 @@ type archivePeerSecondaryPolicy struct {
 	keyMode      dedup.SecondaryKeyMode
 }
 
-func newClusterRuntime(versionInfo binaryVersion, cfg *config.Config, configSource string) *clusterRuntime {
+func newClusterRuntime(versionInfo BuildInfo, cfg *config.Config, configSource string) *clusterRuntime {
 	return &clusterRuntime{
 		versionInfo:       versionInfo,
 		cfg:               cfg,
@@ -202,7 +202,7 @@ func (r *clusterRuntime) setupLoggingAndUI() bool {
 	r.loadSolarWeatherConfig()
 	r.configureSurface()
 
-	log.Printf("DX Cluster Server v%s starting... (commit=%s built=%s)", Version, r.versionInfo.commit, r.versionInfo.buildTime)
+	log.Printf("DX Cluster Server v%s starting... (commit=%s built=%s)", r.versionInfo.Version, r.versionInfo.Commit, r.versionInfo.BuildTime)
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 	return true
 }

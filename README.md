@@ -106,6 +106,17 @@ Supported bands:
 
 The main operator-facing configuration lives in [`data/config`](data/config). Startup uses an explicit filename registry, rejects unknown YAML files/keys, and fails fast when required YAML-owned settings or reference tables are missing. Documented zero sentinels, such as disabled keepalives or immediate broadcast delivery, are preserved as operator choices rather than replaced by code defaults. The config directory layout is described in [`data/config/README.md`](data/config/README.md).
 
+## Repo Layout
+
+The repo root now follows a simple ownership rule:
+
+- `main.go` is the live binary entrypoint only.
+- `internal/cluster` contains the live runtime implementation and cluster-local helpers.
+- `cmd/` contains standalone tools and offline runners.
+- Domain packages such as `spot`, `peer`, `telnet`, `config`, and `pathreliability` remain reusable subsystems with their own tests and package-local docs.
+
+Historical analysis notes and protocol reference material live under [`docs/archive/analysis`](docs/archive/analysis) and [`docs/reference`](docs/reference) rather than competing with the live binary at the repo root.
+
 ## Dropped Call Logs
 
 `logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. The shipped config enables it; set `logging.dropped_calls.enabled: false` to disable those files. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.

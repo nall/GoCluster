@@ -149,3 +149,21 @@ After Stages 1-4, the original repo goal for this refactor program was met:
 - the identified repo-owned routines above the 500-line threshold were removed
 - the major composition and hot-path responsibilities now have explicit private owners
 - behavior-preserving structure is documented without claiming a new architectural decision
+
+## 10) Follow-on Packaging Clarification
+
+On 2026-04-23, the live runtime ownership was clarified further:
+
+- root `main.go` became the live-binary wrapper only
+- live runtime implementation moved under `internal/cluster`
+- standalone tools remained under `cmd/`
+- non-runtime analysis artifacts and protocol references were moved out of the repo root
+
+This follow-on stayed within the same extraction-first philosophy as Stages 1-4:
+
+- no YAML or protocol changes
+- no lifecycle or shutdown redesign
+- no hot-path semantic changes
+- no replay/runtime policy consolidation
+
+Unlike Stages 1-4, that packaging rule is durable repo structure guidance and is recorded separately in an ADR.
