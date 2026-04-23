@@ -53,6 +53,7 @@ When the user asks what existing code does and has not asked for changes:
 - Reclassify Small work as Non-trivial immediately if the blast radius expands.
 - Non-trivial work includes any meaningful blast radius, schema/config/protocol/parser change, shared component, operational behavior, concurrency/lifecycle concern, docs/decision impact, or uncertain impact.
 - Before proposing or confirming a Non-trivial Scope Ledger, perform targeted Current-State Discovery: inspect relevant entry points, caller/callee flow, persisted state, user-visible surfaces, and existing tests. Ask product or semantic questions only after discoverable code facts have been checked.
+- Every Proposed Scope Ledger must include a compact `Reasoning budget` recommendation: target `low|medium|high|xhigh`, lowest-sufficient rationale, and escalation trigger.
 - For Non-trivial changes, do not edit files, propose diffs, run formatters, or run full checker suites until the user replies with the exact approval token: `Approved vN`.
 - Record `Ledger status: Approved vN found: yes/no`.
 - Do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval.

@@ -62,6 +62,25 @@ Ask product or semantic questions only after discoverable code facts have been
 checked. If a fact cannot be established from inspection, say
 `Unknown from inspected code` and name what should be inspected next.
 
+### Reasoning budget recommendation
+Every Proposed Scope Ledger must recommend the lowest reasoning level expected
+to satisfy the workflow without skipping required artifacts:
+- `low`: clearly Small, localized, low-risk work, or read-only explanation
+- `medium`: ordinary Non-trivial work with known blast radius, docs-only
+  workflow changes, or localized implementation with clear tests
+- `high`: Full-rigor work, config/schema/protocol/parser changes,
+  user-visible behavior, shared interfaces, retained state,
+  concurrency/lifecycle, queues, hot paths, or production-impacting fixes
+- `xhigh`: large cross-cutting architecture, ambiguous semantics, conflicting
+  evidence, incident/root-cause work, or multiple high-risk domains at once
+
+Format:
+- `Reasoning budget: <low|medium|high|xhigh> (lowest sufficient). Rationale: <one sentence>; escalation trigger: <one phrase or "none expected">.`
+
+The recommendation is advisory. Raise it if discovery reveals hidden blast
+radius; do not lower it by skipping required workflow artifacts, skill audits,
+dependency rigor, validation, review, or traceability.
+
 Before code, explicitly identify:
 - impacted contracts, or `No contract changes`
 - user-visible behavior changes, or `No user-visible behavior changes`

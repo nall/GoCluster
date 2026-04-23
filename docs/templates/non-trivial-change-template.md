@@ -24,6 +24,7 @@ or
 - Out of scope:
 - Risks requiring attention:
 - Initial classification: Non-trivial
+- Reasoning budget: <low|medium|high|xhigh> (lowest sufficient). Rationale: <one sentence>; escalation trigger: <one phrase or "none expected">.
 
 Stop here and wait for the exact approval token:
 `Approved vN`

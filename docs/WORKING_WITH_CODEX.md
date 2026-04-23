@@ -57,6 +57,9 @@ Approved vN
 
 No code, diffs, or full validation should happen before that approval.
 Before that ledger, Codex should inspect the relevant current code path so the scope is grounded in actual entry points, state, tests, and user-visible behavior.
+The proposed ledger should also include a `Reasoning budget` recommendation.
+Use it as Codex's target reasoning-level suggestion for the next execution turn;
+it does not approve scope or waive validation.
 
 ## Practical loop
 
