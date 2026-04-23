@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestPSKReporterSubscriptionTopicsWithModes(t *testing.T) {
-	cfg := PSKReporterConfig{Modes: []string{"FT8", "ft4", "  "}}
+func TestPSKReporterSubscriptionTopicsIgnoreModeTaxonomy(t *testing.T) {
+	cfg := PSKReporterConfig{}
 	got := cfg.SubscriptionTopics()
 	want := []string{defaultPSKReporterTopic}
 	if !reflect.DeepEqual(got, want) {

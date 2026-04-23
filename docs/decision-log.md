@@ -78,3 +78,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0066 | DXSummit HTTP Ingest | Accepted | 2026-04-21 | dxsummit, config, spot, runtime, docs | - | - | `docs/decisions/ADR-0066-dxsummit-http-ingest.md` |
 | ADR-0067 | Centralized YAML Settings Enforcement | Accepted | 2026-04-22 | config, pathreliability, solarweather, spot, runtime, reports | - | - | `docs/decisions/ADR-0067-centralized-yaml-settings-enforcement.md` |
 | ADR-0068 | EVENT Comment Tags and Filter Contract | Accepted | 2026-04-22 | spot, filter, telnet, archive, commands, docs | - | - | `docs/decisions/ADR-0068-event-comment-tags-and-filter-contract.md` |
+| ADR-0069 | Single Spot Taxonomy YAML | Accepted | 2026-04-22 | spot, config, filter, telnet, pskreporter, pathreliability | - | - | `docs/decisions/ADR-0069-single-spot-taxonomy-yaml.md` |

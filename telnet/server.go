@@ -1667,14 +1667,29 @@ const (
 )
 
 const (
-	passFilterUsageMsg      = "Usage: PASS <type> ...\nPASS BAND <band>[,<band>...] | PASS MODE <mode>[,<mode>...] | PASS SOURCE <HUMAN|SKIMMER|ALL> | PASS EVENT <event>[,<event>...] | PASS DXCALL <pattern>[,<pattern>...] | PASS DECALL <pattern>[,<pattern>...] | PASS CONFIDENCE <symbol>[,<symbol>...] (symbols: ?,S,C,P,V,B or ALL) | PASS PATH <class>[,<class>...] (classes: HIGH,MEDIUM,LOW,UNLIKELY,INSUFFICIENT or ALL) | PASS BEACON | PASS WWV | PASS WCY | PASS ANNOUNCE | PASS NEARBY ON|OFF | PASS DXGRID2 <grid>[,<grid>...] (two characters or ALL) | PASS DEGRID2 <grid>[,<grid>...] (two characters or ALL) | PASS DXCONT <cont>[,<cont>...] | PASS DECONT <cont>[,<cont>...] | PASS DXZONE <zone>[,<zone>...] | PASS DEZONE <zone>[,<zone>...] | PASS DXDXCC <code>[,<code>...] | PASS DEDXCC <code>[,<code>...] (PASS = allow list; removes from block list; ALL allows all). Supported modes include: CW, LSB, USB, JS8, SSTV, RTTY, FT2, FT4, FT8, MSK144, PSK, UNKNOWN. Supported events include: LLOTA, IOTA, POTA, SOTA, WWFF.\nType HELP for usage.\n"
-	rejectFilterUsageMsg    = "Usage: REJECT <type> ...\nREJECT BAND <band>[,<band>...] | REJECT MODE <mode>[,<mode>...] | REJECT SOURCE <HUMAN|SKIMMER|ALL> | REJECT EVENT <event>[,<event>...] | REJECT DXCALL <pattern>[,<pattern>...] | REJECT DECALL <pattern>[,<pattern>...] | REJECT CONFIDENCE <symbol>[,<symbol>...] (symbols: ?,S,C,P,V,B or ALL) | REJECT PATH <class>[,<class>...] (classes: HIGH,MEDIUM,LOW,UNLIKELY,INSUFFICIENT or ALL) | REJECT BEACON | REJECT WWV | REJECT WCY | REJECT ANNOUNCE | REJECT DXGRID2 <grid>[,<grid>...] (two characters or ALL) | REJECT DEGRID2 <grid>[,<grid>...] (two characters or ALL) | REJECT DXCONT <cont>[,<cont>...] | REJECT DECONT <cont>[,<cont>...] | REJECT DXZONE <zone>[,<zone>...] | REJECT DEZONE <zone>[,<zone>...] | REJECT DXDXCC <code>[,<code>...] | REJECT DEDXCC <code>[,<code>...] (REJECT = block list; removes from allow list; ALL blocks all). Supported modes include: CW, LSB, USB, JS8, SSTV, RTTY, FT2, FT4, FT8, MSK144, PSK, UNKNOWN. Supported events include: LLOTA, IOTA, POTA, SOTA, WWFF.\nType HELP for usage.\n"
 	unknownPassTypeMsg      = "Unknown filter type. Use: BAND, MODE, SOURCE, EVENT, DXCALL, DECALL, CONFIDENCE, PATH, BEACON, WWV, WCY, ANNOUNCE, DXGRID2, DEGRID2, DXCONT, DECONT, DXZONE, DEZONE, DXDXCC, or DEDXCC\nType HELP for usage.\n"
 	unknownRejectTypeMsg    = "Unknown filter type. Use: BAND, MODE, SOURCE, EVENT, DXCALL, DECALL, CONFIDENCE, PATH, BEACON, WWV, WCY, ANNOUNCE, DXGRID2, DEGRID2, DXCONT, DECONT, DXZONE, DEZONE, DXDXCC, or DEDXCC\nType HELP for usage.\n"
 	invalidFilterCommandMsg = "Invalid filter command. Type HELP for usage.\n"
 	nearbyLoginWarningMsg   = "NEARBY filter is ON. Disable NEARBY if you want to use regular location filters"
 	nearbyLoginInactiveMsg  = "NEARBY filter is ON but inactive: grid not set or H3 tables unavailable.\n"
 )
+
+func passFilterUsageMsg() string {
+	return filterUsageMsg("PASS")
+}
+
+func rejectFilterUsageMsg() string {
+	return filterUsageMsg("REJECT")
+}
+
+func filterUsageMsg(verb string) string {
+	modeList := strings.Join(filter.SupportedModes(), ", ")
+	eventList := strings.Join(filter.SupportedEvents(), ", ")
+	if verb == "REJECT" {
+		return "Usage: REJECT <type> ...\nREJECT BAND <band>[,<band>...] | REJECT MODE <mode>[,<mode>...] | REJECT SOURCE <HUMAN|SKIMMER|ALL> | REJECT EVENT <event>[,<event>...] | REJECT DXCALL <pattern>[,<pattern>...] | REJECT DECALL <pattern>[,<pattern>...] | REJECT CONFIDENCE <symbol>[,<symbol>...] (symbols: ?,S,C,P,V,B or ALL) | REJECT PATH <class>[,<class>...] (classes: HIGH,MEDIUM,LOW,UNLIKELY,INSUFFICIENT or ALL) | REJECT BEACON | REJECT WWV | REJECT WCY | REJECT ANNOUNCE | REJECT DXGRID2 <grid>[,<grid>...] (two characters or ALL) | REJECT DEGRID2 <grid>[,<grid>...] (two characters or ALL) | REJECT DXCONT <cont>[,<cont>...] | REJECT DECONT <cont>[,<cont>...] | REJECT DXZONE <zone>[,<zone>...] | REJECT DEZONE <zone>[,<zone>...] | REJECT DXDXCC <code>[,<code>...] | REJECT DEDXCC <code>[,<code>...] (REJECT = block list; removes from allow list; ALL blocks all; MODE list entries are deltas; UNKNOWN means blank-mode spots). Supported modes include: " + modeList + ". Supported events include: " + eventList + ".\nType HELP for usage.\n"
+	}
+	return "Usage: PASS <type> ...\nPASS BAND <band>[,<band>...] | PASS MODE <mode>[,<mode>...] | PASS SOURCE <HUMAN|SKIMMER|ALL> | PASS EVENT <event>[,<event>...] | PASS DXCALL <pattern>[,<pattern>...] | PASS DECALL <pattern>[,<pattern>...] | PASS CONFIDENCE <symbol>[,<symbol>...] (symbols: ?,S,C,P,V,B or ALL) | PASS PATH <class>[,<class>...] (classes: HIGH,MEDIUM,LOW,UNLIKELY,INSUFFICIENT or ALL) | PASS BEACON | PASS WWV | PASS WCY | PASS ANNOUNCE | PASS NEARBY ON|OFF | PASS DXGRID2 <grid>[,<grid>...] (two characters or ALL) | PASS DEGRID2 <grid>[,<grid>...] (two characters or ALL) | PASS DXCONT <cont>[,<cont>...] | PASS DECONT <cont>[,<cont>...] | PASS DXZONE <zone>[,<zone>...] | PASS DEZONE <zone>[,<zone>...] | PASS DXDXCC <code>[,<code>...] | PASS DEDXCC <code>[,<code>...] (PASS = allow list; removes from block list; ALL allows all; MODE list entries are deltas; UNKNOWN means blank-mode spots). Supported modes include: " + modeList + ". Supported events include: " + eventList + ".\nType HELP for usage.\n"
+}
 
 // ServerOptions configures the telnet server instance.
 type ServerOptions struct {

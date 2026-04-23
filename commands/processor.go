@@ -227,10 +227,10 @@ func (p *Processor) handleHelp(dialect string, topic string) string {
 	lines = append(lines, wrapListLines(filterListTypes())...)
 	lines = append(lines, "")
 	lines = append(lines, "Supported modes:")
-	lines = append(lines, wrapListLines(filter.SupportedModes)...)
+	lines = append(lines, wrapListLines(filter.SupportedModes())...)
 	lines = append(lines, "")
 	lines = append(lines, "Supported events:")
-	lines = append(lines, wrapListLines(filter.SupportedEvents)...)
+	lines = append(lines, wrapListLines(filter.SupportedEvents())...)
 	lines = append(lines, "")
 	lines = append(lines, "Supported bands:")
 	lines = append(lines, wrapListLines(spot.SupportedBandNames())...)
@@ -547,7 +547,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 				"Alias of PASS MODE <MODE>.",
 			},
 		)
-		setModeLines = appendListSection(setModeLines, "Modes:", []string{"CW", "FT2", "FT4", "FT8", "RTTY"})
+		setModeLines = appendListSection(setModeLines, "Modes:", spot.CCShortcutModes())
 		add("SET/<MODE>", "SET/<MODE> - Allow a mode.", setModeLines)
 
 		setNoModeLines := helpEntryLines(
@@ -558,7 +558,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 				"Alias of REJECT MODE <MODE>.",
 			},
 		)
-		setNoModeLines = appendListSection(setNoModeLines, "Modes:", []string{"CW", "FT2", "FT4", "FT8", "RTTY"})
+		setNoModeLines = appendListSection(setNoModeLines, "Modes:", spot.CCShortcutModes())
 		add("SET/NO<MODE>", "SET/NO<MODE> - Block a mode.", setNoModeLines)
 
 		catalog.order = []string{
@@ -625,6 +625,8 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 			[]string{
 				"Adds to allowlist and removes from blocklist.",
 				"List is comma or space separated; use ALL to allow all.",
+				"For MODE, list entries are enabled without changing modes not listed.",
+				"Use PASS MODE UNKNOWN or PASS MODE ALL to restore blank-mode spots.",
 			},
 		)
 		passLines = appendListSection(passLines, "Types:", filterListTypes())
@@ -644,6 +646,8 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig) helpCatalog {
 			[]string{
 				"Adds to blocklist and removes from allowlist.",
 				"List is comma or space separated; use ALL to block all.",
+				"For MODE, list entries are rejected without changing modes not listed.",
+				"UNKNOWN is the MODE token for blank-mode spots.",
 			},
 		)
 		rejectLines = appendListSection(rejectLines, "Types:", filterListTypes())
@@ -815,12 +819,7 @@ func normalizeHelpTopic(dialect string, topic string) string {
 }
 
 func isCCHelpMode(mode string) bool {
-	switch strutil.NormalizeUpper(mode) {
-	case "CW", "FT2", "FT4", "FT8", "RTTY":
-		return true
-	default:
-		return false
-	}
+	return spot.IsCCShortcutMode(strutil.NormalizeUpper(mode))
 }
 
 func helpEntryLines(summary string, usage []string, aliases []string, notes []string) []string {
@@ -944,6 +943,8 @@ func filterHelpLines(dialect string) []string {
 		"Filter core rules:",
 		"PASS <type> <list> adds to allowlist and removes from blocklist.",
 		"REJECT <type> <list> adds to blocklist and removes from allowlist.",
+		"PASS/REJECT MODE <list> are deltas; modes not listed are unchanged.",
+		"UNKNOWN is the MODE token for blank-mode spots.",
 		"If an item appears in both lists, block wins.",
 		"",
 		"ALL keyword (type-scoped):",
@@ -971,8 +972,9 @@ func filterHelpLines(dialect string) []string {
 		lines = append(lines, wrapTextLines(note, helpMaxWidth, "  ", "    ")...)
 	}
 	lines = append(lines, "", "Event filters:")
-	lines = append(lines, wrapTextLines("EVENT recognizes LLOTA, IOTA, POTA, SOTA, and WWFF as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "  ", "    ")...)
+	lines = append(lines, wrapTextLines("EVENT recognizes the taxonomy EVENT families as standalone comment tokens or acronym-prefixed references such as POTA-1234. Only the event family is filtered; the reference remains in the comment.", helpMaxWidth, "  ", "    ")...)
 	if strings.EqualFold(strings.TrimSpace(dialect), "cc") {
+		ccModeLine := "SET/<MODE> | SET/NO<MODE> (" + strings.Join(spot.CCShortcutModes(), ", ") + ")"
 		lines = append(lines,
 			"",
 			"CC shortcuts:",
@@ -981,7 +983,7 @@ func filterHelpLines(dialect string) []string {
 			"SET/WWV | SET/NOWWV",
 			"SET/WCY | SET/NOWCY",
 			"SET/SKIMMER | SET/NOSKIMMER",
-			"SET/<MODE> | SET/NO<MODE> (CW, FT2, FT4, FT8, RTTY)",
+			ccModeLine,
 			"SET/NOFILTER",
 			"SET/FILTER <type> <list>",
 			"UNSET/FILTER <type> <list>",

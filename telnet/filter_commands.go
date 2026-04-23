@@ -64,6 +64,7 @@ const nearbyLocationFilterWarning = "This filter is disabled when NEARBY ON. Dis
 const nearbyUsageMsg = "Usage: PASS NEARBY ON|OFF\nType HELP for usage.\n"
 const nearbyMissingGridMsg = "Grid not set. Use SET GRID <4-6 char maidenhead>.\n"
 const nearbyUnavailableMsg = "Unable to enable NEARBY: invalid grid or H3 tables unavailable.\n"
+const unknownModeHiddenWarningMsg = "Note: UNKNOWN represents blank-mode spots. They are hidden; use PASS MODE UNKNOWN or PASS MODE ALL to show them again.\n"
 
 var locationFilterDomains = map[string]bool{
 	"DXGRID2": true,
@@ -301,12 +302,12 @@ func parseClassicDialect(tokens, upper []string) (parsedFilterCommand, bool, str
 		return parsedFilterCommand{}, true, "Usage: RESET FILTER\nType HELP for usage.\n"
 	case "PASS":
 		if len(upper) < 2 {
-			return parsedFilterCommand{}, true, passFilterUsageMsg
+			return parsedFilterCommand{}, true, passFilterUsageMsg()
 		}
 		return parsedFilterCommand{action: actionAllow, domain: upper[1], args: tokens[2:]}, true, ""
 	case "REJECT":
 		if len(upper) < 2 {
-			return parsedFilterCommand{}, true, rejectFilterUsageMsg
+			return parsedFilterCommand{}, true, rejectFilterUsageMsg()
 		}
 		return parsedFilterCommand{action: actionBlock, domain: upper[1], args: tokens[2:]}, true, ""
 	case "SHOW":
@@ -383,7 +384,7 @@ func parseCCDialect(tokens, upper []string) (parsedFilterCommand, bool, string) 
 		return parsedFilterCommand{action: actionAllow, domain: "NOFILTER"}, true, ""
 	case "SET/FILTER":
 		if len(upper) < 2 {
-			return parsedFilterCommand{}, true, passFilterUsageMsg
+			return parsedFilterCommand{}, true, passFilterUsageMsg()
 		}
 		domain := upper[1]
 		args := tokens[2:]
@@ -401,7 +402,7 @@ func parseCCDialect(tokens, upper []string) (parsedFilterCommand, bool, string) 
 		return parsedFilterCommand{action: actionAllow, domain: domain, args: args}, true, ""
 	case "UNSET/FILTER":
 		if len(upper) < 2 {
-			return parsedFilterCommand{}, true, rejectFilterUsageMsg
+			return parsedFilterCommand{}, true, rejectFilterUsageMsg()
 		}
 		return parsedFilterCommand{action: actionBlock, domain: upper[1], args: tokens[2:]}, true, ""
 	case "SHOW/FILTER", "SH/FILTER":
@@ -411,7 +412,7 @@ func parseCCDialect(tokens, upper []string) (parsedFilterCommand, bool, string) 
 		}
 		return cmd, true, ""
 	default:
-		// Mode shortcuts: SET/FT8, SET/NOFT8, etc. (CC supports CW, FT2, FT4, FT8, RTTY)
+		// Mode shortcuts: SET/FT8, SET/NOFT8, etc.
 		if len(upper) == 1 && strings.HasPrefix(upper[0], "SET/NO") {
 			mode := strings.TrimPrefix(upper[0], "SET/NO")
 			if isCCMode(mode) {
@@ -436,7 +437,7 @@ func newBandHandler() *domainHandler {
 			case actionAllow:
 				value := strings.TrimSpace(strings.Join(args, " "))
 				if value == "" {
-					return passFilterUsageMsg, false
+					return passFilterUsageMsg(), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) { f.ResetBands() })
@@ -444,14 +445,14 @@ func newBandHandler() *domainHandler {
 				}
 				rawBands := parseBandList(value)
 				if len(rawBands) == 0 {
-					return passFilterUsageMsg, false
+					return passFilterUsageMsg(), false
 				}
 				normalizedBands, invalid := normalizeBands(rawBands)
 				if len(invalid) > 0 {
 					return fmt.Sprintf("Unknown band: %s\nSupported bands: %s\n", strings.Join(invalid, ", "), strings.Join(spot.SupportedBandNames(), ", ")), false
 				}
 				if len(normalizedBands) == 0 {
-					return passFilterUsageMsg, false
+					return passFilterUsageMsg(), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, band := range normalizedBands {
@@ -465,7 +466,7 @@ func newBandHandler() *domainHandler {
 			case actionBlock:
 				value := strings.TrimSpace(strings.Join(args, " "))
 				if value == "" {
-					return rejectFilterUsageMsg, false
+					return rejectFilterUsageMsg(), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) {
@@ -477,14 +478,14 @@ func newBandHandler() *domainHandler {
 				}
 				rawBands := parseBandList(value)
 				if len(rawBands) == 0 {
-					return rejectFilterUsageMsg, false
+					return rejectFilterUsageMsg(), false
 				}
 				normalizedBands, invalid := normalizeBands(rawBands)
 				if len(invalid) > 0 {
 					return fmt.Sprintf("Unknown band: %s\nSupported bands: %s\n", strings.Join(invalid, ", "), strings.Join(spot.SupportedBandNames(), ", ")), false
 				}
 				if len(normalizedBands) == 0 {
-					return rejectFilterUsageMsg, false
+					return rejectFilterUsageMsg(), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, band := range normalizedBands {
@@ -517,7 +518,7 @@ func newModeHandler() *domainHandler {
 				modeArgs := strings.TrimSpace(strings.Join(args, " "))
 				if strings.EqualFold(modeArgs, "ALL") {
 					c.updateFilter(func(f *filter.Filter) { f.ResetModes() })
-					return "All modes enabled\n", true
+					return formatModeMutationResponse(c, "All modes enabled"), true
 				}
 				modes := parseModeList(modeArgs)
 				if len(modes) == 0 {
@@ -525,14 +526,14 @@ func newModeHandler() *domainHandler {
 				}
 				invalid := collectInvalidModes(modes)
 				if len(invalid) > 0 {
-					return fmt.Sprintf("Unknown mode: %s\nSupported modes: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedModes, ", ")), false
+					return fmt.Sprintf("Unknown mode: %s\nSupported modes: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedModes(), ", ")), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, mode := range modes {
 						f.SetMode(mode, true)
 					}
 				})
-				return fmt.Sprintf("Filter set: Modes %s\n", strings.Join(modes, ", ")), true
+				return formatModeMutationResponse(c, fmt.Sprintf("Modes enabled: %s", strings.Join(modes, ", "))), true
 			case actionBlock:
 				modeArgs := strings.TrimSpace(strings.Join(args, " "))
 				if modeArgs == "" {
@@ -544,7 +545,7 @@ func newModeHandler() *domainHandler {
 						f.BlockAllModes = true
 						f.AllModes = false
 					})
-					return "All modes blocked\n", true
+					return formatModeMutationResponse(c, "All modes blocked"), true
 				}
 				modes := parseModeList(modeArgs)
 				if len(modes) == 0 {
@@ -552,19 +553,52 @@ func newModeHandler() *domainHandler {
 				}
 				invalid := collectInvalidModes(modes)
 				if len(invalid) > 0 {
-					return fmt.Sprintf("Unknown mode: %s\nSupported modes: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedModes, ", ")), false
+					return fmt.Sprintf("Unknown mode: %s\nSupported modes: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedModes(), ", ")), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, mode := range modes {
 						f.SetMode(mode, false)
 					}
 				})
-				return fmt.Sprintf("Mode filters disabled: %s\n", strings.Join(modes, ", ")), true
+				return formatModeMutationResponse(c, fmt.Sprintf("Modes rejected: %s", strings.Join(modes, ", "))), true
 			default:
 				return invalidFilterCommandMsg, false
 			}
 		},
 	}
+}
+
+func formatModeMutationResponse(c *Client, status string) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(status, "\r\n"))
+	b.WriteString("\n")
+	if c == nil {
+		return b.String()
+	}
+	c.filterMu.RLock()
+	modes := snapshotModeFilter(c.filter)
+	unknownVisible := c.filter != nil && c.filter.UnknownModeVisible()
+	c.filterMu.RUnlock()
+	b.WriteString(formatEffectiveModeLine(modes))
+	if !unknownVisible {
+		b.WriteString(unknownModeHiddenWarningMsg)
+	}
+	return b.String()
+}
+
+func formatEventMutationResponse(c *Client, status string) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(status, "\r\n"))
+	b.WriteString("\n")
+	if c == nil {
+		return b.String()
+	}
+	c.filterMu.RLock()
+	events := snapshotEventFilter(c.filter)
+	eventlessVisible := eventlessSpotsVisible(c.filter)
+	c.filterMu.RUnlock()
+	b.WriteString(formatEffectiveEventLine(events, eventlessVisible))
+	return b.String()
 }
 
 func newSourceHandler() *domainHandler {
@@ -618,28 +652,28 @@ func newEventHandler() *domainHandler {
 			switch action {
 			case actionAllow:
 				if value == "" {
-					return "Usage: PASS EVENT <event>[,<event>...] (LLOTA, IOTA, POTA, SOTA, WWFF, or ALL)\nType HELP for usage.\n", false
+					return eventUsage("PASS"), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) { f.ResetEvents() })
-					return "Event filtering disabled\n", true
+					return formatEventMutationResponse(c, "All events enabled"), true
 				}
 				events := parseEventList(value)
 				if len(events) == 0 {
-					return "Usage: PASS EVENT <event>[,<event>...] (LLOTA, IOTA, POTA, SOTA, WWFF, or ALL)\nType HELP for usage.\n", false
+					return eventUsage("PASS"), false
 				}
 				if invalid := collectInvalidEvents(events); len(invalid) > 0 {
-					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents, ", ")), false
+					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents(), ", ")), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, event := range events {
 						f.SetEvent(event, true)
 					}
 				})
-				return fmt.Sprintf("Filter set: Events %s\n", strings.Join(events, ", ")), true
+				return formatEventMutationResponse(c, fmt.Sprintf("Events enabled: %s", strings.Join(events, ", "))), true
 			case actionBlock:
 				if value == "" {
-					return "Usage: REJECT EVENT <event>[,<event>...] (comma or space separated, or ALL)\nType HELP for usage.\n", false
+					return eventUsage("REJECT"), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) {
@@ -647,26 +681,30 @@ func newEventHandler() *domainHandler {
 						f.BlockAllEvents = true
 						f.AllEvents = false
 					})
-					return "All events blocked\n", true
+					return formatEventMutationResponse(c, "All events blocked"), true
 				}
 				events := parseEventList(value)
 				if len(events) == 0 {
-					return "Usage: REJECT EVENT <event>[,<event>...] (comma or space separated, or ALL)\nType HELP for usage.\n", false
+					return eventUsage("REJECT"), false
 				}
 				if invalid := collectInvalidEvents(events); len(invalid) > 0 {
-					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents, ", ")), false
+					return fmt.Sprintf("Unknown event: %s\nSupported events: %s\n", strings.Join(invalid, ", "), strings.Join(filter.SupportedEvents(), ", ")), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, event := range events {
 						f.SetEvent(event, false)
 					}
 				})
-				return fmt.Sprintf("Event filters disabled: %s\n", strings.Join(events, ", ")), true
+				return formatEventMutationResponse(c, fmt.Sprintf("Events rejected: %s", strings.Join(events, ", "))), true
 			default:
 				return invalidFilterCommandMsg, false
 			}
 		},
 	}
+}
+
+func eventUsage(verb string) string {
+	return fmt.Sprintf("Usage: %s EVENT <event>[,<event>...] (%s, or ALL)\nType HELP for usage.\n", verb, strings.Join(filter.SupportedEvents(), ", "))
 }
 
 func newNoFilterHandler() *domainHandler {
@@ -689,7 +727,7 @@ func newCallPatternHandler(name string) *domainHandler {
 			case actionAllow:
 				value := strings.TrimSpace(strings.Join(args, " "))
 				if value == "" {
-					return passFilterUsageMsg, false
+					return passFilterUsageMsg(), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) {
@@ -708,7 +746,7 @@ func newCallPatternHandler(name string) *domainHandler {
 				}
 				patterns := splitListValues(value)
 				if len(patterns) == 0 {
-					return passFilterUsageMsg, false
+					return passFilterUsageMsg(), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, pattern := range patterns {
@@ -732,7 +770,7 @@ func newCallPatternHandler(name string) *domainHandler {
 			case actionBlock:
 				value := strings.TrimSpace(strings.Join(args, " "))
 				if value == "" {
-					return rejectFilterUsageMsg, false
+					return rejectFilterUsageMsg(), false
 				}
 				if strings.EqualFold(value, "ALL") {
 					c.updateFilter(func(f *filter.Filter) {
@@ -753,7 +791,7 @@ func newCallPatternHandler(name string) *domainHandler {
 				}
 				patterns := splitListValues(value)
 				if len(patterns) == 0 {
-					return rejectFilterUsageMsg, false
+					return rejectFilterUsageMsg(), false
 				}
 				c.updateFilter(func(f *filter.Filter) {
 					for _, pattern := range patterns {
@@ -1396,15 +1434,17 @@ func showFilterDeprecationNote(tokens []string, dialect DialectName) string {
 }
 
 type allowBlockSnapshot struct {
-	allow      string
-	block      string
-	effective  string
-	allowAll   bool
-	blockAll   bool
-	allowList  string
-	blockList  string
-	allowCount int
-	blockCount int
+	allow        string
+	block        string
+	effective    string
+	enabled      string
+	allowAll     bool
+	blockAll     bool
+	allowList    string
+	blockList    string
+	allowCount   int
+	blockCount   int
+	enabledCount int
 }
 
 // formatFilterSnapshot renders a stable, multi-line view of current filter state.
@@ -1421,9 +1461,10 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	dxccSupported := supportedDXCCCodes(ctyDB)
 
 	bands := snapshotAllowBlockStrings(f.AllBands, f.BlockAllBands, f.Bands, f.BlockBands, spot.SupportedBandNames())
-	modes := snapshotAllowBlockStrings(f.AllModes, f.BlockAllModes, f.Modes, f.BlockModes, filter.SupportedModes)
+	modes := snapshotModeFilter(f)
 	sources := snapshotAllowBlockStrings(f.AllSources, f.BlockAllSources, f.Sources, f.BlockSources, filter.SupportedSources)
-	events := snapshotAllowBlockStrings(f.AllEvents, f.BlockAllEvents, f.Events, f.BlockEvents, filter.SupportedEvents)
+	events := snapshotEventFilter(f)
+	eventlessVisible := eventlessSpotsVisible(f)
 	confidence := snapshotAllowBlockStrings(f.AllConfidence, f.BlockAllConfidence, f.Confidence, f.BlockConfidence, filter.SupportedConfidenceSymbols)
 	pathClasses := snapshotAllowBlockStrings(f.AllPathClasses, f.BlockAllPathClasses, f.PathClasses, f.BlockPathClasses, filter.SupportedPathClasses)
 	dxCont := snapshotAllowBlockStrings(f.AllDXContinents, f.BlockAllDXContinents, f.DXContinents, f.BlockDXContinents, filter.SupportedContinents)
@@ -1460,9 +1501,9 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	}
 	summaryParts := []string{
 		summaryAllowBlockField("BAND", bands, maxFieldLen),
-		summaryAllowBlockField("MODE", modes, maxFieldLen),
+		summaryEnabledField("MODE", modes, maxFieldLen),
 		summaryAllowBlockField("SOURCE", sources, maxFieldLen),
-		summaryAllowBlockField("EVENT", events, maxFieldLen),
+		summaryEventField(events, eventlessVisible, maxFieldLen),
 		clampSummaryField(dxCallSummary, maxFieldLen),
 		clampSummaryField(deCallSummary, maxFieldLen),
 		summaryAllowBlockField("CONFIDENCE", confidence, maxFieldLen),
@@ -1487,9 +1528,12 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 		b.WriteString("\n")
 	}
 	b.WriteString(formatAllowBlockLine("BAND", bands))
-	b.WriteString(formatAllowBlockLine("MODE", modes))
+	b.WriteString(formatEnabledLine("MODE", modes))
+	if !f.UnknownModeVisible() {
+		b.WriteString(unknownModeHiddenWarningMsg)
+	}
 	b.WriteString(formatAllowBlockLine("SOURCE", sources))
-	b.WriteString(formatAllowBlockLine("EVENT", events))
+	b.WriteString(formatEventLine(events, eventlessVisible))
 	b.WriteString(dxCallLine)
 	b.WriteString(deCallLine)
 	b.WriteString(formatAllowBlockLine("CONFIDENCE", confidence))
@@ -1511,13 +1555,35 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	return b.String()
 }
 
+func snapshotModeFilter(f *filter.Filter) allowBlockSnapshot {
+	if f == nil {
+		return buildAllowBlockSnapshot(false, false, "", "", 0, 0)
+	}
+	return snapshotAllowBlockStrings(f.AllModes, f.BlockAllModes, f.Modes, f.BlockModes, filter.SupportedModes())
+}
+
+func snapshotEventFilter(f *filter.Filter) allowBlockSnapshot {
+	if f == nil {
+		return buildAllowBlockSnapshot(false, false, "", "", 0, 0)
+	}
+	return snapshotAllowBlockStrings(f.AllEvents, f.BlockAllEvents, f.Events, f.BlockEvents, filter.SupportedEvents())
+}
+
+func eventlessSpotsVisible(f *filter.Filter) bool {
+	return f != nil && !f.BlockAllEvents && f.AllEvents
+}
+
 func snapshotAllowBlockStrings(allowAll, blockAll bool, allow, block map[string]bool, supported []string) allowBlockSnapshot {
 	allowValues := orderedStringValues(allow, supported)
 	blockValues := orderedStringValues(block, supported)
 	allowListLabel := strings.Join(allowValues, ", ")
 	blockListLabel := strings.Join(blockValues, ", ")
 	allowAllNormalized := allowAll || coversAllSupported(allow, supported)
-	return buildAllowBlockSnapshot(allowAllNormalized, blockAll, allowListLabel, blockListLabel, len(allowValues), len(blockValues))
+	snapshot := buildAllowBlockSnapshot(allowAllNormalized, blockAll, allowListLabel, blockListLabel, len(allowValues), len(blockValues))
+	enabledValues := effectiveEnabledStringValues(allowAllNormalized, blockAll, allow, block, supported)
+	snapshot.enabled = enabledListLabel(enabledValues)
+	snapshot.enabledCount = len(enabledValues)
+	return snapshot
 }
 
 func snapshotAllowBlockIntsRange(allowAll, blockAll bool, allow, block map[int]bool, min, max int) allowBlockSnapshot {
@@ -1554,15 +1620,17 @@ func buildAllowBlockSnapshot(allowAll, blockAll bool, allowList, blockList strin
 	}
 
 	return allowBlockSnapshot{
-		allow:      allowLabel,
-		block:      blockLabel,
-		effective:  effectiveAllowBlockLabel(allowAll, blockAll, allowList, blockList),
-		allowAll:   allowAll,
-		blockAll:   blockAll,
-		allowList:  allowList,
-		blockList:  blockList,
-		allowCount: allowCount,
-		blockCount: blockCount,
+		allow:        allowLabel,
+		block:        blockLabel,
+		effective:    effectiveAllowBlockLabel(allowAll, blockAll, allowList, blockList),
+		enabled:      "NONE",
+		allowAll:     allowAll,
+		blockAll:     blockAll,
+		allowList:    allowList,
+		blockList:    blockList,
+		allowCount:   allowCount,
+		blockCount:   blockCount,
+		enabledCount: 0,
 	}
 }
 
@@ -1586,6 +1654,22 @@ func formatAllowBlockLine(name string, snapshot allowBlockSnapshot) string {
 	return fmt.Sprintf("%s: allow=%s block=%s (effective: %s)\n", name, snapshot.allow, snapshot.block, snapshot.effective)
 }
 
+func formatEnabledLine(name string, snapshot allowBlockSnapshot) string {
+	return fmt.Sprintf("%s: enabled=%s\n", name, snapshot.enabled)
+}
+
+func formatEventLine(snapshot allowBlockSnapshot, eventlessVisible bool) string {
+	return fmt.Sprintf("EVENT: enabled=%s; no-event spots=%s\n", snapshot.enabled, passHiddenLabel(eventlessVisible))
+}
+
+func formatEffectiveModeLine(snapshot allowBlockSnapshot) string {
+	return fmt.Sprintf("Effective MODE: %s\n", snapshot.enabled)
+}
+
+func formatEffectiveEventLine(snapshot allowBlockSnapshot, eventlessVisible bool) string {
+	return fmt.Sprintf("Effective EVENT: %s; no-event spots: %s\n", snapshot.enabled, passHiddenLabel(eventlessVisible))
+}
+
 func summaryAllowBlockField(name string, snapshot allowBlockSnapshot, maxFieldLen int) string {
 	if maxFieldLen <= len(name)+1 {
 		return name
@@ -1594,6 +1678,30 @@ func summaryAllowBlockField(name string, snapshot allowBlockSnapshot, maxFieldLe
 	label := summaryEffectiveLabel(snapshot, maxLabelLen)
 	field := fmt.Sprintf("%s=%s", name, label)
 	return clampSummaryField(field, maxFieldLen)
+}
+
+func summaryEnabledField(name string, snapshot allowBlockSnapshot, maxFieldLen int) string {
+	if maxFieldLen <= len(name)+1 {
+		return name
+	}
+	maxLabelLen := maxFieldLen - len(name) - 1
+	label := snapshot.enabled
+	if len(label) > maxLabelLen {
+		label = fmt.Sprintf("enabled(%d)", snapshot.enabledCount)
+	}
+	field := fmt.Sprintf("%s=%s", name, label)
+	return clampSummaryField(field, maxFieldLen)
+}
+
+func summaryEventField(snapshot allowBlockSnapshot, eventlessVisible bool, maxFieldLen int) string {
+	const name = "EVENT"
+	label := fmt.Sprintf("%s; no-event=%s", snapshot.enabled, passHiddenLabel(eventlessVisible))
+	field := fmt.Sprintf("%s=%s", name, label)
+	if len(field) <= maxFieldLen {
+		return field
+	}
+	compact := fmt.Sprintf("%s=enabled(%d); no-event=%s", name, snapshot.enabledCount, passHiddenLabel(eventlessVisible))
+	return clampSummaryField(compact, maxFieldLen)
 }
 
 func summaryEffectiveLabel(snapshot allowBlockSnapshot, maxLen int) string {
@@ -1658,6 +1766,46 @@ func wrapSummaryLines(prefix, indent string, fields []string, maxWidth int) []st
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+func effectiveEnabledStringValues(allowAll, blockAll bool, allow, block map[string]bool, supported []string) []string {
+	if blockAll {
+		return nil
+	}
+	if allowAll {
+		out := make([]string, 0, len(supported))
+		for _, entry := range supported {
+			if !block[entry] {
+				out = append(out, entry)
+			}
+		}
+		return out
+	}
+	allowed := orderedStringValues(allow, supported)
+	if len(allowed) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(allowed))
+	for _, entry := range allowed {
+		if !block[entry] {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func enabledListLabel(values []string) string {
+	if len(values) == 0 {
+		return "NONE"
+	}
+	return strings.Join(values, ", ")
+}
+
+func passHiddenLabel(visible bool) string {
+	if visible {
+		return "pass"
+	}
+	return "hidden"
 }
 
 func orderedStringValues(values map[string]bool, supported []string) []string {
@@ -2118,11 +2266,5 @@ func featureLabels(name string) (enable string, disable string, status string) {
 }
 
 func isCCMode(mode string) bool {
-	mode = strutil.NormalizeUpper(mode)
-	switch mode {
-	case "CW", "FT2", "FT4", "FT8", "RTTY":
-		return true
-	default:
-		return false
-	}
+	return spot.IsCCShortcutMode(strutil.NormalizeUpper(mode))
 }

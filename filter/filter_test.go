@@ -726,6 +726,9 @@ func TestFT8ConfidenceFilterNoLongerExempt(t *testing.T) {
 
 func TestDefaultFilterIncludesUnknownModeSpots(t *testing.T) {
 	f := NewFilter()
+	if !f.UnknownModeVisible() {
+		t.Fatalf("expected default filter to mark UNKNOWN as visible")
+	}
 	blank := &spot.Spot{Band: "20m"}
 	blank.EnsureNormalized()
 	if !f.Matches(blank) {
@@ -737,6 +740,9 @@ func TestExplicitModeAllowlistExcludesUnknown(t *testing.T) {
 	f := NewFilter()
 	f.ResetModes()
 	f.SetMode("CW", true)
+	if f.UnknownModeVisible() {
+		t.Fatalf("expected CW-only filter to mark UNKNOWN as hidden")
+	}
 
 	blank := &spot.Spot{Band: "20m"}
 	blank.EnsureNormalized()
@@ -749,6 +755,9 @@ func TestRejectUnknownModeSuppressesBlankSpots(t *testing.T) {
 	f := NewFilter()
 	f.ResetModes()
 	f.SetMode(UnknownModeToken, false)
+	if f.UnknownModeVisible() {
+		t.Fatalf("expected explicit UNKNOWN block to mark UNKNOWN as hidden")
+	}
 
 	blank := &spot.Spot{Band: "20m"}
 	blank.EnsureNormalized()
@@ -760,6 +769,21 @@ func TestRejectUnknownModeSuppressesBlankSpots(t *testing.T) {
 	cw.EnsureNormalized()
 	if !f.Matches(cw) {
 		t.Fatalf("expected explicit CW spot to pass when only UNKNOWN is blocked")
+	}
+
+	f.SetMode(UnknownModeToken, true)
+	if !f.UnknownModeVisible() {
+		t.Fatalf("expected PASS MODE UNKNOWN semantics to restore UNKNOWN visibility")
+	}
+}
+
+func TestUnknownModeVisibleBlockAllModes(t *testing.T) {
+	f := NewFilter()
+	f.ResetModes()
+	f.BlockAllModes = true
+	f.AllModes = false
+	if f.UnknownModeVisible() {
+		t.Fatalf("expected block-all mode filter to hide UNKNOWN")
 	}
 }
 

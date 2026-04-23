@@ -873,23 +873,8 @@ func modeIsFTRecord(raw []byte) (bool, error) {
 	if dataOffset+modeLen > len(raw) {
 		return false, errInvalidRecord
 	}
-	mode := raw[dataOffset : dataOffset+modeLen]
-	if len(mode) != 3 {
-		return false, nil
-	}
-	b0 := mode[0]
-	if b0 >= 'a' && b0 <= 'z' {
-		b0 -= 32
-	}
-	b1 := mode[1]
-	if b1 >= 'a' && b1 <= 'z' {
-		b1 -= 32
-	}
-	b2 := mode[2]
-	if b2 >= 'a' && b2 <= 'z' {
-		b2 -= 32
-	}
-	return b0 == 'F' && b1 == 'T' && (b2 == '8' || b2 == '4'), nil
+	mode := string(raw[dataOffset : dataOffset+modeLen])
+	return spot.ArchiveRetentionClassForMode(mode) == spot.ArchiveRetentionFT, nil
 }
 
 func decodeSpot(ts int64, raw []byte) (*spot.Spot, error) {

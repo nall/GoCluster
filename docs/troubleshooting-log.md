@@ -29,3 +29,4 @@ This index tracks troubleshooting records (`TSR-XXXX`) that can lead to ADRs.
 | TSR-0016 | FT Confidence Arrival Window Misses Live Corroboration | Superseded | 2026-04-08 | main output pipeline, FT confidence, docs | ADR-0059 | `docs/troubleshooting/TSR-0016-ft-confidence-arrival-window-misses-live-corroboration.md` |
 | TSR-0017 | FT Confidence Slot Anchors Still Split Live Corroboration | Resolved | 2026-04-08 | main output pipeline, FT confidence, stats, docs | ADR-0060 | `docs/troubleshooting/TSR-0017-ft-confidence-slot-anchor-fragmentation.md` |
 | TSR-0018 | Peer Bulletin Duplicate Fanout | Resolved | 2026-04-19 | peer, telnet fan-out, config | ADR-0063 | `docs/troubleshooting/TSR-0018-peer-bulletin-duplicate-fanout.md` |
+| TSR-0019 | MODE UNKNOWN Filter Feedback | Resolved | 2026-04-22 | filter, telnet, docs | - | `docs/troubleshooting/TSR-0019-mode-unknown-filter-feedback.md` |

@@ -35,12 +35,15 @@ The telnet layer owns the live filter parser and persistence rules.
 - `REJECT` adds to the block list and removes from the allow list
 - if a value appears in both, block wins
 - `RESET FILTER` restores configured defaults for new users
+- `PASS/REJECT MODE <list>` are deltas; modes not listed are unchanged
+- `UNKNOWN` is the MODE token for blank-mode spots; use `PASS MODE UNKNOWN` or `PASS MODE ALL` to show them again after they are hidden
 
 Path and confidence filters are operator-visible here:
 
 - `PASS/REJECT CONFIDENCE` works with `?`, `S`, `C`, `P`, `V`, `B`
 - `PASS/REJECT PATH` works with `HIGH`, `MEDIUM`, `LOW`, `UNLIKELY`, `INSUFFICIENT`
-- `PASS/REJECT EVENT` works with `LLOTA`, `IOTA`, `POTA`, `SOTA`, `WWFF`, or `ALL`
+- `PASS/REJECT MODE` and `PASS/REJECT EVENT` validate against the active `spot_taxonomy.yaml`
+- the shipped `PASS/REJECT EVENT` families are `LLOTA`, `IOTA`, `POTA`, `SOTA`, `WWFF`, or `ALL`
 
 EVENT filters are family-level. Standalone tokens such as `POTA` and acronym-prefixed references such as `POTA-1234` both match `POTA`; the reference stays in the comment and is not separately filterable.
 

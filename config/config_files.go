@@ -13,6 +13,7 @@ const (
 	solarWeatherConfigFile    = "solarweather.yaml"
 	iaruRegionsConfigFile     = "iaru_regions.yaml"
 	iaruModeInferenceFile     = "iaru_mode_inference.yaml"
+	spotTaxonomyConfigFile    = "spot_taxonomy.yaml"
 	openAIConfigFile          = "openai.yaml"
 )
 
@@ -50,6 +51,7 @@ var configFileRegistry = map[string]configFileSpec{
 	solarWeatherConfigFile:    {class: configFileFeatureRoot, required: true},
 	iaruRegionsConfigFile:     {class: configFileReference, required: true},
 	iaruModeInferenceFile:     {class: configFileReference, required: true},
+	spotTaxonomyConfigFile:    {class: configFileReference, required: true},
 	openAIConfigFile:          {class: configFileOptionalTool, required: false},
 }
 
@@ -87,6 +89,20 @@ func validateConfigFileTopLevel(file string, spec configFileSpec, doc map[string
 	for key := range doc {
 		if _, ok := allowed[key]; !ok {
 			return fmt.Errorf("unrecognized top-level config key %q in %s", key, filepath.Base(file))
+		}
+	}
+	return nil
+}
+
+func validateRemovedRuntimeKeys(raw map[string]any) error {
+	removed := []string{
+		"pskreporter.modes",
+		"pskreporter.path_only_modes",
+	}
+	for _, path := range removed {
+		parts := strings.Split(path, ".")
+		if yamlKeyPresent(raw, parts...) {
+			return fmt.Errorf("removed YAML setting %q: define PSKReporter mode routing in spot_taxonomy.yaml using pskreporter_route", path)
 		}
 	}
 	return nil

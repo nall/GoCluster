@@ -154,17 +154,9 @@ type ResolverPrimaryGateOptions struct {
 	RecentPlus1DisallowReason string
 }
 
-var correctionEligibleModes = map[string]struct{}{
-	"CW":   {},
-	"RTTY": {},
-	"USB":  {},
-	"LSB":  {},
-}
-
 // IsCallCorrectionCandidate reports whether mode is eligible for call correction rails.
 func IsCallCorrectionCandidate(mode string) bool {
-	_, ok := correctionEligibleModes[strutil.NormalizeUpper(mode)]
-	return ok
+	return CallCorrectionProfileForMode(mode) != CallCorrectionProfileNone
 }
 
 // EvaluateResolverPrimaryGates applies correction-family-sensitive threshold

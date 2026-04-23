@@ -31,23 +31,14 @@ import (
 	"dxcluster/strutil"
 )
 
-// SupportedModes lists the commonly used modes that users can enable/disable
-// via the PASS MODE command. Exported so UI/commands can display them.
-const UnknownModeToken = "UNKNOWN"
+// UnknownModeToken is the filter-visible token for spots with no decoded mode.
+const UnknownModeToken = spot.UnknownModeToken
 
-var SupportedModes = []string{
-	"CW",
-	"FT2",
-	"FT4",
-	"FT8",
-	"JS8",
-	"LSB",
-	"USB",
-	"RTTY",
-	"MSK144",
-	"PSK",
-	"SSTV",
-	UnknownModeToken,
+// SupportedModes lists taxonomy-defined modes users can enable/disable via
+// PASS MODE. A fresh snapshot is returned so callers cannot mutate the process
+// taxonomy.
+func SupportedModes() []string {
+	return spot.SupportedFilterModes()
 }
 
 // Purpose: Return a pointer to the provided bool.
@@ -58,14 +49,10 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
-// canonicalModeToken collapses PSK variants into the PSK family while keeping
-// other modes uppercase/trimmed.
+// canonicalModeToken collapses taxonomy variants into the canonical filter mode
+// while keeping blank spot modes as UNKNOWN.
 func canonicalModeToken(mode string) string {
-	mode = strutil.NormalizeUpper(mode)
-	if canonical, _, ok := spot.CanonicalPSKMode(mode); ok {
-		return canonical
-	}
-	return mode
+	return spot.CanonicalModeForFilter(mode)
 }
 
 func modeFilterTokenForSpot(s *spot.Spot) string {
@@ -82,14 +69,27 @@ func modeFilterTokenForSpot(s *spot.Spot) string {
 	return modeUpper
 }
 
+// UnknownModeVisible reports whether blank-mode spots can pass the MODE filter.
+func (f *Filter) UnknownModeVisible() bool {
+	if f == nil {
+		return false
+	}
+	if f.BlockAllModes || f.BlockModes[UnknownModeToken] {
+		return false
+	}
+	return f.AllModes || f.Modes[UnknownModeToken]
+}
+
 // SupportedSources enumerates how telnet users can filter on Spot.IsHuman.
 //
 // HUMAN means the spot was marked as coming from a human operator (Spot.IsHuman=true).
 // SKIMMER represents everything else (Spot.IsHuman=false), including automated sources.
 var SupportedSources = []string{"HUMAN", "SKIMMER"}
 
-// SupportedEvents enumerates comment-derived event families available for EVENT filters.
-var SupportedEvents = spot.SupportedEvents
+// SupportedEvents enumerates taxonomy-defined EVENT families available for EVENT filters.
+func SupportedEvents() []string {
+	return spot.SupportedEvents()
+}
 
 // SupportedContinents enumerates continent codes used in DX metadata.
 var SupportedContinents = []string{"AF", "AN", "AS", "EU", "NA", "OC", "SA"}
@@ -100,7 +100,7 @@ const (
 )
 
 func builtInDefaultModeSelection() []string {
-	return []string{"CW", "LSB", "USB", UnknownModeToken, "RTTY"}
+	return spot.DefaultFilterModes()
 }
 
 // defaultModeSelection controls which modes are enabled when a new filter is created.
@@ -113,14 +113,6 @@ var defaultModeSelection = builtInDefaultModeSelection()
 // A nil or empty slice means "ALL" (disable SOURCE filtering).
 var defaultSourceSelection []string
 
-var supportedModeSet = func() map[string]bool {
-	m := make(map[string]bool)
-	for _, s := range SupportedModes {
-		m[strutil.NormalizeUpper(s)] = true
-	}
-	return m
-}()
-
 var supportedSourceSet = func() map[string]bool {
 	m := make(map[string]bool, len(SupportedSources))
 	for _, source := range SupportedSources {
@@ -129,18 +121,6 @@ var supportedSourceSet = func() map[string]bool {
 			continue
 		}
 		m[s] = true
-	}
-	return m
-}()
-
-var supportedEventSet = func() map[string]bool {
-	m := make(map[string]bool, len(SupportedEvents))
-	for _, event := range SupportedEvents {
-		e := strutil.NormalizeUpper(event)
-		if e == "" {
-			continue
-		}
-		m[e] = true
 	}
 	return m
 }()
@@ -208,8 +188,7 @@ var supportedPathClassSet = func() map[string]bool {
 // Upstream: Telnet filter parsing and validation.
 // Downstream: supportedModeSet.
 func IsSupportedMode(mode string) bool {
-	mode = canonicalModeToken(mode)
-	return supportedModeSet[mode]
+	return spot.IsSupportedFilterMode(mode)
 }
 
 // IsSupportedSource reports whether a source label is supported for filtering.
@@ -239,11 +218,7 @@ func normalizeSource(source string) string {
 }
 
 func normalizeEvent(event string) string {
-	event = spot.NormalizeEvent(event)
-	if event == "" || !supportedEventSet[event] {
-		return ""
-	}
-	return event
+	return spot.NormalizeEvent(event)
 }
 
 // IsSupportedContinent reports whether a continent code is supported.
@@ -291,7 +266,7 @@ func SetDefaultModeSelection(modes []string) {
 	normalized := make([]string, 0, len(modes))
 	for _, mode := range modes {
 		candidate := canonicalModeToken(mode)
-		if candidate == "" {
+		if candidate == "" || !spot.IsSupportedFilterMode(candidate) {
 			continue
 		}
 		normalized = append(normalized, candidate)
@@ -1773,12 +1748,7 @@ func matchesCallsignPattern(callsign, pattern string) bool {
 // Upstream: Filter.Matches.
 // Downstream: None.
 func isConfidenceExemptMode(mode string) bool {
-	switch strutil.NormalizeUpper(mode) {
-	case "PSK", "MSK144":
-		return true
-	default:
-		return false
-	}
+	return spot.IsConfidenceFilterExemptMode(mode)
 }
 
 // String render a human-readable summary of active filters.
@@ -2101,7 +2071,7 @@ func enabledEvents(m map[string]bool) []string {
 		return []string{"NONE"}
 	}
 	out := make([]string, 0, len(m))
-	for _, event := range SupportedEvents {
+	for _, event := range SupportedEvents() {
 		if m[event] {
 			out = append(out, event)
 		}
@@ -2281,8 +2251,8 @@ func (f *Filter) migrateLegacyConfidence() {
 	}
 }
 
-// migratePSKModes collapses legacy PSK31/63/125 entries into the canonical PSK
-// family so filters align with the new single-mode surface.
+// migratePSKModes collapses legacy variant entries into canonical taxonomy
+// families so filters align with the current mode surface.
 func (f *Filter) migratePSKModes() {
 	if f == nil {
 		return
@@ -2295,19 +2265,36 @@ func (f *Filter) migratePSKModes() {
 	}
 
 	for mode := range f.Modes {
-		if canonical, _, ok := spot.CanonicalPSKMode(mode); ok && canonical != "" && canonical != mode {
+		canonical := canonicalModeToken(mode)
+		if canonical != "" && canonical != mode {
 			f.Modes[canonical] = true
 			delete(f.Modes, mode)
 		}
 	}
 	for mode := range f.BlockModes {
-		if canonical, _, ok := spot.CanonicalPSKMode(mode); ok && canonical != "" && canonical != mode {
+		canonical := canonicalModeToken(mode)
+		if canonical != "" && canonical != mode {
 			f.BlockModes[canonical] = true
 			delete(f.BlockModes, mode)
 		}
 	}
 
 	f.AllModes = len(f.Modes) == 0
+}
+
+// pruneUnsupportedModes keeps persisted MODE maps bounded to the configured taxonomy.
+func pruneUnsupportedModes(m map[string]bool) {
+	for mode, enabled := range m {
+		canonical := canonicalModeToken(mode)
+		if !enabled || canonical == "" || !spot.IsSupportedFilterMode(canonical) {
+			delete(m, mode)
+			continue
+		}
+		if canonical != mode {
+			delete(m, mode)
+			m[canonical] = true
+		}
+	}
 }
 
 // migrateLegacyUnknownMode adds UNKNOWN to legacy explicit mode allowlists so
@@ -2405,6 +2392,8 @@ func (f *Filter) normalizeDefaults() {
 		f.BlockPathClasses = make(map[string]bool)
 	}
 	f.migratePSKModes()
+	pruneUnsupportedModes(f.Modes)
+	pruneUnsupportedModes(f.BlockModes)
 	f.migrateLegacyUnknownMode()
 	if f.DXContinents == nil {
 		f.DXContinents = make(map[string]bool)

@@ -32,6 +32,8 @@ Type HELP <command> for details.
 Filter core rules:
 PASS <type> <list> adds to allowlist and removes from blocklist.
 REJECT <type> <list> adds to blocklist and removes from allowlist.
+PASS/REJECT MODE <list> are deltas; modes not listed are unchanged.
+UNKNOWN is the MODE token for blank-mode spots.
 If an item appears in both lists, block wins.
 
 ALL keyword (type-scoped):
@@ -60,9 +62,9 @@ Confidence glyphs:
     the original call was kept.
 
 Event filters:
-  EVENT recognizes LLOTA, IOTA, POTA, SOTA, and WWFF as standalone comment
-    tokens or acronym-prefixed references such as POTA-1234. Only the event
-    family is filtered; the reference remains in the comment.
+  EVENT recognizes the taxonomy EVENT families as standalone comment tokens or
+    acronym-prefixed references such as POTA-1234. Only the event family is
+    filtered; the reference remains in the comment.
 
 Path reliability glyphs:
   ">" - HIGH: favorable path.
@@ -169,7 +171,7 @@ WWV, WCY, and `TO ALL` announcement bulletins have a separate server-wide duplic
 
 ## EVENT Filtering
 
-`PASS EVENT` and `REJECT EVENT` filter spots by comment-derived activation/event family. The supported families are `LLOTA`, `IOTA`, `POTA`, `SOTA`, and `WWFF`.
+`PASS EVENT` and `REJECT EVENT` filter spots by comment-derived activation/event family. Supported families come from `data/config/spot_taxonomy.yaml`; the shipped config defines `LLOTA`, `IOTA`, `POTA`, `SOTA`, and `WWFF`.
 
 Event recognition is intentionally family-level. A comment token such as `POTA` or `POTA-1234` marks the spot as `POTA`; the reference text stays in the comment and is not a separate filter key. Slash forms such as `POTA/SOTA` and event-specific reference grammars without the acronym prefix are not interpreted by this filter.
 
@@ -179,6 +181,12 @@ Useful commands:
 - `REJECT EVENT WWFF` hides WWFF-tagged spots.
 - `PASS EVENT ALL` disables EVENT filtering.
 - `REJECT EVENT ALL` blocks every spot, including spots with no event tag.
+
+## MODE And EVENT Taxonomy
+
+`data/config/spot_taxonomy.yaml` is the single operator-editable table for supported MODE tokens, EVENT families, PSKReporter mode routing, and existing mode capability classes. `ingest.yaml` keeps only PSKReporter transport/runtime settings; mode admission moved to `pskreporter_route` in the taxonomy.
+
+This is a binary+config contract. Deploy or roll back the binary and config directory together, and restart the cluster after changing taxonomy entries.
 
 ## NEARBY Filtering
 

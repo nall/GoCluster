@@ -40,9 +40,12 @@ func canonicalPSKModeUpper(upper string) (canonical string, variant string, isPS
 	if upper == "" {
 		return "", "", false
 	}
-	canonical, ok := pskVariantMap[upper]
-	if !ok {
-		return upper, upper, false
+	canonical = CurrentTaxonomy().CanonicalMode(upper)
+	if canonical == "" {
+		return "", "", false
 	}
-	return canonical, upper, true
+	if canonical != upper || canonical == "PSK" {
+		return canonical, upper, true
+	}
+	return canonical, upper, false
 }

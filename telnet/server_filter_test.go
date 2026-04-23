@@ -430,6 +430,258 @@ func TestPassCommands(t *testing.T) {
 	}
 }
 
+func TestPassModeUnknownDefaultSessionIsAdditive(t *testing.T) {
+	client := newTestClient()
+	engine := newFilterCommandEngine()
+
+	resp, handled := engine.Handle(client, "PASS MODE UNKNOWN")
+	if !handled {
+		t.Fatalf("expected PASS MODE UNKNOWN to be handled")
+	}
+	if resp == "" {
+		t.Fatalf("expected response for PASS MODE UNKNOWN")
+	}
+	if !strings.Contains(resp, "Modes enabled: UNKNOWN") {
+		t.Fatalf("expected additive mode response, got: %q", resp)
+	}
+	if strings.Contains(resp, "Filter set: Modes") {
+		t.Fatalf("expected old misleading mode response to be gone, got: %q", resp)
+	}
+	if !strings.Contains(resp, "Effective MODE:") {
+		t.Fatalf("expected effective MODE line, got: %q", resp)
+	}
+	if strings.Contains(resp, "Effective MODE: allow=") {
+		t.Fatalf("expected explicit effective MODE list, got: %q", resp)
+	}
+	if strings.Contains(resp, unknownModeHiddenWarningMsg) {
+		t.Fatalf("did not expect UNKNOWN warning when UNKNOWN remains visible, got: %q", resp)
+	}
+
+	blank := &spot.Spot{Band: "20m"}
+	blank.EnsureNormalized()
+	if !client.filter.Matches(blank) {
+		t.Fatalf("expected PASS MODE UNKNOWN to match blank-mode spot; response=%q modes=%v blockModes=%v all=%v blockAll=%v",
+			resp, client.filter.Modes, client.filter.BlockModes, client.filter.AllModes, client.filter.BlockAllModes)
+	}
+
+	cw := &spot.Spot{Mode: "CW", Band: "20m"}
+	cw.EnsureNormalized()
+	if !client.filter.Matches(cw) {
+		t.Fatalf("expected PASS MODE UNKNOWN to preserve existing default CW allowance")
+	}
+}
+
+func TestRejectAllThenPassModeUnknownMatchesOnlyBlankModeSpot(t *testing.T) {
+	client := newTestClient()
+	engine := newFilterCommandEngine()
+
+	rejectResp, handled := engine.Handle(client, "REJECT MODE ALL")
+	if !handled {
+		t.Fatalf("expected REJECT MODE ALL to be handled")
+	}
+	if !strings.Contains(rejectResp, unknownModeHiddenWarningMsg) {
+		t.Fatalf("expected REJECT MODE ALL to warn about UNKNOWN, got: %q", rejectResp)
+	}
+
+	passResp, handled := engine.Handle(client, "PASS MODE UNKNOWN")
+	if !handled {
+		t.Fatalf("expected PASS MODE UNKNOWN to be handled")
+	}
+	if !strings.Contains(passResp, "Modes enabled: UNKNOWN") {
+		t.Fatalf("expected PASS MODE UNKNOWN response, got: %q", passResp)
+	}
+	if !strings.Contains(passResp, "Effective MODE: UNKNOWN") {
+		t.Fatalf("expected effective UNKNOWN-only MODE line, got: %q", passResp)
+	}
+	if strings.Contains(passResp, unknownModeHiddenWarningMsg) {
+		t.Fatalf("did not expect UNKNOWN warning after UNKNOWN is re-enabled, got: %q", passResp)
+	}
+
+	blank := &spot.Spot{Band: "20m"}
+	blank.EnsureNormalized()
+	if !client.filter.Matches(blank) {
+		t.Fatalf("expected REJECT MODE ALL then PASS MODE UNKNOWN to match blank-mode spot")
+	}
+
+	cw := &spot.Spot{Mode: "CW", Band: "20m"}
+	cw.EnsureNormalized()
+	if client.filter.Matches(cw) {
+		t.Fatalf("expected REJECT MODE ALL then PASS MODE UNKNOWN to reject explicit CW spot")
+	}
+}
+
+func TestModeEffectiveOutputListsEnabledModesAfterAllMinusBlocklist(t *testing.T) {
+	client := newTestClient()
+	engine := newFilterCommandEngine()
+
+	if _, handled := engine.Handle(client, "PASS MODE ALL"); !handled {
+		t.Fatalf("expected PASS MODE ALL to be handled")
+	}
+	resp, handled := engine.Handle(client, "REJECT MODE CW,FT2,FT4,FT8")
+	if !handled {
+		t.Fatalf("expected REJECT MODE list to be handled")
+	}
+
+	wantLine := "Effective MODE: " + supportedModesExcept("CW", "FT2", "FT4", "FT8")
+	if !strings.Contains(resp, wantLine) {
+		t.Fatalf("expected explicit enabled MODE list %q, got: %q", wantLine, resp)
+	}
+	if strings.Contains(resp, "allow=ALL") || strings.Contains(resp, "all except") {
+		t.Fatalf("expected effective MODE output to hide raw ALL/block rule text, got: %q", resp)
+	}
+}
+
+func supportedModesExcept(blocked ...string) string {
+	blockSet := make(map[string]bool, len(blocked))
+	for _, mode := range blocked {
+		blockSet[mode] = true
+	}
+	enabled := make([]string, 0, len(filter.SupportedModes()))
+	for _, mode := range filter.SupportedModes() {
+		if !blockSet[mode] {
+			enabled = append(enabled, mode)
+		}
+	}
+	if len(enabled) == 0 {
+		return "NONE"
+	}
+	return strings.Join(enabled, ", ")
+}
+
+func TestModeUnknownHiddenWarnings(t *testing.T) {
+	tests := []struct {
+		name     string
+		commands []string
+		wantLine string
+	}{
+		{
+			name:     "reject unknown",
+			commands: []string{"REJECT MODE UNKNOWN"},
+			wantLine: "Modes rejected: UNKNOWN",
+		},
+		{
+			name:     "reject all",
+			commands: []string{"REJECT MODE ALL"},
+			wantLine: "All modes blocked",
+		},
+		{
+			name:     "pass ft8 after reject all leaves unknown hidden",
+			commands: []string{"REJECT MODE ALL", "PASS MODE FT8"},
+			wantLine: "Modes enabled: FT8",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient()
+			engine := newFilterCommandEngine()
+			var resp string
+			for _, cmd := range tt.commands {
+				var handled bool
+				resp, handled = engine.Handle(client, cmd)
+				if !handled {
+					t.Fatalf("expected %s to be handled", cmd)
+				}
+			}
+			if !strings.Contains(resp, tt.wantLine) {
+				t.Fatalf("expected response %q, got: %q", tt.wantLine, resp)
+			}
+			if !strings.Contains(resp, "Effective MODE:") {
+				t.Fatalf("expected effective MODE line, got: %q", resp)
+			}
+			if !strings.Contains(resp, unknownModeHiddenWarningMsg) {
+				t.Fatalf("expected UNKNOWN hidden warning, got: %q", resp)
+			}
+		})
+	}
+}
+
+func TestInvalidPassModeDoesNotMutateModeFilter(t *testing.T) {
+	client := newTestClient()
+	client.filter.ResetModes()
+	client.filter.SetMode("CW", true)
+	engine := newFilterCommandEngine()
+
+	resp, handled := engine.Handle(client, "PASS MODE BOGUS")
+	if !handled {
+		t.Fatalf("expected invalid PASS MODE to be handled")
+	}
+	if !strings.Contains(resp, "Unknown mode: BOGUS") {
+		t.Fatalf("expected unknown mode response, got: %q", resp)
+	}
+	if !client.filter.Modes["CW"] || len(client.filter.Modes) != 1 {
+		t.Fatalf("expected CW-only mode filter to remain unchanged, got: %+v", client.filter.Modes)
+	}
+	if client.filter.BlockAllModes || client.filter.AllModes {
+		t.Fatalf("expected mode flags to remain scoped, all=%v blockAll=%v", client.filter.AllModes, client.filter.BlockAllModes)
+	}
+}
+
+func TestEventEffectiveOutputListsEnabledEventsAndEventlessStatus(t *testing.T) {
+	client := newTestClient()
+	engine := newFilterCommandEngine()
+
+	resp, handled := engine.Handle(client, "PASS EVENT POTA")
+	if !handled {
+		t.Fatalf("expected PASS EVENT POTA to be handled")
+	}
+	if !strings.Contains(resp, "Events enabled: POTA") {
+		t.Fatalf("expected event enable status, got: %q", resp)
+	}
+	if !strings.Contains(resp, "Effective EVENT: POTA; no-event spots: hidden") {
+		t.Fatalf("expected explicit POTA-only EVENT line with eventless hidden, got: %q", resp)
+	}
+	if strings.Contains(resp, "allow=") || strings.Contains(resp, "only:") {
+		t.Fatalf("expected effective EVENT output to hide raw allow/block rule text, got: %q", resp)
+	}
+
+	resp, handled = engine.Handle(client, "PASS EVENT ALL")
+	if !handled {
+		t.Fatalf("expected PASS EVENT ALL to be handled")
+	}
+	wantAll := "Effective EVENT: " + strings.Join(filter.SupportedEvents(), ", ") + "; no-event spots: pass"
+	if !strings.Contains(resp, wantAll) {
+		t.Fatalf("expected all EVENT families plus eventless pass, want %q got: %q", wantAll, resp)
+	}
+
+	resp, handled = engine.Handle(client, "REJECT EVENT WWFF")
+	if !handled {
+		t.Fatalf("expected REJECT EVENT WWFF to be handled")
+	}
+	wantExcept := "Effective EVENT: " + supportedEventsExcept("WWFF") + "; no-event spots: pass"
+	if !strings.Contains(resp, wantExcept) {
+		t.Fatalf("expected explicit EVENT list with WWFF removed, want %q got: %q", wantExcept, resp)
+	}
+	if strings.Contains(resp, "allow=ALL") || strings.Contains(resp, "all except") {
+		t.Fatalf("expected effective EVENT output to hide raw ALL/block rule text, got: %q", resp)
+	}
+
+	resp, handled = engine.Handle(client, "REJECT EVENT ALL")
+	if !handled {
+		t.Fatalf("expected REJECT EVENT ALL to be handled")
+	}
+	if !strings.Contains(resp, "Effective EVENT: NONE; no-event spots: hidden") {
+		t.Fatalf("expected no EVENT families and eventless hidden, got: %q", resp)
+	}
+}
+
+func supportedEventsExcept(blocked ...string) string {
+	blockSet := make(map[string]bool, len(blocked))
+	for _, event := range blocked {
+		blockSet[event] = true
+	}
+	enabled := make([]string, 0, len(filter.SupportedEvents()))
+	for _, event := range filter.SupportedEvents() {
+		if !blockSet[event] {
+			enabled = append(enabled, event)
+		}
+	}
+	if len(enabled) == 0 {
+		return "NONE"
+	}
+	return strings.Join(enabled, ", ")
+}
+
 func TestRejectCommands(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -855,11 +1107,14 @@ func TestShowFilterSnapshotDefault(t *testing.T) {
 	if !strings.HasPrefix(resp, "Current filters: ") {
 		t.Fatalf("expected summary line, got: %q", resp)
 	}
-	if strings.Contains(resp, "MODE: allow=ALL") {
-		t.Fatalf("expected default modes to be listed explicitly, got: %q", resp)
+	if strings.Contains(resp, "MODE: allow=") {
+		t.Fatalf("expected MODE line to show enabled modes, got: %q", resp)
 	}
-	if !strings.Contains(resp, "MODE: allow=CW, LSB, USB, RTTY") {
+	if !strings.Contains(resp, "MODE: enabled=CW, LSB, USB, RTTY") {
 		t.Fatalf("expected default mode list in snapshot, got: %q", resp)
+	}
+	if strings.Contains(resp, unknownModeHiddenWarningMsg) {
+		t.Fatalf("did not expect UNKNOWN warning in default snapshot, got: %q", resp)
 	}
 	if !strings.Contains(resp, "DXCALL: allow=ALL block=NONE") {
 		t.Fatalf("expected DXCALL line to show allow/block defaults, got: %q", resp)
@@ -867,11 +1122,49 @@ func TestShowFilterSnapshotDefault(t *testing.T) {
 	if !strings.Contains(resp, "PATH: allow=ALL block=NONE") {
 		t.Fatalf("expected PATH line to show allow/block defaults, got: %q", resp)
 	}
-	if !strings.Contains(resp, "EVENT: allow=ALL block=NONE") {
-		t.Fatalf("expected EVENT line to show allow/block defaults, got: %q", resp)
+	wantEvents := "EVENT: enabled=" + strings.Join(filter.SupportedEvents(), ", ") + "; no-event spots=pass"
+	if !strings.Contains(resp, wantEvents) {
+		t.Fatalf("expected EVENT line to show enabled defaults, want %q got: %q", wantEvents, resp)
 	}
 	if !strings.Contains(resp, "SELF: ON") {
 		t.Fatalf("expected SELF line in snapshot, got: %q", resp)
+	}
+}
+
+func TestShowFilterWarnsWhenUnknownHidden(t *testing.T) {
+	client := newTestClient()
+	client.filter.ResetModes()
+	client.filter.SetMode("CW", true)
+	engine := newFilterCommandEngine()
+
+	resp, handled := engine.Handle(client, "SHOW FILTER")
+	if !handled {
+		t.Fatalf("expected SHOW FILTER to be handled")
+	}
+	if !strings.Contains(resp, "MODE: enabled=CW") {
+		t.Fatalf("expected CW-only mode line, got: %q", resp)
+	}
+	if !strings.Contains(resp, unknownModeHiddenWarningMsg) {
+		t.Fatalf("expected UNKNOWN hidden warning, got: %q", resp)
+	}
+}
+
+func TestShowFilterEventEffectiveOutput(t *testing.T) {
+	client := newTestClient()
+	engine := newFilterCommandEngine()
+
+	if _, handled := engine.Handle(client, "PASS EVENT POTA"); !handled {
+		t.Fatalf("expected PASS EVENT POTA to be handled")
+	}
+	resp, handled := engine.Handle(client, "SHOW FILTER")
+	if !handled {
+		t.Fatalf("expected SHOW FILTER to be handled")
+	}
+	if !strings.Contains(resp, "EVENT: enabled=POTA; no-event spots=hidden") {
+		t.Fatalf("expected SHOW FILTER to show explicit EVENT state, got: %q", resp)
+	}
+	if strings.Contains(resp, "EVENT: allow=") {
+		t.Fatalf("expected SHOW FILTER EVENT line to hide raw allow/block state, got: %q", resp)
 	}
 }
 

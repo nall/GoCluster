@@ -559,10 +559,7 @@ type PSKReporterConfig struct {
 	// MQTTQoS12EnqueueTimeoutMS bounds how long QoS1/2 publishes wait when the queue is full.
 	MQTTQoS12EnqueueTimeoutMS int `yaml:"mqtt_qos12_enqueue_timeout_ms"`
 	// SpotChannelSize controls the buffered ingest channel between MQTT client and processing.
-	SpotChannelSize int      `yaml:"spot_channel_size"`
-	Modes           []string `yaml:"modes"`
-	// PathOnlyModes are ingested for path prediction only; they never reach telnet/dedup/archive.
-	PathOnlyModes []string `yaml:"path_only_modes"`
+	SpotChannelSize int `yaml:"spot_channel_size"`
 	// AppendSpotterSSID, when true, appends "-#" to receiver callsigns that
 	// lack an SSID so deduplication treats each PSK skimmer uniquely.
 	AppendSpotterSSID bool `yaml:"append_spotter_ssid"`
@@ -1470,6 +1467,9 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	raw := loaded.merged
+	if err := validateRemovedRuntimeKeys(raw); err != nil {
+		return nil, err
+	}
 	if err := validateMergedRuntimePresence(raw); err != nil {
 		return nil, err
 	}
@@ -3433,11 +3433,7 @@ func (c *Config) Print() {
 		if c.PSKReporter.MQTTInboundQueueDepth > 0 {
 			mqttQueueDesc = fmt.Sprintf("%d", c.PSKReporter.MQTTInboundQueueDepth)
 		}
-		pathOnly := "(none)"
-		if len(c.PSKReporter.PathOnlyModes) > 0 {
-			pathOnly = strings.Join(c.PSKReporter.PathOnlyModes, ",")
-		}
-		fmt.Printf("PSKReporter: %s:%d (topic: %s buffer=%d workers=%s mqtt_inbound_workers=%s mqtt_inbound_queue=%s qos12_timeout=%dms path_only_modes=%s)\n",
+		fmt.Printf("PSKReporter: %s:%d (topic: %s buffer=%d workers=%s mqtt_inbound_workers=%s mqtt_inbound_queue=%s qos12_timeout=%dms)\n",
 			c.PSKReporter.Broker,
 			c.PSKReporter.Port,
 			c.PSKReporter.Topic,
@@ -3445,8 +3441,7 @@ func (c *Config) Print() {
 			workerDesc,
 			mqttWorkerDesc,
 			mqttQueueDesc,
-			c.PSKReporter.MQTTQoS12EnqueueTimeoutMS,
-			pathOnly)
+			c.PSKReporter.MQTTQoS12EnqueueTimeoutMS)
 	}
 	clusterWindow := "disabled"
 	if c.Dedup.ClusterWindowSeconds > 0 {

@@ -5,14 +5,15 @@ This directory owns PSKReporter MQTT ingest and normalization into canonical spo
 ## What It Does
 
 - subscribes to the PSKReporter MQTT feed
-- filters accepted modes downstream
+- routes modes according to the active spot taxonomy
 - converts JSON payloads into canonical spot records
 - preserves locator-based grids in metadata
 - can route selected modes into path reliability only
 
 ## Key Runtime Rules
 
-- the client subscribes to one catch-all topic and filters modes after receipt
+- the client subscribes to one catch-all topic and routes modes after receipt
+- `data/config/spot_taxonomy.yaml` owns PSKReporter mode handling through `pskreporter_route: normal`, `path_only`, or `ignore`
 - spots with explicit `0 dB` reports or missing reports are dropped before ingest
 - PSK variants are normalized into the `PSK` family for filtering and stats while keeping the original variant for display
 - PSKReporter spots do not carry a free-form comment string in the runtime pipeline
@@ -33,7 +34,7 @@ The raw observed RF frequency is still kept separately for diagnostics and archi
 
 ## Path-Only Modes
 
-Modes listed in `pskreporter.path_only_modes` go directly to path reliability and bypass:
+Modes marked `pskreporter_route: path_only` in `spot_taxonomy.yaml` go directly to path reliability and bypass:
 
 - CTY validation
 - dedup

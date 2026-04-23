@@ -1306,22 +1306,11 @@ func sanitizeCustomSCPOptions(opts CustomSCPOptions) CustomSCPOptions {
 }
 
 func customSCPBucketForMode(mode string) (string, bool) {
-	switch strutil.NormalizeUpper(mode) {
-	case "USB", "LSB":
-		return "voice", true
-	case "CW":
-		return "cw", true
-	case "RTTY":
-		return "rtty", true
-	case "FT2":
-		return "ft2", true
-	case "FT4":
-		return "ft4", true
-	case "FT8":
-		return "ft8", true
-	default:
+	bucket := CustomSCPBucketForMode(mode)
+	if bucket == "" {
 		return "", false
 	}
+	return bucket, true
 }
 
 func normalizeMinUnique(minUnique int, max int) int {

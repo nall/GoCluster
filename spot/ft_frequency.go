@@ -23,7 +23,7 @@ type FTDialRegistry struct {
 }
 
 // NewFTDialRegistry builds an immutable FT dial-frequency registry from the
-// configured digital seeds. Only FT2/FT4/FT8 entries are retained.
+// configured digital seeds. Only taxonomy-enabled FT dial modes are retained.
 func NewFTDialRegistry(seeds []ModeSeed) *FTDialRegistry {
 	if len(seeds) == 0 {
 		return nil
@@ -106,12 +106,7 @@ func (r *FTDialRegistry) Canonicalize(mode string, observedFreqKHz float64) (flo
 }
 
 func supportsFTDialCanonicalization(mode string) bool {
-	switch normalizeUpperASCIITrim(mode) {
-	case "FT2", "FT4", "FT8":
-		return true
-	default:
-		return false
-	}
+	return SupportsFTDialCanonicalization(mode)
 }
 
 func preferFTDialCandidate(delta, currentBest float64) bool {

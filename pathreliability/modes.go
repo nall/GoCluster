@@ -11,10 +11,8 @@ const (
 // BucketForIngest maps a mode to its ingest bucket class.
 // Modes not explicitly listed return BucketNone (no ingest).
 func BucketForIngest(mode string) BucketClass {
-	switch normalizeMode(mode) {
-	case "FT8", "FT4", "CW", "RTTY", "PSK", "WSPR":
+	if policy, ok := modePolicy(mode); ok && policy.Ingest {
 		return BucketCombined
-	default:
-		return BucketNone
 	}
+	return BucketNone
 }

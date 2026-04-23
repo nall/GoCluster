@@ -133,14 +133,14 @@ func TestParseSpotCommentPSK31SetsMode(t *testing.T) {
 }
 
 func TestParseSpotCommentFT2SetsMode(t *testing.T) {
-	comment := "CQ TEST FT2"
-	result := ParseSpotComment(comment, 14080.0)
-
-	if result.Mode != "FT2" {
-		t.Fatalf("expected mode FT2, got %q", result.Mode)
-	}
-	if strings.TrimSpace(result.Comment) != "CQ TEST" {
-		t.Fatalf("expected comment without mode token, got %q", result.Comment)
+	for _, comment := range []string{"CQ TEST FT2", "CQ TEST FT-2"} {
+		result := ParseSpotComment(comment, 14080.0)
+		if result.Mode != "FT2" {
+			t.Fatalf("expected mode FT2 for %q, got %q", comment, result.Mode)
+		}
+		if strings.TrimSpace(result.Comment) != "CQ TEST" {
+			t.Fatalf("expected comment without mode token for %q, got %q", comment, result.Comment)
+		}
 	}
 }
 

@@ -84,10 +84,7 @@ type Client struct {
 	parseErrorCounter      ratelimit.Counter
 	pathOnlyDropCounter    ratelimit.Counter
 
-	allowAllModes bool
-	allowedModes  map[string]struct{}
-	pathOnlyModes map[string]struct{}
-	hasPathOnly   bool
+	hasPathOnly bool
 
 	badCallReporterMu sync.RWMutex
 	badCallReporter   BadCallReporter
@@ -170,31 +167,14 @@ func ConfigureCallCache(size int, ttl time.Duration) {
 // Key aspects: Initializes channels, caches, and worker settings.
 // Upstream: main.go startup.
 // Downstream: Client.Connect, worker pool.
-func NewClient(broker string, port int, topics []string, allowedModes []string, pathOnlyModes []string, name string, workers int, mqttInboundWorkers int, mqttInboundQueueDepth int, mqttQoS12EnqueueTimeout time.Duration, skewStore *skew.Store, ftDialRegistry *spot.FTDialRegistry, appendSSID bool, spotBuffer int, maxPayloadBytes int) *Client {
+func NewClient(broker string, port int, topics []string, name string, workers int, mqttInboundWorkers int, mqttInboundQueueDepth int, mqttQoS12EnqueueTimeout time.Duration, skewStore *skew.Store, ftDialRegistry *spot.FTDialRegistry, appendSSID bool, spotBuffer int, maxPayloadBytes int) *Client {
 	if spotBuffer <= 0 {
 		spotBuffer = defaultSpotBuffer
 	}
 	if maxPayloadBytes <= 0 {
 		maxPayloadBytes = defaultMaxPayloadBytes
 	}
-	modeSet := make(map[string]struct{}, len(allowedModes))
-	for _, m := range allowedModes {
-		m = strutil.NormalizeUpper(m)
-		if m == "" {
-			continue
-		}
-		modeSet[m] = struct{}{}
-	}
-	pathOnlySet := make(map[string]struct{}, len(pathOnlyModes))
-	for _, m := range pathOnlyModes {
-		m = strutil.NormalizeUpper(m)
-		if m == "" {
-			continue
-		}
-		pathOnlySet[m] = struct{}{}
-	}
-	allowAll := len(modeSet) == 0
-	hasPathOnly := len(pathOnlySet) > 0
+	hasPathOnly := spot.HasPSKReporterPathOnlyModes()
 	var pathOnlyChan chan *spot.Spot
 	if hasPathOnly {
 		pathOnlyChan = make(chan *spot.Spot, spotBuffer)
@@ -203,9 +183,6 @@ func NewClient(broker string, port int, topics []string, allowedModes []string, 
 		broker:                  broker,
 		port:                    port,
 		topics:                  append([]string{}, topics...),
-		allowedModes:            modeSet,
-		allowAllModes:           allowAll,
-		pathOnlyModes:           pathOnlySet,
 		hasPathOnly:             hasPathOnly,
 		name:                    name,
 		spotChan:                make(chan *spot.Spot, spotBuffer), // Buffered ingest to absorb bursts
@@ -599,11 +576,9 @@ func (c *Client) handlePayload(payload []byte) {
 	if !ok {
 		return
 	}
-	pathOnly := c.hasPathOnly && c.modeMatchesList(modeInfo.canonical, modeInfo.variant, modeInfo.isPSK, c.pathOnlyModes)
-	if !c.allowAllModes {
-		if !pathOnly && !c.modeMatchesList(modeInfo.canonical, modeInfo.variant, modeInfo.isPSK, c.allowedModes) {
-			return
-		}
+	pathOnly := c.hasPathOnly && spot.PSKReporterRouteIsPathOnly(modeInfo.canonical)
+	if !pathOnly && !spot.PSKReporterRouteIsNormal(modeInfo.canonical) {
+		return
 	}
 	s := c.convertToSpot(&pskrMsg, modeInfo)
 	if s == nil {
@@ -762,13 +737,12 @@ func (c *Client) badCallSource() string {
 	return "PSKREPORTER"
 }
 
-// Purpose: Report whether a mode is CW or RTTY.
-// Key aspects: Expects normalized/uppercased mode input.
+// Purpose: Report whether a mode needs source-skew correction.
+// Key aspects: Uses taxonomy capabilities for normalized mode input.
 // Upstream: convertToSpot.
 // Downstream: None.
 func isCWorRTTY(mode string) bool {
-	// mode is expected to be uppercased/trimmed by normalizeMessage.
-	return mode == "CW" || mode == "RTTY"
+	return spot.SourceSkewCorrectedMode(mode)
 }
 
 // Purpose: Normalize and validate a PSKReporter message.
@@ -854,27 +828,6 @@ func (c *Client) stopWorkerPool() {
 	c.processingMu.Lock()
 	c.processing = nil
 	c.processingMu.Unlock()
-}
-
-// Purpose: Decide if a normalized mode is present in a mode list.
-// Key aspects: Supports canonical + variant matching for PSK-family modes.
-// Upstream: handlePayload allowlist and path-only routing.
-// Downstream: map lookups only.
-func (c *Client) modeMatchesList(canonical string, variant string, isPSK bool, allowed map[string]struct{}) bool {
-	if len(allowed) == 0 {
-		return false
-	}
-	if canonical != "" {
-		if _, ok := allowed[canonical]; ok {
-			return true
-		}
-	}
-	if isPSK && variant != "" {
-		if _, ok := allowed[variant]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 // Purpose: Choose a default worker count for PSKReporter ingest.

@@ -7,7 +7,7 @@ package spot
 // NormalizeVoiceMode maps generic SSB to LSB/USB depending on frequency.
 func NormalizeVoiceMode(mode string, freqKHz float64) string {
 	upper := normalizeUpperASCIITrim(mode)
-	if upper == "SSB" {
+	if VoiceByFrequencyMode(upper) {
 		if freqKHz >= 10000 {
 			return "USB"
 		}

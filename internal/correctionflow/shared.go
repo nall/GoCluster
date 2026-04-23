@@ -525,10 +525,10 @@ func CallCorrectionWindowForMode(cfg config.CallCorrectionConfig, mode string) t
 
 // ResolveRuntimeSettings computes resolver runtime parameters from config.
 // Invariants:
-//   - voice (USB/LSB) uses voice tolerance.
+//   - taxonomy voice correction modes use voice tolerance.
 //   - adaptive min-reports can override correction min-report gate.
 //
-// Side effect: when observeAdaptive is true, CW/RTTY observations are recorded before
+// Side effect: when observeAdaptive is true, source-skew-corrected observations are recorded before
 // querying adaptive state so the current spot can influence near-term thresholds.
 func ResolveRuntimeSettings(cfg config.CallCorrectionConfig, spotEntry *spot.Spot, adaptive *spot.AdaptiveMinReports, now time.Time, observeAdaptive bool) RuntimeSettings {
 	mode := ""
@@ -541,10 +541,11 @@ func ResolveRuntimeSettings(cfg config.CallCorrectionConfig, spotEntry *spot.Spo
 	if band == "" && spotEntry != nil {
 		band = spot.FreqToBand(spotEntry.Frequency)
 	}
-	isVoice := modeUpper == "USB" || modeUpper == "LSB"
+	isVoice := spot.CallCorrectionProfileForMode(modeUpper) == spot.CallCorrectionProfileVoice
+	adaptiveMode := spot.SourceSkewCorrectedMode(modeUpper)
 	window := CallCorrectionWindowForMode(cfg, modeUpper)
 
-	if observeAdaptive && adaptive != nil && (modeUpper == "CW" || modeUpper == "RTTY") && spotEntry != nil {
+	if observeAdaptive && adaptive != nil && adaptiveMode && spotEntry != nil {
 		reporter := spotEntry.DECallNorm
 		if reporter == "" {
 			reporter = spotEntry.DECall
@@ -553,7 +554,7 @@ func ResolveRuntimeSettings(cfg config.CallCorrectionConfig, spotEntry *spot.Spo
 	}
 
 	minReports := cfg.MinConsensusReports
-	if adaptive != nil && (modeUpper == "CW" || modeUpper == "RTTY") {
+	if adaptive != nil && adaptiveMode {
 		if dyn := adaptive.MinReportsForBand(band, now); dyn > 0 {
 			minReports = dyn
 		}

@@ -1,11 +1,10 @@
 package spot
 
 import (
-	"dxcluster/strutil"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // CommentParseResult captures parsed metadata from a spot comment.
@@ -181,43 +180,30 @@ func classifyTokenWithFallback(matchIndex map[int][]acMatch, tok commentToken) (
 	return acPattern{}, false
 }
 
-var keywordPatterns = []acPattern{
-	{word: "DB", kind: acTokenDB},
-	{word: "WPM", kind: acTokenWPM},
-	{word: "BPS", kind: acTokenBPS},
-	{word: "CW", kind: acTokenMode, mode: "CW"},
-	{word: "CWT", kind: acTokenMode, mode: "CW"},
-	{word: "RTTY", kind: acTokenMode, mode: "RTTY"},
-	{word: "FT2", kind: acTokenMode, mode: "FT2"},
-	{word: "FT8", kind: acTokenMode, mode: "FT8"},
-	{word: "FT-8", kind: acTokenMode, mode: "FT8"},
-	{word: "FT4", kind: acTokenMode, mode: "FT4"},
-	{word: "FT-4", kind: acTokenMode, mode: "FT4"},
-	{word: "PSK31", kind: acTokenMode, mode: "PSK31"},
-	{word: "PSK63", kind: acTokenMode, mode: "PSK63"},
-	{word: "PSK125", kind: acTokenMode, mode: "PSK125"},
-	{word: "JS8", kind: acTokenMode, mode: "JS8"},
-	{word: "SSTV", kind: acTokenMode, mode: "SSTV"},
-	{word: "MSK", kind: acTokenMode, mode: "MSK144"},
-	{word: "MSK144", kind: acTokenMode, mode: "MSK144"},
-	{word: "MSK-144", kind: acTokenMode, mode: "MSK144"},
-	{word: "USB", kind: acTokenMode, mode: "USB"},
-	{word: "LSB", kind: acTokenMode, mode: "LSB"},
-	{word: "SSB", kind: acTokenMode, mode: "SSB"},
+func getKeywordScanner() *acScanner {
+	// Purpose: Return the taxonomy-owned keyword scanner.
+	// Key aspects: Scanner is built once when the immutable taxonomy is loaded.
+	// Upstream: ParseSpotComment and classifyTokenWithFallback.
+	// Downstream: CurrentTaxonomy snapshot.
+	return CurrentTaxonomy().keywordScanner
 }
 
-var keywordScannerOnce sync.Once
-var keywordScanner *acScanner
-
-func getKeywordScanner() *acScanner {
-	// Purpose: Lazily initialize the global keyword scanner.
-	// Key aspects: sync.Once to build shared Aho-Corasick trie.
-	// Upstream: ParseSpotComment and classifyTokenWithFallback.
-	// Downstream: newACScanner.
-	keywordScannerOnce.Do(func() {
-		keywordScanner = newACScanner(keywordPatterns)
-	})
-	return keywordScanner
+func buildKeywordScanner(t *Taxonomy) *acScanner {
+	patterns := make([]acPattern, 0, 3+len(t.modeCommentTokens))
+	patterns = append(patterns,
+		acPattern{word: "DB", kind: acTokenDB},
+		acPattern{word: "WPM", kind: acTokenWPM},
+		acPattern{word: "BPS", kind: acTokenBPS},
+	)
+	modeTokens := make([]string, 0, len(t.modeCommentTokens))
+	for token := range t.modeCommentTokens {
+		modeTokens = append(modeTokens, token)
+	}
+	sort.Strings(modeTokens)
+	for _, token := range modeTokens {
+		patterns = append(patterns, acPattern{word: token, kind: acTokenMode, mode: t.modeCommentTokens[token]})
+	}
+	return newACScanner(patterns)
 }
 
 type commentToken struct {
@@ -561,9 +547,5 @@ func ParseSpotEvents(comment string) EventMask {
 // Downstream: strings.ToUpper.
 // modeWantsBareReport determines which modes treat bare signed integers as SNR/report.
 func modeWantsBareReport(mode string) bool {
-	switch strutil.NormalizeUpper(mode) {
-	case "CW", "RTTY", "FT8", "FT4", "MSK144":
-		return true
-	}
-	return false
+	return ModeWantsBareReport(mode)
 }

@@ -8,8 +8,12 @@ import (
 // FT8Equivalent returns the FT8-equivalent dB for a mode/SNR pair.
 // Returns ok=false when mode is unsupported for path reliability.
 func FT8Equivalent(mode string, snr int, cfg Config) (float64, bool) {
-	switch normalizeMode(mode) {
-	case "FT8":
+	policy, ok := modePolicy(mode)
+	if !ok || !policy.Ingest {
+		return 0, false
+	}
+	switch policy.OffsetMode {
+	case "FT8", "":
 		return float64(snr), true
 	case "FT4":
 		return float64(snr) + cfg.ModeOffsets.FT4, true

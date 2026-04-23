@@ -55,8 +55,6 @@ pskreporter:
   broker: "mqtt.pskreporter.info"
   port: 1883
   topic: "pskr/filter/v2/+/+/#"         # MQTT subscription topic; filtering happens downstream
-  modes: ["FT8", "FT4", "FT2", "CW", "RTTY", "MSK144", "PSK"]  # Modes to accept after subscription (PSK covers PSK31/63/125 variants)
-  path_only_modes: ["WSPR"]           # Modes used for path prediction only (never reach dedup/telnet/archive)
   workers: 8                          # 0 means automatic (uses all CPU cores, minimum 4)
   spot_channel_size: 25000            # Buffered ingest channel between MQTT and processing
   mqtt_inbound_workers: 8             # 0 means automatic (defaults to workers)

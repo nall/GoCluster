@@ -77,15 +77,6 @@ type Spot struct {
 	DECallNormStripped string
 }
 
-// pskVariantMap collapses PSK variants to a canonical family while preserving
-// the original token for display/logging.
-var pskVariantMap = map[string]string{
-	"PSK":    "PSK",
-	"PSK31":  "PSK",
-	"PSK63":  "PSK",
-	"PSK125": "PSK",
-}
-
 // CanonicalPSKMode returns the canonical PSK family label alongside the
 // original token. When mode is not a PSK variant, it returns the input as both
 // canonical and variant with isPSK=false.
@@ -747,7 +738,7 @@ func (s *Spot) buildDXClusterLine(commentPayload string) string {
 	b.AppendString(s.Mode)
 	if s.HasReport {
 		b.AppendByte(' ')
-		if strings.EqualFold(s.Mode, "CW") || strings.EqualFold(s.Mode, "RTTY") {
+		if ReportFormatForMode(s.Mode) == ReportFormatPlainDB {
 			b.AppendString(strconv.Itoa(s.Report))
 		} else {
 			if s.Report >= 0 {

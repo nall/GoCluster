@@ -35,7 +35,7 @@ func TestDecorateSpotterCall(t *testing.T) {
 }
 
 func TestConvertToSpotOmitsCommentAndCarriesGrids(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
 
 	msg := &PSKRMessage{
 		SequenceNumber:  1,
@@ -72,7 +72,7 @@ func TestConvertToSpotCanonicalizesFTFrequencyAndPreservesObserved(t *testing.T)
 	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
 		{FrequencyKHz: 14074, Mode: "FT8"},
 	})
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
 
 	msg := &PSKRMessage{
 		SequenceNumber:  1,
@@ -106,7 +106,7 @@ func TestConvertToSpotFTFrequencyFailsOpenWithoutMatchingDial(t *testing.T) {
 	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
 		{FrequencyKHz: 14074, Mode: "FT8"},
 	})
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
 
 	msg := &PSKRMessage{
 		SequenceNumber: 1,
@@ -135,7 +135,7 @@ func TestConvertToSpotFTFrequencyFailsOpenWithoutMatchingDial(t *testing.T) {
 }
 
 func TestConvertToSpotReportsInvalidSenderCall(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
 	var got struct {
 		source string
 		role   string
@@ -191,7 +191,7 @@ func (m testMessage) Payload() []byte { return m.payload }
 func (m testMessage) Ack()            {}
 
 func TestMessageHandlerDropsOversizePayload(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 4)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 4)
 	client.processingMu.Lock()
 	client.processing = make(chan []byte, 1)
 	client.processingMu.Unlock()
@@ -205,9 +205,8 @@ func TestMessageHandlerDropsOversizePayload(t *testing.T) {
 	}
 }
 
-func TestHandlePayloadFiltersModes(t *testing.T) {
-	// Allow only FT8.
-	client := NewClient("localhost", 1883, nil, []string{"FT8"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+func TestHandlePayloadFiltersModesByTaxonomyRoute(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	allowed := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -217,12 +216,12 @@ func TestHandlePayloadFiltersModes(t *testing.T) {
 		ReceiverCall: "N0CALL",
 	}
 	blocked := allowed
-	blocked.Mode = "FT4"
+	blocked.Mode = "PACKET"
 
 	allowedPayload, _ := json.Marshal(allowed)
 	blockedPayload, _ := json.Marshal(blocked)
 
-	// Blocked mode should not reach spotChan.
+	// Ignored taxonomy route should not reach spotChan.
 	client.handlePayload(blockedPayload)
 	select {
 	case <-client.spotChan:
@@ -230,7 +229,7 @@ func TestHandlePayloadFiltersModes(t *testing.T) {
 	default:
 	}
 
-	// Allowed mode should enqueue a spot.
+	// Normal taxonomy route should enqueue a spot.
 	client.handlePayload(allowedPayload)
 	select {
 	case <-client.spotChan:
@@ -241,7 +240,7 @@ func TestHandlePayloadFiltersModes(t *testing.T) {
 }
 
 func TestHandlePayloadDropsZeroSNR(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -261,7 +260,7 @@ func TestHandlePayloadDropsZeroSNR(t *testing.T) {
 }
 
 func TestHandlePayloadDropsMissingReport(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "FT8",
@@ -279,8 +278,8 @@ func TestHandlePayloadDropsMissingReport(t *testing.T) {
 	}
 }
 
-func TestHandlePayloadAllowsPSKVariantsWithCanonicalAllowlist(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"PSK"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+func TestHandlePayloadAllowsPSKVariantsWithCanonicalTaxonomyRoute(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	psk31 := PSKRMessage{
 		Frequency:    14074000,
 		Mode:         "PSK31",
@@ -302,8 +301,8 @@ func TestHandlePayloadAllowsPSKVariantsWithCanonicalAllowlist(t *testing.T) {
 	}
 }
 
-func TestHandlePayloadAllowsFT2WhenConfigured(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"FT2"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+func TestHandlePayloadAllowsFT2WhenTaxonomyRouted(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:    14080000,
 		Mode:         "FT2",
@@ -321,12 +320,12 @@ func TestHandlePayloadAllowsFT2WhenConfigured(t *testing.T) {
 			t.Fatalf("expected FT2 spot, got Mode=%q ModeNorm=%q", spot.Mode, spot.ModeNorm)
 		}
 	default:
-		t.Fatalf("expected FT2 to be accepted when FT2 is allowed")
+		t.Fatalf("expected FT2 to be accepted when taxonomy routes FT2")
 	}
 }
 
 func TestHandlePayloadRoutesPathOnlyMode(t *testing.T) {
-	client := NewClient("localhost", 1883, nil, []string{"FT8"}, []string{"WSPR"}, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:       14097000,
 		Mode:            "WSPR",
@@ -361,7 +360,7 @@ func BenchmarkConvertToSpotFTCanonicalized(b *testing.B) {
 	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
 		{FrequencyKHz: 14074, Mode: "FT8"},
 	})
-	client := NewClient("localhost", 1883, nil, nil, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, registry, false, 16, 0)
 	msg := &PSKRMessage{
 		SequenceNumber:  1,
 		Frequency:       14076110,
@@ -387,7 +386,7 @@ func BenchmarkConvertToSpotFTCanonicalized(b *testing.B) {
 }
 
 func BenchmarkHandlePayloadFT8(b *testing.B) {
-	client := NewClient("localhost", 1883, nil, []string{"FT8"}, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 2, 0)
 	msg := PSKRMessage{
 		Frequency:       14074000,
 		Mode:            "FT8",

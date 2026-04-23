@@ -328,7 +328,7 @@ func buildFTConfidenceKey(s *spot.Spot) (ftConfidenceKey, string, bool) {
 		mode = s.Mode
 	}
 	mode = strutil.NormalizeUpper(mode)
-	if mode != "FT8" && mode != "FT4" && mode != "FT2" {
+	if _, _, ok := spot.FTConfidenceTimingKeys(mode); !ok {
 		return ftConfidenceKey{}, "", false
 	}
 	call := s.DXCallNorm
@@ -352,12 +352,16 @@ func buildFTConfidenceKey(s *spot.Spot) (ftConfidenceKey, string, bool) {
 }
 
 func ftConfidenceTimingForMode(mode string, policy ftConfidencePolicy) (ftConfidenceTiming, bool) {
-	switch strutil.NormalizeUpper(mode) {
-	case "FT8":
+	quietKey, hardCapKey, ok := spot.FTConfidenceTimingKeys(mode)
+	if !ok {
+		return ftConfidenceTiming{}, false
+	}
+	switch {
+	case quietKey == "ft8_quiet_gap_seconds" && hardCapKey == "ft8_hard_cap_seconds":
 		return policy.ft8Timing, true
-	case "FT4":
+	case quietKey == "ft4_quiet_gap_seconds" && hardCapKey == "ft4_hard_cap_seconds":
 		return policy.ft4Timing, true
-	case "FT2":
+	case quietKey == "ft2_quiet_gap_seconds" && hardCapKey == "ft2_hard_cap_seconds":
 		return policy.ft2Timing, true
 	default:
 		return ftConfidenceTiming{}, false

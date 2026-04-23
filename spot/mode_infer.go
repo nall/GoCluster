@@ -723,13 +723,8 @@ func (m *digitalFreqMap) removeElement(freq int, elem *list.Element) {
 
 func isSeedMode(mode string) bool {
 	// Purpose: Check if a mode is eligible for digital seeding.
-	// Key aspects: Limits to FT4/FT8/JS8.
+	// Key aspects: Uses taxonomy mode_inference_seed capability.
 	// Upstream: seedDigitalMap and shouldObserveDigital.
-	// Downstream: strings.ToUpper.
-	switch strutil.NormalizeUpper(mode) {
-	case "FT4", "FT8", "JS8":
-		return true
-	default:
-		return false
-	}
+	// Downstream: CurrentTaxonomy.
+	return IsModeInferenceSeedMode(mode)
 }

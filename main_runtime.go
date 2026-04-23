@@ -160,6 +160,9 @@ func (r *clusterRuntime) initialize() bool {
 		return false
 	}
 	r.startBackgroundServices()
+	if !r.loadYAMLReferenceTables() {
+		return false
+	}
 	r.initializeCallCacheAndMeta()
 	if !r.initializeReferenceData() {
 		return false
@@ -349,9 +352,6 @@ func (r *clusterRuntime) initializeCallCacheAndMeta() {
 }
 
 func (r *clusterRuntime) initializeReferenceData() bool {
-	if !r.loadYAMLReferenceTables() {
-		return false
-	}
 	r.initializeULSAndCTY()
 	r.initializeCorrectionModels()
 	r.initializeObservabilityState()
@@ -366,6 +366,21 @@ func (r *clusterRuntime) initializeReferenceData() bool {
 }
 
 func (r *clusterRuntime) loadYAMLReferenceTables() bool {
+	taxonomyPath := filepath.Join(r.configSource, "spot_taxonomy.yaml")
+	taxonomy, err := spot.LoadTaxonomyFile(taxonomyPath)
+	if err != nil {
+		log.Printf("Failed to load required spot taxonomy %s: %v", taxonomyPath, err)
+		return false
+	}
+	spot.ConfigureTaxonomy(taxonomy)
+	pathPolicies := make(map[string]pathreliability.ModePolicy)
+	for mode, offsetMode := range spot.PathReliabilityModePolicies() {
+		pathPolicies[mode] = pathreliability.ModePolicy{Ingest: true, OffsetMode: offsetMode}
+	}
+	pathreliability.ConfigureModePolicies(pathPolicies)
+	if !r.validateTaxonomyReferences() {
+		return false
+	}
 	iaruPath := filepath.Join(r.configSource, "iaru_regions.yaml")
 	if err := spot.LoadIARURegionsFile(iaruPath); err != nil {
 		log.Printf("Failed to load required IARU region table %s: %v", iaruPath, err)
@@ -375,6 +390,28 @@ func (r *clusterRuntime) loadYAMLReferenceTables() bool {
 	if err := spot.LoadIARUModeInferenceFile(modePath); err != nil {
 		log.Printf("Failed to load required IARU mode inference table %s: %v", modePath, err)
 		return false
+	}
+	return true
+}
+
+func (r *clusterRuntime) validateTaxonomyReferences() bool {
+	for _, mode := range r.cfg.Filter.DefaultModes {
+		if !spot.IsSupportedFilterMode(mode) {
+			log.Printf("Invalid filter.default_modes entry %q: mode is not declared as filter_visible in spot_taxonomy.yaml", mode)
+			return false
+		}
+	}
+	for _, seed := range r.cfg.ModeInference.DigitalSeeds {
+		if !spot.IsModeInferenceSeedMode(seed.Mode) {
+			log.Printf("Invalid mode_inference.digital_seeds mode %q at %d kHz: mode must be declared with mode_inference_seed: true in spot_taxonomy.yaml", seed.Mode, seed.FrequencyKHz)
+			return false
+		}
+	}
+	for mode := range r.cfg.PathReliability.ModeThresholds {
+		if !spot.IsKnownMode(mode) {
+			log.Printf("Invalid path_reliability.mode_thresholds mode %q: mode is not declared in spot_taxonomy.yaml", mode)
+			return false
+		}
 	}
 	return true
 }
@@ -1124,8 +1161,6 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 		r.cfg.PSKReporter.Broker,
 		r.cfg.PSKReporter.Port,
 		r.pskrTopics,
-		r.cfg.PSKReporter.Modes,
-		r.cfg.PSKReporter.PathOnlyModes,
 		r.cfg.PSKReporter.Name,
 		r.cfg.PSKReporter.Workers,
 		r.cfg.PSKReporter.MQTTInboundWorkers,
