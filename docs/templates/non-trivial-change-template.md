@@ -81,6 +81,8 @@ No code, diffs, file writes, or full validation commands before that approval.
 - Decision-memory scan:
   - Relevant ADRs:
   - Relevant TSRs:
+  - ADR handling plan:
+    - full ADR | updated ADR | lightweight ADR stub
   - Decision refs:
   - If none: `No relevant ADR found` / `No relevant TSR found`
 
@@ -141,6 +143,7 @@ Use:
 - User impact and determinism:
 - README impact:
 - Verification commands and results:
+- ADR handling outcome:
 - Decision refs:
 
 ### 12. Scope-to-Code Traceability

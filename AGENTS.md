@@ -61,7 +61,7 @@ When the user asks what existing code does and has not asked for changes:
 - Follow `docs/change-workflow.md` for Git preflight, Current-State Understanding, requirements, dependency rigor, implementation plan, architecture note, user impact note, incremental implementation, documentation review, and decision-memory scan.
 - Use `docs/templates/non-trivial-change-template.md` for the compact approval-packet and execution-closeout shape unless the user explicitly requests a different reporting shape.
 - For Non-trivial closeout, use `docs/dev-runbook.md` as the required checker source; the short baseline here is not the full command list.
-- Use `docs/decision-memory.md` for ADR/TSR pre-read, updates, and `No decision change` handling.
+- Use `docs/decision-memory.md` for mandatory ADR handling, TSR pre-read when applicable, and lightweight ADR stubs when there is no durable decision change.
 - When editing workflow docs or repo-managed skills, perform the workflow-drift audit defined in `docs/change-workflow.md`.
 
 ## Execution Loop
@@ -82,6 +82,7 @@ For Non-trivial work, produce these artifacts in order unless a later repo doc g
 - execution-closeout contents from `docs/templates/non-trivial-change-template.md`
 - `Dependency scan evidence: <repo search commands/steps used>; reviewed files/packages: <list>` when Full rigor applies
 - triggered audits required by the touched area
+- ADR handling for every Non-trivial task
 - exact final validation block
 
 Later sections may reference earlier evidence instead of restating unchanged facts.

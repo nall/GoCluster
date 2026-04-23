@@ -20,8 +20,17 @@ For every Non-trivial task and every troubleshooting task:
    - `No relevant ADR found`
    - and/or `No relevant TSR found`
 
-## When an ADR is required
-Create or update an ADR when a Non-trivial change affects any of:
+## ADR handling for Non-trivial work
+Every Non-trivial task must end with one of:
+- a new ADR
+- an updated ADR
+- a lightweight ADR stub recording `No durable decision change`
+
+This makes ADR handling mandatory even when the task does not introduce a new
+durable design decision.
+
+## When a full ADR is required
+Create or update a full ADR when a Non-trivial change affects any of:
 - protocol or compatibility
 - parser behavior
 - concurrency model
@@ -32,8 +41,12 @@ Create or update an ADR when a Non-trivial change affects any of:
 - shared component behavior used by multiple packages
 - operational mode selection with user-visible or operator-visible impact
 
-If no durable decision changed, state:
-- `No decision change`
+If none of those changed, create a lightweight ADR stub instead of a full ADR.
+The stub should record:
+- task/date/scope
+- summary of what changed
+- `No durable decision change`
+- links to relevant code/tests/docs when applicable
 
 ## When a TSR is required
 Create or update a TSR when:
@@ -47,8 +60,8 @@ If troubleshooting leads to a durable decision change:
 3. cross-link both
 
 If troubleshooting ends without a durable decision change:
-- record `No decision change`
-- no ADR is required
+- record the troubleshooting outcome in the TSR
+- still create the lightweight ADR stub required for the Non-trivial task
 
 ## Naming convention
 Suggested filenames:
@@ -95,7 +108,6 @@ Use `docs/templates/tsr-template.md`.
 ## Traceability requirements
 Every Non-trivial final summary must include:
 - `Decision refs: ADR-XXXX`
-- or `Decision refs: none`
 
 If troubleshooting originated the durable decision, include both:
 - `Decision refs: ADR-XXXX; TSR-XXXX`

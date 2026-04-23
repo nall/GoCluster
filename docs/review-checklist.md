@@ -64,6 +64,7 @@ Required sections:
 - User impact and determinism
 - README impact
 - Verification commands and results
+- ADR handling outcome
 - Decision refs
 - Scope-to-Code Traceability
 - Validation block

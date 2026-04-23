@@ -266,12 +266,19 @@ shape:
 Required rigor does not imply a long narrative. Reuse earlier evidence by
 reference where possible.
 
+## Decision-memory requirement
+Every Non-trivial task requires ADR handling:
+- full ADR when a durable decision changed
+- lightweight ADR stub when no durable decision changed
+
+Use `docs/decision-memory.md` for the detailed rules.
+
 ## Completion requirements
 A Non-trivial task is not complete until:
 - code is implemented
 - checks are run
 - Review Pass is done
 - docs are reviewed
-- ADR/TSR obligations are satisfied
+- ADR handling is satisfied and TSR obligations are satisfied when applicable
 - Scope-to-Code Traceability is complete
 - the exact 3-line validation block is present
