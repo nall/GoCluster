@@ -2,6 +2,9 @@
 
 Audience: the human operator working with Codex. For Codex's executor-facing rules, use `AGENTS.md`.
 
+`AGENTS.md` is the repo's executor contract. `CLAUDE.md` should not be treated
+as a second competing workflow source for this repository.
+
 Use two layers:
 
 - Use planning conversation to settle intent, scope, risks, and edge cases.

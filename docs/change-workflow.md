@@ -13,6 +13,12 @@ For Non-trivial work, do not go directly from idea to code. Move through:
 5. review the diff
 6. close out with traceability and validation
 
+Keep the workflow additive, not repetitive:
+- later sections may reference earlier evidence instead of restating it
+- only restate facts when the later section adds a new conclusion, delta, or
+  final disposition
+- keep required artifacts, but compress duplicate narration
+
 ## IDE context discipline
 When using the Codex VS Code extension:
 - Prefer the user's open files as the primary context.
@@ -121,13 +127,8 @@ Output format:
 This is mandatory before implementation planning. It extends the pre-ledger
 Current-State Discovery with the detail needed for implementation.
 
-Required content:
-- current request/data/control flow
-- key packages/files/functions involved
-- boundaries and ownership
-- invariants that must not break
-- likely blast radius
-- top 3 failure modes if changed incorrectly
+If the pre-ledger discovery already captured part of this cleanly, reuse it and
+add only the implementation-relevant delta.
 
 Quality rules:
 - ground statements in inspected code
@@ -137,17 +138,6 @@ Quality rules:
 
 ## Requirements & Edge Cases Note
 Required for Non-trivial work.
-
-Cover:
-- functional requirements
-- non-functional requirements
-- compatibility constraints
-- overload behavior
-- reconnect behavior
-- shutdown behavior
-- observability expectations
-- safety/security constraints
-- edge cases that must be tested or reasoned about
 
 This is where hidden expectations should be surfaced before code.
 
@@ -162,11 +152,7 @@ Use Light only when all are true:
 - no user-visible or operator-visible contract change
 - no concurrency/lifecycle impact outside the local package
 
-Expected output:
-- touched files/packages
-- nearest upstream callers reviewed
-- nearest downstream consumers reviewed
-- tests/docs/config touched
+Expected coverage is defined by the template. Keep it concise.
 
 ### Full rigor
 Use Full when any are true:
@@ -179,11 +165,6 @@ Use Full when any are true:
 - fan-out, queueing, caching, or hot-path changes
 
 Required output:
-- touched files/packages
-- upstream callers/sources reviewed
-- downstream consumers reviewed
-- shared interfaces/components reviewed
-- config/metrics/logs/docs affected
 - exact one-line evidence block:
   `Dependency scan evidence: <repo search commands/steps used>; reviewed files/packages: <list>`
 
@@ -195,14 +176,8 @@ tool/secret config.
 Config/schema changes require Full dependency rigor unless they are strictly
 local test fixture changes.
 
-Required output:
-- touched YAML files and classification
-- single loader path for each file
-- unknown-key, missing-key, null, `0`, and `false` behavior
-- defaults audit evidence
-- downstream consumers reviewed
-- tests proving loader behavior and consumer behavior
-- README/config docs/ADR impact
+Use the template's triggered-audit subsection and include only the config
+details that apply.
 
 The audit must distinguish YAML-owned operator settings from validation
 constants, algorithm constants, compatibility boundaries, and test fixtures.
@@ -210,15 +185,7 @@ constants, algorithm constants, compatibility boundaries, and test fixtures.
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.
 
-Required fields:
-- objective
-- in scope
-- out of scope
-- files/packages to inspect and likely files to change
-- tests to add or update
-- exact validation commands in execution order
-- milestone breakdown
-- rollback note
+Use the template's plan section. Keep it production-safe and minimal.
 
 Rules:
 - milestone 1 must be the smallest production-safe slice
@@ -228,28 +195,14 @@ Rules:
 ## Architecture Note
 Mandatory for every Non-trivial change before code.
 
-Required content:
-- concurrency model
-- ownership/lifetime
-- backpressure and queue policy
-- failure/recovery behavior
-- resource bounds
-- timeout/deadline behavior
-- shutdown sequencing
-- determinism guarantees
-- tradeoffs and rejected alternatives when material
+Use the template's architecture section and cover only the fields material to
+the change.
 
 ## User Impact and Determinism Note
 Required for every Non-trivial change.
 
-State explicitly:
-- whether user-visible behavior changes
-- whether operator-visible behavior changes
-- what slow clients experience
-- what overload looks like
-- what reconnect churn looks like
-- how behavior remains deterministic
-- if there is no user-visible change, say so explicitly
+Use the template's design/impact frame and closeout summary. If there is no
+user-visible change, say so explicitly.
 
 ## Implementation slicing rules
 - Implement only the current milestone.
@@ -303,6 +256,15 @@ For every Non-trivial task, explicitly say:
 - `README impact: Required`
 - or `README impact: Not required`
 with one sentence of reasoning
+
+## Reporting shape
+Use `docs/templates/non-trivial-change-template.md` for the compact reporting
+shape:
+- approval packet before `Approved vN`
+- execution closeout after approval
+
+Required rigor does not imply a long narrative. Reuse earlier evidence by
+reference where possible.
 
 ## Completion requirements
 A Non-trivial task is not complete until:

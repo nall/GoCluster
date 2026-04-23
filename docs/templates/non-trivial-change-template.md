@@ -2,12 +2,20 @@
 
 Use this exact structure for Non-trivial tasks unless the user explicitly requests a different reporting shape.
 
-## 1. Skill check
+Later sections may reference earlier evidence instead of restating unchanged
+facts. Only restate information when the later section adds a new conclusion,
+delta, or final disposition.
+Omit subsections that are not triggered by the task instead of filling them with
+placeholder text.
+
+## Phase A: Approval Packet
+
+### 1. Skill check
 - Skill check: selected <skill>
 or
 - Skill check: none applicable
 
-## 2. Current-State Discovery Evidence
+### 2. Current-State Discovery Evidence
 - Inspected entry points/surfaces:
 - Caller/callee flow checked:
 - Persisted/config/archive/schema surfaces checked:
@@ -15,7 +23,7 @@ or
 - Existing tests checked:
 - Unknown from inspected code:
 
-## 3. Proposed Scope Ledger vN
+### 3. Proposed Scope Ledger vN
 - Version: vN
 - Objective:
 - In scope:
@@ -33,46 +41,50 @@ No code, diffs, file writes, or full validation commands before that approval.
 
 ---
 
-## 4. Git preflight
+## Phase B: Execution Closeout
+
+### 4. Git preflight
 - Git preflight: branch=<name>; worktree=<clean|dirty acknowledged>; rollback=<hash/tag/branch>
 
-## 5. Current-State Understanding Note
-- Current flow:
-- Likely impacted files/packages/functions:
-- Invariants that must not break:
-- Top 3 failure modes if changed incorrectly:
+### 5. Design and impact frame
+- Current-State Understanding Note:
+  - Current flow:
+  - Likely impacted files/packages/functions:
+  - Invariants that must not break:
+  - Top 3 failure modes if changed incorrectly:
+- Requirements & Edge Cases Note:
+  - Functional requirements:
+  - Non-functional requirements:
+  - Compatibility constraints:
+  - Operational behavior:
+  - Observability expectations:
+  - Edge cases:
+- Dependency impact:
+  - Dependency rigor: Light | Full
+  - Touched files/packages:
+  - Upstream callers/sources reviewed:
+  - Downstream consumers reviewed:
+  - Shared components/interfaces reviewed:
+  - Config/metrics/logs/docs affected:
+  - Dependency scan evidence: <required for Full rigor>
+- Triggered audits only:
+  - Config Contract Audit when required
+  - Retained-State Audit when required
+  - Performance evidence when required
+- Contract and surface declarations:
+  - Contracts changed | No contract changes
+  - User-visible behavior changes | No user-visible behavior changes
+  - Operator-visible behavior changes when relevant
+  - Slow-client / overload / reconnect behavior when relevant
+  - README impact: Required | Not required
+  - Checker set and execution order:
+- Decision-memory scan:
+  - Relevant ADRs:
+  - Relevant TSRs:
+  - Decision refs:
+  - If none: `No relevant ADR found` / `No relevant TSR found`
 
-## 6. Requirements & Edge Cases Note
-- Functional requirements:
-- Non-functional requirements:
-- Compatibility constraints:
-- Operational behavior:
-- Observability expectations:
-- Edge cases:
-
-## 7. Dependency impact
-- Dependency rigor: Light | Full
-- Touched files/packages:
-- Upstream callers/sources reviewed:
-- Downstream consumers reviewed:
-- Shared components/interfaces reviewed:
-- Config/metrics/logs/docs affected:
-- Dependency scan evidence: <required for Full rigor>
-
-## 8. Config Contract Audit
-- Required? yes/no
-- Touched YAML files and classification:
-- Single loader path:
-- Unknown-key behavior:
-- Missing-key behavior:
-- Null behavior:
-- Explicit `0` / `false` behavior:
-- Defaults audit evidence:
-- Downstream consumers reviewed:
-- Consumer-level tests planned:
-- Docs/ADR impact:
-
-## 9. Implementation Plan
+### 6. Implementation Plan
 - Objective:
 - In scope:
 - Out of scope:
@@ -84,32 +96,19 @@ No code, diffs, file writes, or full validation commands before that approval.
   2.
 - Rollback note:
 
-## 10. Architecture Note
-- Concurrency model:
-- Ownership/lifetime:
-- Backpressure and queue policy:
-- Failure/recovery behavior:
-- Resource bounds:
-- Timeout/deadline behavior:
-- Shutdown sequencing:
-- Determinism guarantees:
-- Alternatives considered:
+### 7. Architecture and determinism
+Include only the fields material to the change:
+- Concurrency model
+- Ownership/lifetime
+- Backpressure and queue policy
+- Failure/recovery behavior
+- Resource bounds
+- Timeout/deadline behavior
+- Shutdown sequencing
+- Determinism guarantees
+- Alternatives considered when material
 
-## 11. User Impact and Determinism Note
-- User-visible behavior changes:
-- Operator-visible behavior changes:
-- Slow-client behavior:
-- Overload behavior:
-- Reconnect behavior:
-- Determinism statement:
-
-## 12. Decision-memory scan
-- Relevant ADRs:
-- Relevant TSRs:
-- Decision refs:
-- If none: `No relevant ADR found` / `No relevant TSR found`
-
-## 13. Implementation slices
+### 8. Implementation slices and verification
 For each milestone:
 - what changed
 - files touched
@@ -117,7 +116,7 @@ For each milestone:
 - result
 - remaining risk before next slice
 
-## 14. Review Pass
+### 9. Review Pass
 - Findings by severity:
 - Confirmed fixes:
 - Rerun checks:
@@ -125,64 +124,26 @@ For each milestone:
 If no material findings:
 - `Review Pass findings: none material`
 
-## 15. Tests and checker results
-- Command:
-- Purpose:
-- Result:
-- Incremental or final:
-
-## 16. Performance evidence
-- Required? yes/no
-- If yes:
-  - benchmark results
-  - allocs/op
-  - pprof highlights
-  - conclusion
-
-## 17. Documentation and README
-- README impact: Required | Not required
-- README action:
-- Docs/comments updated:
-
-## 18. ADR/TSR update
-- ADR created/updated:
-- TSR created/updated:
-- or `No decision change`
-
-## 19. Self-Audit
+### 10. Self-Audit
 Use:
-- Scope completeness: PASS|FAIL|N/A - note
-- Dependency coverage: PASS|FAIL|N/A - note
-- Contract disclosure: PASS|FAIL|N/A - note
-- Correctness/protocol semantics: PASS|FAIL|N/A - note
-- Config contract integrity: PASS|FAIL|N/A - note
-- Concurrency/lifecycle: PASS|FAIL|N/A - note
-- Backpressure/drop/disconnect semantics: PASS|FAIL|N/A - note
-- Resource bounds: PASS|FAIL|N/A - note
-- Performance evidence: PASS|FAIL|N/A - note
-- Security/robustness: PASS|FAIL|N/A - note
-- Testing adequacy: PASS|FAIL|N/A - note
-- Checker discipline: PASS|FAIL|N/A - note
-- Documentation/README: PASS|FAIL|N/A - note
-- Decision-memory obligations: PASS|FAIL|N/A - note
-- Traceability completeness: PASS|FAIL|N/A - note
+- Scope and dependency coverage: PASS|FAIL|N/A - note
+- Contract, config, and protocol correctness: PASS|FAIL|N/A - note
+- Concurrency, backpressure, and resource bounds: PASS|FAIL|N/A - note
+- Verification and checker discipline: PASS|FAIL|N/A - note
+- Documentation, decision memory, and traceability: PASS|FAIL|N/A - note
 - Validation block completeness: PASS|FAIL|N/A - note
 
-## 20. PR-style summary
+### 11. Closeout summary
 - Summary:
 - Tradeoffs:
 - Risks and mitigations:
 - Contracts and compatibility:
-- Config contract audit:
 - User impact and determinism:
-- Observability impact:
 - README impact:
-- Skill check:
 - Verification commands and results:
-- Dependency scan evidence:
 - Decision refs:
 
-## 21. Scope-to-Code Traceability
+### 12. Scope-to-Code Traceability
 For every Scope Ledger item that was `Agreed` or `Pending` at the start of implementation:
 - Ledger item:
 - Code locations:
@@ -190,7 +151,7 @@ For every Scope Ledger item that was `Agreed` or `Pending` at the start of imple
 - Docs/comments:
 - Decision refs:
 
-## 22. Validation block
+### 13. Validation block
 Validation Score: X/6
 Failed items: none | <comma-separated failed item numbers/names>
 Auto-fail conditions triggered: no | yes (<conditions>)

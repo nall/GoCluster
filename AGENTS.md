@@ -59,7 +59,7 @@ When the user asks what existing code does and has not asked for changes:
 - Do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval.
 - Every scope change after approval requires a new ledger version.
 - Follow `docs/change-workflow.md` for Git preflight, Current-State Understanding, requirements, dependency rigor, implementation plan, architecture note, user impact note, incremental implementation, documentation review, and decision-memory scan.
-- Use `docs/templates/non-trivial-change-template.md` for the full Non-trivial response shape unless the user explicitly requests a different reporting shape.
+- Use `docs/templates/non-trivial-change-template.md` for the compact approval-packet and execution-closeout shape unless the user explicitly requests a different reporting shape.
 - For Non-trivial closeout, use `docs/dev-runbook.md` as the required checker source; the short baseline here is not the full command list.
 - Use `docs/decision-memory.md` for ADR/TSR pre-read, updates, and `No decision change` handling.
 - When editing workflow docs or repo-managed skills, perform the workflow-drift audit defined in `docs/change-workflow.md`.
@@ -78,19 +78,15 @@ For Non-trivial work, produce these artifacts in order unless a later repo doc g
 - `Proposed Scope Ledger vN`
 - `Skill check: selected <skill>` or `Skill check: none applicable`
 - `Git preflight: branch=<name>; worktree=<clean|dirty acknowledged>; rollback=<hash/tag/branch>`
-- `Current-State Understanding Note`
-- `Requirements & Edge Cases Note`
-- dependency rigor: `Light` or `Full`
+- approval-packet contents from `docs/templates/non-trivial-change-template.md`
+- execution-closeout contents from `docs/templates/non-trivial-change-template.md`
 - `Dependency scan evidence: <repo search commands/steps used>; reviewed files/packages: <list>` when Full rigor applies
-- `Config Contract Audit` when config/schema/YAML/defaulting behavior is touched
-- `Retained-State Audit` when retained state is touched
-- Implementation Plan
-- Architecture Note
-- User Impact and Determinism Note
-- Decision-memory scan with ADR/TSR refs or `No decision change`
-- Review Pass
-- Self-Audit
-- PR-style summary with Scope-to-Code Traceability
+- triggered audits required by the touched area
+- exact final validation block
+
+Later sections may reference earlier evidence instead of restating unchanged facts.
+Only repeat information when the later section adds a new conclusion, delta, or
+final disposition.
 
 ## Checker Baseline
 - Default Non-trivial baseline: `go test ./...`, `go vet ./...`, and `staticcheck ./...`.

@@ -38,21 +38,11 @@ If there are no material findings, say:
 After the Review Pass, produce a Self-Audit with pass/fail for each category below.
 
 ### Required categories
-- Scope completeness vs Scope Ledger
-- Dependency impact coverage
-- Contract and user-visible behavior disclosure
-- Correctness and protocol semantics
-- Config contract integrity
-- Concurrency, cancellation, deadlines, and shutdown
-- Backpressure, queue, drop, and disconnect policy
-- Resource bounds
-- Performance evidence where applicable
-- Security and robustness
-- Testing adequacy
-- Checker discipline
-- Documentation and README review
-- Decision-memory obligations
-- Traceability completeness
+- Scope and dependency coverage
+- Contract, config, and protocol correctness
+- Concurrency, backpressure, and resource bounds
+- Verification and checker discipline
+- Documentation, decision memory, and traceability
 - Validation block completeness
 
 ### Self-Audit rules
@@ -60,6 +50,8 @@ After the Review Pass, produce a Self-Audit with pass/fail for each category bel
 - `N/A` is allowed only when the category truly does not apply.
 - Every `FAIL` must include a short explanation and next action.
 - Do not hide uncertainty. If evidence is incomplete, fail the category.
+- Use one short note per grouped category. Reference earlier review evidence when
+  that already establishes the point.
 
 ## PR-style summary
 Every Non-trivial task must end with a PR-style summary.
@@ -69,16 +61,16 @@ Required sections:
 - Tradeoffs
 - Risks and mitigations
 - Contracts and compatibility
-- Config contract audit
 - User impact and determinism
-- Observability impact
 - README impact
-- Skill check
 - Verification commands and results
-- Dependency scan evidence (for Full-rigor tasks)
 - Decision refs
 - Scope-to-Code Traceability
 - Validation block
+
+Later summary sections may reference earlier artifacts instead of repeating the
+same evidence verbatim. When doing so, state only the final disposition or
+delta relevant to closeout.
 
 ## Scope-to-Code Traceability
 Map every Scope Ledger item with status `Agreed` or `Pending` as of the start of the implementation cycle to:
