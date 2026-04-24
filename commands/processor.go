@@ -365,7 +365,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 
 	whoSpotsMeLines := helpEntryLines(
 		"WHOSPOTSME - Show recent spotter countries for your call.",
-		[]string{"WHOSPOTSME <band>"},
+		[]string{"WHOSPOTSME [band]"},
 		nil,
 		whoSpotsMeHelpNotes(whoSpotsMeHelp),
 	)
@@ -1131,7 +1131,7 @@ func showHistoryUsage(command string) string {
 }
 
 func whoSpotsMeUsage() string {
-	return "Usage: WHOSPOTSME <band>\n"
+	return "Usage: WHOSPOTSME [band]\n"
 }
 
 const (
@@ -1592,59 +1592,129 @@ func (p *Processor) handleShowDXCC(args []string) string {
 }
 
 func (p *Processor) handleWhoSpotsMe(args []string, spotter string) string {
-	if len(args) != 1 {
+	if len(args) > 1 {
 		return whoSpotsMeUsage()
 	}
 	call := spot.NormalizeCallsign(strings.TrimSpace(spotter))
-	band := spot.NormalizeBand(strings.TrimSpace(args[0]))
 	if call == "" {
 		return noLoggedUserMsg
 	}
-	if band == "" || band == "???" || !spot.IsValidBand(band) {
-		return whoSpotsMeUsage()
+	band := ""
+	if len(args) == 1 {
+		band = spot.NormalizeBand(strings.TrimSpace(args[0]))
+		if band == "" || band == "???" || !spot.IsValidBand(band) {
+			return whoSpotsMeUsage()
+		}
 	}
 	if p.whoSpotsMe == nil {
 		return "WHOSPOTSME is not available.\n"
 	}
 
 	now := time.Now().UTC()
-	counts := p.whoSpotsMe.CountryCountsByContinent(call, band, now)
+	windowMinutes := p.whoSpotsMeWindowMinutes()
+	db := p.whoSpotsMeDB()
+
+	if band != "" {
+		counts := p.whoSpotsMe.CountryCountsByContinent(call, band, now)
+		return p.renderWhoSpotsMeBand(db, band, counts, windowMinutes)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "WHOSPOTSME")
+	p.writeWhoSpotsMeWindow(&b, windowMinutes)
+	b.WriteString(":\n")
+	bandsRendered := 0
+	for _, band := range spot.SupportedBandNames() {
+		counts := p.whoSpotsMe.CountryCountsByContinent(call, band, now)
+		if !p.hasWhoSpotsMeCounts(db, counts) {
+			continue
+		}
+		if bandsRendered > 0 {
+			b.WriteByte('\n')
+		}
+		p.writeWhoSpotsMeBand(&b, db, band, counts)
+		bandsRendered++
+	}
+	if bandsRendered == 0 {
+		var empty strings.Builder
+		fmt.Fprintf(&empty, "WHOSPOTSME")
+		p.writeWhoSpotsMeWindow(&empty, windowMinutes)
+		empty.WriteString(": no data\n")
+		return empty.String()
+	}
+	return b.String()
+}
+
+func (p *Processor) whoSpotsMeWindowMinutes() int {
 	windowMinutes := p.whoSpotsMeHelp.WindowMinutes
 	if windowMinutes <= 0 {
 		if window := p.whoSpotsMe.Window(); window > 0 {
 			windowMinutes = int(window / time.Minute)
 		}
 	}
+	return windowMinutes
+}
 
-	var db *cty.CTYDatabase
+func (p *Processor) whoSpotsMeDB() *cty.CTYDatabase {
 	if p.ctyLookup != nil {
-		db = p.ctyLookup()
+		return p.ctyLookup()
 	}
+	return nil
+}
 
+func (p *Processor) renderWhoSpotsMeBand(db *cty.CTYDatabase, band string, counts map[string][]spot.WhoSpotsMeCountryCount, windowMinutes int) string {
+	if !p.hasWhoSpotsMeCounts(db, counts) {
+		var empty strings.Builder
+		fmt.Fprintf(&empty, "WHOSPOTSME %s", strings.ToUpper(band))
+		p.writeWhoSpotsMeWindow(&empty, windowMinutes)
+		empty.WriteString(": no data\n")
+		return empty.String()
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "WHOSPOTSME %s", strings.ToUpper(band))
-	if windowMinutes > 0 {
-		fmt.Fprintf(&b, " (last %dm)", windowMinutes)
-	}
+	p.writeWhoSpotsMeWindow(&b, windowMinutes)
 	b.WriteString(":\n")
+	p.writeWhoSpotsMeRows(&b, db, counts)
+	return b.String()
+}
+
+func (p *Processor) writeWhoSpotsMeBand(b *strings.Builder, db *cty.CTYDatabase, band string, counts map[string][]spot.WhoSpotsMeCountryCount) {
+	fmt.Fprintf(b, "%s:\n", strings.ToUpper(band))
+	p.writeWhoSpotsMeRows(b, db, counts)
+}
+
+func (p *Processor) writeWhoSpotsMeRows(b *strings.Builder, db *cty.CTYDatabase, counts map[string][]spot.WhoSpotsMeCountryCount) {
 	for _, continent := range filter.SupportedContinents {
+		display := p.formatWhoSpotsMeCountries(db, counts[continent])
+		if len(display) == 0 {
+			continue
+		}
 		b.WriteString("  ")
 		b.WriteString(continent)
 		b.WriteString(":  ")
-		display := p.formatWhoSpotsMeCountries(db, counts[continent])
-		if len(display) == 0 {
-			b.WriteString("(no data)")
-		} else {
-			for i, item := range display {
-				if i > 0 {
-					b.WriteByte(' ')
-				}
-				fmt.Fprintf(&b, "%s(%d)", item.label, item.count)
+		for i, item := range display {
+			if i > 0 {
+				b.WriteByte(' ')
 			}
+			fmt.Fprintf(b, "%s(%d)", item.label, item.count)
 		}
 		b.WriteByte('\n')
 	}
-	return b.String()
+}
+
+func (p *Processor) hasWhoSpotsMeCounts(db *cty.CTYDatabase, counts map[string][]spot.WhoSpotsMeCountryCount) bool {
+	for _, continent := range filter.SupportedContinents {
+		if len(p.formatWhoSpotsMeCountries(db, counts[continent])) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Processor) writeWhoSpotsMeWindow(b *strings.Builder, windowMinutes int) {
+	if windowMinutes > 0 {
+		fmt.Fprintf(b, " (last %dm)", windowMinutes)
+	}
 }
 
 type whoSpotsMeDisplayCountry struct {
@@ -1767,6 +1837,7 @@ func whoSpotsMeHelpNotes(cfg WhoSpotsMeHelpConfig) []string {
 	}
 	return []string{
 		windowNote,
+		"Omit band to show bands with rolling-window data.",
 		"Counts accepted observations before secondary broadcast dedupe.",
 		"Counts are totals, not unique spotters.",
 		"Shows up to 5 DXCC prefixes per continent for your logged-in callsign.",

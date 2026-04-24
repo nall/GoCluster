@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0079 | WHOSPOTSME Optional Band and Compact Output | Accepted | 2026-04-24 | commands, docs | ADR-0071 (operator command/output contract) | - | `docs/decisions/ADR-0079-whospotsme-optional-band-compact-output.md` |
 | ADR-0078 | Release Package Clean Source Gate | Accepted | 2026-04-24 | release packaging, build reproducibility | - | - | `docs/decisions/ADR-0078-release-package-clean-source-gate.md` |
 | ADR-0077 | Compile-Date Binary Version | Accepted | 2026-04-24 | build metadata, release packaging, operator console | - | - | `docs/decisions/ADR-0077-compile-date-binary-version.md` |
 | ADR-0076 | GitHub Release Package | Accepted | 2026-04-24 | release packaging, deployment, GitHub Actions | - | - | `docs/decisions/ADR-0076-github-release-package.md` |
@@ -87,4 +88,4 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0068 | EVENT Comment Tags and Filter Contract | Superseded | 2026-04-22 | spot, filter, telnet, archive, commands, docs | - | ADR-0070 | `docs/decisions/ADR-0068-event-comment-tags-and-filter-contract.md` |
 | ADR-0069 | Single Spot Taxonomy YAML | Accepted | 2026-04-22 | spot, config, filter, telnet, pskreporter, pathreliability | - | - | `docs/decisions/ADR-0069-single-spot-taxonomy-yaml.md` |
 | ADR-0070 | EVENT Filters Preserve Untagged Spots | Accepted | 2026-04-23 | filter, telnet, commands, docs | ADR-0068 | - | `docs/decisions/ADR-0070-event-filters-preserve-untagged-spots.md` |
-| ADR-0071 | WHOSPOTSME Rolling Country Summary | Accepted | 2026-04-23 | commands, config, main output pipeline, spot | - | - | `docs/decisions/ADR-0071-whospotsme-rolling-country-summary.md` |
+| ADR-0071 | WHOSPOTSME Rolling Country Summary | Accepted | 2026-04-23 | commands, config, main output pipeline, spot | - | ADR-0079 (operator command/output contract) | `docs/decisions/ADR-0071-whospotsme-rolling-country-summary.md` |

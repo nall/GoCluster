@@ -756,7 +756,7 @@ func TestHelpTopicGoDialect(t *testing.T) {
 	}
 
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "go")
-	if !strings.Contains(resp, "Usage: WHOSPOTSME <band>") {
+	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage, got %q", resp)
 	}
 }
@@ -790,7 +790,7 @@ func TestHelpTopicCCDialect(t *testing.T) {
 	}
 
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "cc")
-	if !strings.Contains(resp, "Usage: WHOSPOTSME <band>") {
+	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage in cc, got %q", resp)
 	}
 }
@@ -807,7 +807,7 @@ func TestHelpEntriesGoDialect(t *testing.T) {
 		{"SHOW DX", []string{"SHOW DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
-		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME <band>"}},
+		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DIAG", []string{"SET DIAG - Toggle diagnostic comments", "Usage: SET DIAG <ON|OFF>"}},
@@ -838,7 +838,7 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		{"SHOW/DX", []string{"SHOW/DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW/DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
-		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME <band>"}},
+		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DIAG", []string{"SET DIAG - Toggle diagnostic comments", "Usage: SET DIAG <ON|OFF>"}},
@@ -901,6 +901,11 @@ func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
 						{ADIF: 50, Count: 8},
 					},
 				},
+				"40m": {
+					"AS": []spot.WhoSpotsMeCountryCount{
+						{ADIF: 339, Count: 11},
+					},
+				},
 			},
 		},
 	}
@@ -916,8 +921,8 @@ func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
 	if !strings.Contains(resp, "WHOSPOTSME 20M (last 10m):") {
 		t.Fatalf("expected heading with window, got %q", resp)
 	}
-	if !strings.Contains(resp, "  AF:  (no data)\n") {
-		t.Fatalf("expected no-data row, got %q", resp)
+	if strings.Contains(resp, "(no data)") || strings.Contains(resp, "  AF:") {
+		t.Fatalf("expected empty continents to be omitted, got %q", resp)
 	}
 	if !strings.Contains(resp, "  EU:  ADIF230(42) ADIF223(35) ADIF227(22) I(22) ADIF281(18)\n") {
 		t.Fatalf("expected capped EU row, got %q", resp)
@@ -925,24 +930,60 @@ func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
 	if !strings.Contains(resp, "  NA:  K(57) K1(21) ADIF50(8)\n") {
 		t.Fatalf("expected NA row, got %q", resp)
 	}
+
+	resp = p.ProcessCommandForClient("WHOSPOTSME", "W1AW", "", nil, "go")
+	if !strings.Contains(resp, "WHOSPOTSME (last 10m):\n") {
+		t.Fatalf("expected all-band heading with window, got %q", resp)
+	}
+	forty := strings.Index(resp, "40M:\n")
+	twenty := strings.Index(resp, "20M:\n")
+	if forty < 0 || twenty < 0 || forty > twenty {
+		t.Fatalf("expected populated bands in canonical order, got %q", resp)
+	}
+	if strings.Contains(resp, "30M:\n") || strings.Contains(resp, "  AF:") || strings.Contains(resp, "(no data)") {
+		t.Fatalf("expected empty bands and continents to be omitted, got %q", resp)
+	}
 }
 
 func TestWhoSpotsMeCommandUsageAndAvailability(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
 
 	resp := p.ProcessCommandForClient("WHOSPOTSME", "W1AW", "", nil, "go")
-	if resp != "Usage: WHOSPOTSME <band>\n" {
-		t.Fatalf("expected usage for missing band, got %q", resp)
+	if resp != "WHOSPOTSME is not available.\n" {
+		t.Fatalf("expected unavailable response without store, got %q", resp)
 	}
 
 	resp = p.ProcessCommandForClient("WHOSPOTSME BADBAND", "W1AW", "", nil, "go")
-	if resp != "Usage: WHOSPOTSME <band>\n" {
+	if resp != "Usage: WHOSPOTSME [band]\n" {
 		t.Fatalf("expected usage for invalid band, got %q", resp)
+	}
+
+	resp = p.ProcessCommandForClient("WHOSPOTSME 20M EXTRA", "W1AW", "", nil, "go")
+	if resp != "Usage: WHOSPOTSME [band]\n" {
+		t.Fatalf("expected usage for too many arguments, got %q", resp)
 	}
 
 	resp = p.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW", "", nil, "go")
 	if resp != "WHOSPOTSME is not available.\n" {
 		t.Fatalf("expected unavailable response without store, got %q", resp)
+	}
+
+	empty := NewProcessor(nil, nil, nil, nil, nil, nil,
+		WithWhoSpotsMe(&fakeWhoSpotsMeQuerier{window: 10 * time.Minute}),
+		WithWhoSpotsMeHelp(WhoSpotsMeHelpConfig{Configured: true, WindowMinutes: 10}),
+	)
+	resp = empty.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW", "", nil, "go")
+	if resp != "WHOSPOTSME 20M (last 10m): no data\n" {
+		t.Fatalf("expected selected-band no-data response, got %q", resp)
+	}
+	resp = empty.ProcessCommandForClient("WHOSPOTSME", "W1AW", "", nil, "go")
+	if resp != "WHOSPOTSME (last 10m): no data\n" {
+		t.Fatalf("expected all-band no-data response, got %q", resp)
+	}
+
+	resp = empty.ProcessCommandForClient("WHOSPOTSME", "", "", nil, "go")
+	if resp != noLoggedUserMsg {
+		t.Fatalf("expected no logged user response, got %q", resp)
 	}
 }
 
