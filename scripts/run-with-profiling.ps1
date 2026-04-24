@@ -12,6 +12,8 @@ $intervalSeconds = 900     # time between captures
 $logsDir         = Join-Path $repoRoot "logs"
 $blockProfileRate = "10ms" # block profile sampling threshold
 $mutexProfileFraction = "10" # 1/N mutex events sampled
+$goMemLimit      = "750MiB" # soft runtime memory target; tune lower only after GC p99 review
+$goGC            = "50"     # more frequent GC to keep heap smaller
 
 # Ensure logs directory exists
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
@@ -25,6 +27,8 @@ $envVars = @{
     DXC_BLOCK_PROFILE_RATE = $blockProfileRate
     DXC_MUTEX_PROFILE_FRACTION = $mutexProfileFraction
     DXC_PSKR_MQTT_DEBUG = "false"
+    GOMEMLIMIT = $goMemLimit
+    GOGC = $goGC
 }
 
 # Start the cluster in a new window so the console UI stays visible.
@@ -38,7 +42,7 @@ foreach ($k in $envVars.Keys) { $startInfo.EnvironmentVariables[$k] = $envVars[$
 $proc = [System.Diagnostics.Process]::Start($startInfo)
 if (-not $proc) { Write-Error "Failed to start gocluster"; exit 1 }
 
-Write-Host "gocluster started (PID=$($proc.Id)); pprof at http://$pprofAddr"
+Write-Host "gocluster started (PID=$($proc.Id)); pprof at http://$pprofAddr; GOMEMLIMIT=$goMemLimit; GOGC=$goGC"
 
 # Wait for pprof to come up
 $pprofUrl = "http://$pprofAddr/debug/pprof/"
