@@ -58,11 +58,13 @@ from Go VCS metadata rather than exposing the module pseudo-version directly.
   from `--version` when reporting deployment state.
 - Dirty builds are visibly marked in the version string and still expose the
   separate Go VCS modified flag when available.
+- Normal release packages reject dirty source before build; a `+dirty` release
+  package version indicates an explicit local `-AllowDirty` test package.
 
 ## Links
 
 - Related issues/PRs/commits:
 - Related tests: `go test .`
-- Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`, `scripts/consolidate-and-build-pgo.ps1`
+- Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`, `scripts/consolidate-and-build-pgo.ps1`, `docs/decisions/ADR-0078-release-package-clean-source-gate.md`
 - Related TSRs:
 - Supersedes / superseded by:

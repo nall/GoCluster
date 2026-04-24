@@ -51,6 +51,12 @@ The zip-root `README.md` is rendered during packaging from the staged
 This prevents the release instructions from drifting away from the packaged
 YAML.
 
+Release packages are built from committed, module-tidy source by default. The
+packaging script refuses a dirty worktree, runs `go mod tidy -diff` without
+modifying files, and always compiles a fresh Windows amd64 binary before
+creating the zip. `-AllowDirty` is reserved for local test packages and visibly
+marks the resulting binary version with `+dirty`.
+
 ## Alternatives considered
 
 1. Zip the whole repo or whole `data` directory.
@@ -63,6 +69,8 @@ YAML.
 
 - Operators can deploy by extracting one zip and running `gocluster.exe`.
 - Release contents are reproducible from committed inputs.
+- The default script path fails before staging if local edits or stale module
+  metadata would make the artifact differ from committed source.
 - Runtime state and secrets are excluded by construction.
 - Source developers keep the current repo layout and build workflow.
 - Normal GitHub commits and release packages use the same public config policy,
@@ -98,7 +106,7 @@ YAML.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
+- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
 - Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`
 - Related TSRs:
 - Supersedes / superseded by:

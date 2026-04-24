@@ -1,6 +1,7 @@
 param(
     [string]$OutputDir = "dist",
-    [string]$PackageName = "gocluster-windows-amd64"
+    [string]$PackageName = "gocluster-windows-amd64",
+    [switch]$AllowDirty
 )
 
 Set-StrictMode -Version Latest
@@ -12,6 +13,27 @@ function Resolve-RepoRoot {
         throw "Unable to resolve repository root with git."
     }
     return $root.Trim()
+}
+
+function Assert-CleanWorktree {
+    param(
+        [string]$RepoRoot,
+        [switch]$AllowDirty
+    )
+
+    $status = @(& git -C $RepoRoot status --porcelain)
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status --porcelain failed."
+    }
+
+    if ($status.Count -gt 0 -and -not $AllowDirty) {
+        throw @"
+Refusing to build a release package from a dirty worktree.
+Commit or stash local changes before packaging, or rerun with -AllowDirty for a local test package.
+"@
+    }
+
+    return $status
 }
 
 function Copy-TrackedPayload {
@@ -124,6 +146,10 @@ function Invoke-GoRunHost {
             $env:GOARCH = $oldGOARCH
         }
     }
+}
+
+function Assert-GoModulesTidy {
+    Invoke-GoRunHost -Arguments @("mod", "tidy", "-diff")
 }
 
 function Render-ReleaseReadme {
@@ -252,13 +278,12 @@ function Assert-PublicReleaseConfig {
 $repoRoot = Resolve-RepoRoot
 Push-Location $repoRoot
 try {
+    $gitStatus = @(Assert-CleanWorktree -RepoRoot $repoRoot -AllowDirty:$AllowDirty)
+    Assert-GoModulesTidy
+
     $commit = (& git rev-parse --short=12 HEAD).Trim()
     $dirtySuffix = ""
-    $gitStatus = & git status --porcelain
-    if ($LASTEXITCODE -ne 0) {
-        throw "git status --porcelain failed."
-    }
-    if ($gitStatus) {
+    if ($gitStatus.Count -gt 0) {
         $dirtySuffix = "+dirty"
     }
     $buildUtc = (Get-Date).ToUniversalTime()
