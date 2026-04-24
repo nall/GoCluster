@@ -166,9 +166,9 @@ The propagation-report tool uses the same directory with `-config-dir`; the olde
 ## Release Package
 
 GitHub Releases publish a Windows amd64 zip for simple deployments. Download
-`gocluster-windows-amd64.zip`, extract it to a directory, copy the packaged
-public example `data/config` to your private config directory, edit the YAML,
-then run:
+`gocluster-windows-amd64.zip`, extract it, open the `ready_to_run` directory,
+copy the packaged public example `data/config` to your private config
+directory, edit the YAML, then run:
 
 ```pwsh
 $env:DXC_CONFIG_PATH = "data/config.local"

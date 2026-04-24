@@ -18,7 +18,7 @@ point it at the whole private config directory, not at one YAML file.
 
 ## Launch
 
-From PowerShell in the extracted package directory:
+From PowerShell in the extracted `ready_to_run` directory:
 
 ```pwsh
 $env:DXC_CONFIG_PATH = "data/config.local"

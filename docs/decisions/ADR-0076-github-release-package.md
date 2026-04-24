@@ -23,8 +23,9 @@ cloning, editing, and building the source tree directly.
 
 ## Decision
 
-Publish a Windows amd64 GitHub Release zip containing a top-level
-`gocluster-windows-amd64/` directory with:
+Publish a Windows amd64 GitHub Release asset named
+`gocluster-windows-amd64.zip`. The zip contains a top-level `ready_to_run/`
+directory with:
 
 1. `gocluster.exe` built from the repo root.
 2. A curated `data/` tree copied from source-controlled runtime inputs,
@@ -68,6 +69,8 @@ marks the resulting binary version with `+dirty`.
 ### Benefits
 
 - Operators can deploy by extracting one zip and running `gocluster.exe`.
+- The download filename remains platform-specific, while the extracted
+  runnable directory has an operator-oriented name.
 - Release contents are reproducible from committed inputs.
 - The default script path fails before staging if local edits or stale module
   metadata would make the artifact differ from committed source.
@@ -92,6 +95,8 @@ marks the resulting binary version with `+dirty`.
 ### Operational impact
 
 - Binary and packaged config should be deployed and rolled back together.
+- Operators should run the executable from the extracted `ready_to_run`
+  directory.
 - The release package does not include learned runtime Pebble data; stores and
   downloads are created or refreshed by runtime behavior according to YAML.
 - Operators should copy the packaged public config to a private config
@@ -106,7 +111,7 @@ marks the resulting binary version with `+dirty`.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
+- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, zip payload inspection for `ready_to_run/`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
 - Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`
 - Related TSRs:
 - Supersedes / superseded by:

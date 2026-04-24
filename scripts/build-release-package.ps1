@@ -1,6 +1,7 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PackageName = "gocluster-windows-amd64",
+    [string]$PackageDirectoryName = "ready_to_run",
     [switch]$AllowDirty
 )
 
@@ -291,7 +292,7 @@ try {
     $buildTime = $buildUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     $outputRoot = Join-Path $repoRoot $OutputDir
-    $stageRoot = Join-Path $outputRoot $PackageName
+    $stageRoot = Join-Path $outputRoot $PackageDirectoryName
     $zipPath = Join-Path $outputRoot "$PackageName.zip"
 
     if (Test-Path -LiteralPath $stageRoot) {
@@ -328,7 +329,7 @@ try {
 
     Push-Location $outputRoot
     try {
-        Compress-Archive -Path $PackageName -DestinationPath $zipPath -Force
+        Compress-Archive -Path $PackageDirectoryName -DestinationPath $zipPath -Force
     }
     finally {
         Pop-Location
