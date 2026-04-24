@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"dxcluster/internal/cluster"
 )
@@ -54,9 +55,6 @@ func resolveBinaryVersion() binaryVersion {
 	if info.goVersion == "" {
 		info.goVersion = runtime.Version()
 	}
-	if mainVer := strings.TrimSpace(buildInfo.Main.Version); mainVer != "" && mainVer != "(devel)" && info.version == "dev" {
-		info.version = mainVer
-	}
 
 	vcsRevision := ""
 	vcsTime := ""
@@ -77,13 +75,55 @@ func resolveBinaryVersion() binaryVersion {
 	if info.buildTime == "unknown" && vcsTime != "" {
 		info.buildTime = vcsTime
 	}
-	if info.version == "dev" && vcsRevision != "" {
-		info.version = "dev-" + shortRevision(vcsRevision)
+	if info.version == "dev" {
+		switch generated := compileDateVersion(info.buildTime, vcsRevision, vcsModified); {
+		case generated != "":
+			info.version = generated
+		case vcsRevision != "":
+			info.version = "dev-" + shortRevision(vcsRevision)
+		default:
+			if mainVer := strings.TrimSpace(buildInfo.Main.Version); mainVer != "" && mainVer != "(devel)" {
+				info.version = mainVer
+			}
+		}
 	}
 	if vcsModified != "" {
 		info.vcsModified = vcsModified
 	}
 	return info
+}
+
+func compileDateVersion(buildTime, revision, vcsModified string) string {
+	stamp, ok := compileDateStamp(buildTime)
+	if !ok {
+		return ""
+	}
+	commit := shortRevision(strings.TrimSpace(revision))
+	if commit == "" {
+		commit = "unknown"
+	}
+	if isVCSModified(vcsModified) {
+		commit += "+dirty"
+	}
+	return stamp + "-" + commit
+}
+
+func compileDateStamp(buildTime string) (string, bool) {
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(buildTime))
+	if err != nil {
+		return "", false
+	}
+	utc := parsed.UTC()
+	return fmt.Sprintf("v%02d.%02d.%02d", utc.Year()%100, utc.Day(), int(utc.Month())), true
+}
+
+func isVCSModified(vcsModified string) bool {
+	switch strings.ToLower(strings.TrimSpace(vcsModified)) {
+	case "true", "1", "yes", "dirty":
+		return true
+	default:
+		return false
+	}
 }
 
 func shortRevision(revision string) string {

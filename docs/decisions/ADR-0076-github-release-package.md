@@ -98,7 +98,7 @@ YAML.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -Version test-release -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
+- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
 - Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`
 - Related TSRs:
 - Supersedes / superseded by:

@@ -1,5 +1,4 @@
 param(
-    [string]$Version = "",
     [string]$OutputDir = "dist",
     [string]$PackageName = "gocluster-windows-amd64"
 )
@@ -254,10 +253,17 @@ $repoRoot = Resolve-RepoRoot
 Push-Location $repoRoot
 try {
     $commit = (& git rev-parse --short=12 HEAD).Trim()
-    if ([string]::IsNullOrWhiteSpace($Version)) {
-        $Version = "dev-$commit"
+    $dirtySuffix = ""
+    $gitStatus = & git status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "git status --porcelain failed."
     }
-    $buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    if ($gitStatus) {
+        $dirtySuffix = "+dirty"
+    }
+    $buildUtc = (Get-Date).ToUniversalTime()
+    $Version = "v$($buildUtc.ToString("yy.dd.MM"))-$commit$dirtySuffix"
+    $buildTime = $buildUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     $outputRoot = Join-Path $repoRoot $OutputDir
     $stageRoot = Join-Path $outputRoot $PackageName

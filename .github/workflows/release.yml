@@ -57,7 +57,7 @@ jobs:
 
       - name: Build release package
         shell: pwsh
-        run: ./scripts/build-release-package.ps1 -Version "${{ steps.release.outputs.tag }}" -OutputDir dist
+        run: ./scripts/build-release-package.ps1 -OutputDir dist
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

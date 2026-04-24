@@ -58,9 +58,15 @@ function Get-GitValue {
     return $Default
 }
 
-$version = Get-GitValue -Probe { git describe --tags --always --dirty } -Default "dev"
 $commit = Get-GitValue -Probe { git rev-parse --short=12 HEAD } -Default "unknown"
-$buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$dirtySuffix = ""
+$gitStatus = & git status --porcelain
+if ($LASTEXITCODE -eq 0 -and $gitStatus) {
+    $dirtySuffix = "+dirty"
+}
+$buildUtc = (Get-Date).ToUniversalTime()
+$version = "v$($buildUtc.ToString("yy.dd.MM"))-$commit$dirtySuffix"
+$buildTime = $buildUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $ldflags = "-X main.Version=$version -X main.Commit=$commit -X main.BuildTime=$buildTime"
 
 # Build with PGO

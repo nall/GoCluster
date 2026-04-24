@@ -188,6 +188,10 @@ developer/process documentation.
 Developers and advanced users can keep using the source checkout normally:
 `go build .` remains the live binary build path from the repo root, and
 `DXC_CONFIG_PATH` can point the binary at an alternate config directory.
+Scripted builds stamp the console and `--version` binary identity as
+`vYY.DD.MM-<12-char-commit>[+dirty]` using the UTC compile date. Unflagged
+`go build .` binaries use the same display shape from Go VCS metadata when
+linker-stamped compile time is unavailable.
 
 ## Dedupe Policies
 
