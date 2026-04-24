@@ -1,0 +1,106 @@
+# Solar/geomagnetic override configuration
+#
+# Purpose: allow a single path glyph to be overridden by an R (radio blackout) or
+# G (geomagnetic storm) symbol when the event is strong AND path-relevant.
+#
+# Precedence per band (single glyph slot):
+#   insufficient -> R -> G -> likelihood
+# R only applies when the band is eligible for the active R level; otherwise G can apply.
+#
+# Overrides are eligible only when the path is sunlit (R) or high-latitude (G).
+# The gating is deterministic and stateful to avoid UI flapping.
+
+# Master switch. When false, overrides are disabled and normal path glyphs apply.
+enabled: true
+
+# Fetch cadence for SWPC feeds (GOES X-ray + observed Kp). Uses conditional GET.
+fetch_interval_seconds: 60
+request_timeout_seconds: 10
+
+# Solar position cache. Sun vector is recomputed at this cadence.
+sun:
+  # Seconds to cache the sun vector (ECEF). 60s is sufficient for UI gating.
+  cache_seconds: 60
+  # Twilight degrees. 0 = strict horizon; 6 = civil twilight (more conservative R gating).
+  twilight_degrees: 0
+  # Daylight hysteresis thresholds (fraction of arc that is sunlit).
+  daylight_enter: 0.55
+  daylight_exit: 0.45
+  # When the path plane coincides with the terminator, hold the previous gate.
+  near_terminator_hold: true
+
+# Numerical tolerances for daylight fraction math (radians, norms).
+daylight:
+  cross_norm_tiny: 1e-12
+  d_small_rad: 1e-8
+  d_antipodal_rad: 3.141592643589793
+  eps_base_rad: 1e-6
+  eps_scale: 1e-6
+
+# High-latitude gating parameters (dipole approximation).
+high_lat:
+  # Use Kp-dependent auroral-edge proxy (66 - 2*Kp clamped to [48,66]).
+  use_kp_boundary: true
+  fixed_l_edge_deg: 55
+  l_edge_min_deg: 48
+  l_edge_max_deg: 66
+  l_edge_slope_deg_per_kp: 2
+  # Hysteresis relative to L_edge(Kp).
+  enter_max_abs_offset_deg: 3
+  exit_max_abs_offset_deg: 1
+  enter_frac: 0.15
+  exit_frac: 0.10
+  # Dipole projection tiny threshold.
+  m_tiny: 1e-12
+
+# Per-path gate state cache. Bounds memory and adds hysteresis continuity.
+gate_cache:
+  max_entries: 100000
+  ttl_seconds: 10800
+
+# GOES X-ray feed (primary, 1-minute). Parser uses corrected 0.1–0.8 nm flux (field "flux").
+goes:
+  url: "https://services.swpc.noaa.gov/json/goes/primary/xrays-6-hour.json"
+  energy_band: "0.1-0.8nm"
+  max_age_seconds: 600
+
+# Observed Kp feed (3-hour cadence). Used for G-level selection and L_edge(Kp).
+kp:
+  url: "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+  max_age_seconds: 21600
+
+# Band normalization: canonical tokens only.
+#   {160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m}
+# Unknown/empty bands never receive overrides.
+
+# R levels (ascending thresholds). Hold-down is per-level and restart-safe:
+# on startup, the latest 6-hour samples are scanned over the max hold window to seed the peak.
+r_levels:
+  - name: R3
+    min_flux_wm2: 1e-4
+    hold_minutes: 60
+    bands: [80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m]
+  - name: R4
+    min_flux_wm2: 1e-3
+    hold_minutes: 90
+    bands: [80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m]
+
+# G levels (ascending thresholds). Each level controls which bands show a G override.
+g_levels:
+  - name: G2
+    min_kp: 6
+    bands: [20m, 17m, 15m, 12m, 10m]
+  - name: G3
+    min_kp: 7
+    bands: [40m, 30m, 20m, 17m, 15m, 12m, 10m]
+  - name: G4
+    min_kp: 8
+    bands: [160m, 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m]
+
+# Override glyphs.
+glyphs:
+  r: "R"
+  g: "G"
+
+# Path keying. When true, include band (normalized token) in the hysteresis cache key.
+path_key_include_band: true

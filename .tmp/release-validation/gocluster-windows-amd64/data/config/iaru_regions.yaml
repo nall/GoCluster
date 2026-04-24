@@ -1,0 +1,48 @@
+# DXCC/ADIF to IARU region mapping used by the final region-aware mode policy.
+# The mapping is intentionally explicit and reviewable:
+#   - continent defaults cover the common case,
+#   - ADIF overrides handle entities whose CTY continent does not match their
+#     IARU operating region or whose Asia-region assignment needs tightening.
+#
+# Region tokens accept R1/R2/R3.
+defaults_by_continent:
+  AF: R1
+  AS: R3
+  EU: R1
+  NA: R2
+  OC: R3
+  SA: R2
+
+adif_overrides:
+  10: R3   # Amsterdam & St. Paul Is.
+  14: R1   # Armenia
+  15: R1   # Asiatic Russia
+  18: R1   # Azerbaijan
+  33: R3   # Chagos Islands
+  75: R1   # Georgia
+  111: R3  # Heard Island
+  130: R1  # Kazakhstan
+  131: R3  # Kerguelen Islands
+  135: R1  # Kyrgyzstan
+  207: R3  # Rodriguez Island
+  215: R1  # Cyprus
+  262: R1  # Tajikistan
+  280: R1  # Turkmenistan
+  283: R1  # UK Base Areas on Cyprus
+  292: R1  # Uzbekistan
+  304: R1  # Bahrain
+  330: R1  # Iran
+  333: R1  # Iraq
+  336: R1  # Israel
+  342: R1  # Jordan
+  348: R1  # Kuwait
+  354: R1  # Lebanon
+  363: R1  # Mongolia
+  370: R1  # Oman
+  376: R1  # Qatar
+  378: R1  # Saudi Arabia
+  384: R1  # Syria
+  390: R1  # Asiatic Turkey
+  391: R1  # United Arab Emirates
+  492: R1  # Yemen
+  510: R1  # Palestine

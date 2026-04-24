@@ -1,0 +1,53 @@
+# Core app identity and local console UI settings.
+server:
+  name: "Go Cluster beta\r\n"
+  node_id: "N0CALL-1"
+
+stats:
+  display_interval_seconds: 60  # How often to print stats to stdout
+
+# Local console UI (applies only to the process console, not telnet clients)
+ui:
+  mode: "tview-v2"    # ansi | tview | tview-v2 | headless
+  refresh_ms: 300     # ANSI redraw cadence; 0 disables redraws
+  color: true         # Enable simple ANSI colors for marked-up lines
+  clear_screen: true  # Clear the screen each frame (set false to append)
+  pane_lines:
+    stats: 10         # Lines retained in the stats block
+    calls: 9          # Corrected calls history
+    unlicensed: 9     # Unlicensed drops history
+    harmonics: 9      # Harmonic drops history
+    system: 9         # System log history
+  v2:
+    pages: [overview, ingest, pipeline, events]  # Enabled pages + order
+    target_fps: 15                   # Max UI refresh rate
+    event_buffer:
+      max_events: 1000               # Hard cap for retained UI event rows
+      max_bytes_mb: 1                # Hard cap for retained UI event text
+      max_message_bytes: 4096        # Truncate a single event message above this size
+      evict_on_byte_limit: true      # Evict oldest events when byte cap is reached
+      log_drops: true                # Emit log lines when event rows are dropped/truncated
+    debug_buffer:
+      max_events: 5000               # Hard cap for retained UI debug rows
+      max_bytes_mb: 2                # Hard cap for retained UI debug text
+      max_message_bytes: 4096        # Truncate a single debug message above this size
+      evict_on_byte_limit: true      # Evict oldest debug rows when byte cap is reached
+      log_drops: false               # Keep debug truncation/drop chatter out of the system log
+    enable_mouse: false              # Mouse support (terminal dependent)
+    keybindings:
+      use_alternatives: true         # Enable o/i/p/e navigation
+
+# Optional daily system log files (local time, one file per day).
+logging:
+  enabled: true
+  dir: "data/logs/system"
+  retention_days: 7   # Keep daily logs for this many days
+  drop_dedupe_window_seconds: 120  # 0 disables console dropped-event dedupe; dropped_calls may override file dedupe
+  dropped_calls:
+    enabled: true
+    dir: "data/logs/dropped_calls"
+    retention_days: 7
+    dedupe_window_seconds: 120
+    bad_de_dx: true
+    no_license: true
+    harmonics: true

@@ -1,0 +1,84 @@
+# Telnet reputation gate (passwordless flood defense).
+# Lookup order: IPv4 in-memory -> Pebble (IPv6) -> Cymru DNS -> IPinfo API.
+# Drops are silent to clients; console_drop_display controls local visibility.
+reputation:
+  enabled: true
+
+  # ===== Primary data (local Pebble store) =====
+  # The CSV is imported into a Pebble DB. IPv4 ranges are loaded into memory;
+  # IPv6 stays on disk and is served via Pebble + lookup cache.
+  ipinfo_pebble_path: "data/ipinfo/pebble"   # root dir (CURRENT_DB points at db-* subdir)
+  ipinfo_pebble_cache_mb: 64                # Pebble block cache (IPv6 lookups)
+  ipinfo_pebble_load_ipv4: true             # keep IPv4 ranges in RAM for microsecond lookups
+  ipinfo_pebble_cleanup: true               # delete older db-* directories after import
+  ipinfo_pebble_compact: true               # compact after import for best read p99
+                                           # compaction is CPU/disk heavy; disable if import window is tight
+
+  # ===== Download + import =====
+  # When enabled, the scheduler downloads the CSV, imports to Pebble, updates CURRENT_DB,
+  # then optionally deletes the CSV (and gzip if desired). When disabled, you must
+  # supply an existing Pebble DB at ipinfo_pebble_path.
+  ipinfo_download_enabled: false
+  ipinfo_snapshot_path: "data/ipinfo/location.csv"   # temp extract location used for import
+  ipinfo_download_path: "data/ipinfo/ipinfo_lite.csv.gz"
+  ipinfo_download_url: "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=$TOKEN"
+  ipinfo_download_token: "REPLACE_WITH_IPINFO_TOKEN"
+  ipinfo_refresh_utc: "03:00"                        # daily UTC time (HH:MM)
+  ipinfo_download_timeout_ms: 15000                  # download deadline
+  ipinfo_import_timeout_ms: 600000                   # extract + import + optional compaction
+  ipinfo_delete_csv_after_import: true               # keep CSV only if you need to debug
+  ipinfo_keep_gzip: true                             # keep .gz for reuse or auditing
+  snapshot_max_age_seconds: 93600                    # stale lookups fall back to Cymru/API
+
+  # ===== Fallback sources =====
+  # Team Cymru DNS (fallback after Pebble or stale cache). Keep timeout tight.
+  fallback_team_cymru: true
+  cymru_lookup_timeout_ms: 250
+  cymru_cache_ttl_seconds: 86400
+  cymru_negative_ttl_seconds: 300
+  cymru_workers: 2
+
+  # IPinfo live API (last resort). Only ASN + country are used; adds latency.
+  ipinfo_api_enabled: false
+  ipinfo_api_token: "" # supply your token; blank disables API fallback
+  ipinfo_api_base_url: "https://ipinfo.io"
+  ipinfo_api_timeout_ms: 250
+
+  # ===== Gate policy =====
+  # Probation + ramp limits
+  initial_wait_seconds: 60                  # delay before first accepted spot for new/flagged calls
+  ramp_window_seconds: 90                   # window for per-band ramp and count reset
+  per_band_start: 1                         # start at N/band per window
+  per_band_cap: 3                           # max N/band after ramp
+  total_cap_start: 5                        # total spots per window during probation
+  total_cap_post_ramp: 10                   # total spots per window after ramp completes
+  total_cap_ramp_delay_seconds: 30          # delay after per-band ramp before raising total cap
+  # Penalties and reset triggers
+  country_mismatch_extra_wait_seconds: 60   # adds delay before ramp increases (CTY vs IP country)
+  disagreement_penalty_seconds: 60          # adds delay when Cymru vs IPinfo disagree
+  unknown_penalty_seconds: 60               # adds delay when no source resolves the IP
+  disagreement_reset_on_new: true           # treat disagreement as "new" (probation reset)
+  reset_on_new_asn: true                    # new ASN resets probation
+  country_flip_scope: "country"             # treat country flips as new ("continent" to relax)
+
+  # ===== State bounds =====
+  max_asn_history: 5                # per-call ASN history length
+  max_country_history: 5            # per-call country/continent history length
+  state_ttl_seconds: 7200           # idle time before a call is treated as new
+  state_max_entries: 50000          # hard cap; eviction resets calls to probation
+  prefix_ttl_seconds: 3600          # idle time before prefix buckets reset
+  prefix_max_entries: 50000         # hard cap on tracked prefixes
+  lookup_cache_ttl_seconds: 86400   # cache ASN/country lookups (applies to all sources)
+  lookup_cache_max_entries: 50000   # hard cap on lookup cache entries
+
+  # ===== Prefix token buckets =====
+  # Limits per /24 (IPv4) and /48 (IPv6) before per-call limits are checked.
+  ipv4_bucket_size: 64
+  ipv4_bucket_refill_per_sec: 8
+  ipv6_bucket_size: 32
+  ipv6_bucket_refill_per_sec: 4
+
+  # ===== Observability =====
+  console_drop_display: true         # show dropped spots in local console UI
+  drop_log_sample_rate: 1.0          # 1.0 = log every drop; lower to sample
+  reputation_dir: "data/reputation"  # ASN/country history per callsign
