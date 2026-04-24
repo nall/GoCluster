@@ -245,22 +245,22 @@ func (p *outputPipeline) processSpotBody(s *spot.Spot, temporalRelease *runtimeT
 	if !ok {
 		return
 	}
-	if !p.applyResolverStage(ctx, temporalRelease) {
+	if !p.applyResolverStage(&ctx, temporalRelease) {
 		return
 	}
-	if !p.applyPostResolverAdjustments(ctx) {
+	if !p.applyPostResolverAdjustments(&ctx) {
 		return
 	}
-	if !p.applyFTConfidenceStage(ctx, time.Now().UTC()) {
+	if !p.applyFTConfidenceStage(&ctx, time.Now().UTC()) {
 		return
 	}
-	if !p.finalizeSpotForMetrics(ctx) {
+	if !p.finalizeSpotForMetrics(&ctx) {
 		return
 	}
-	if !p.prepareFanoutSpot(ctx) {
+	if !p.prepareFanoutSpot(&ctx) {
 		return
 	}
-	p.deliverSpot(ctx)
+	p.deliverSpot(&ctx)
 }
 
 func (p *outputPipeline) stopTemporalTimer() {

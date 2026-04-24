@@ -413,6 +413,39 @@ func TestCustomSCPStoreRecordObservationOverflowRetainsNewestDeterministically(t
 	assertCustomSCPInternerInvariant(t, store)
 }
 
+func TestCustomSCPStoreHasSFloorSupportFamilyKeyPairMatchesSlice(t *testing.T) {
+	opts := CustomSCPOptions{
+		Path:                   filepath.Join(t.TempDir(), "scp"),
+		HorizonDays:            30,
+		StaticHorizonDays:      30,
+		MaxSpottersPerKey:      4,
+		CoreMinScore:           1,
+		CoreMinH3Cells:         1,
+		SFloorMinScore:         1,
+		SFloorExactMinH3Cells:  1,
+		SFloorFamilyMinH3Cells: 1,
+	}
+	store, err := OpenCustomSCPStore(opts)
+	if err != nil {
+		t.Fatalf("open custom store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+	store.recordObservation("W1AW", "40m", "CW", "N0AAA", 101, 0, false, now)
+	voteKey, baseKey, ok := CorrectionFamilyKeyPair("W1AW/5")
+	if !ok {
+		t.Fatal("expected slash family key pair")
+	}
+	viaSlice := store.HasSFloorSupportFamily([]string{voteKey, baseKey}, "40m", "CW", 1, now)
+	viaPair := store.HasSFloorSupportFamilyKeyPair(voteKey, baseKey, "40m", "CW", 1, now)
+	if viaPair != viaSlice || !viaPair {
+		t.Fatalf("expected pair helper to match slice helper and find support, viaPair=%v viaSlice=%v", viaPair, viaSlice)
+	}
+}
+
 func TestCustomSCPSpotterSliceUpsertMaintainsSortedNewestWins(t *testing.T) {
 	entry := &customSCPEntry{spotters: makeCustomSCPSpotters(4)}
 

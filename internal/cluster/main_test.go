@@ -1016,7 +1016,7 @@ func TestLocalSelfSpotResolverStageForcesVAndAdmitsCustomSCP(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected self spot context")
 	}
-	if !pipeline.applyResolverStage(ctx, nil) {
+	if !pipeline.applyResolverStage(&ctx, nil) {
 		t.Fatalf("expected self spot to pass resolver stage")
 	}
 	if s.Confidence != "V" {

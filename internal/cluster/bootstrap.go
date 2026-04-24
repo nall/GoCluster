@@ -2414,12 +2414,15 @@ func recordRecentBandObservation(s *spot.Spot, store spot.RecentSupportStore, cu
 	if seenAt.IsZero() {
 		seenAt = time.Now().UTC()
 	}
-	keys := spot.CorrectionFamilyKeys(call)
-	if len(keys) == 0 {
-		keys = []string{call}
+	key, baseKey, ok := spot.CorrectionFamilyKeyPair(call)
+	if !ok {
+		key = call
 	}
-	for _, key := range keys {
+	if key != "" {
 		legacyStore.Record(key, band, mode, spotter, seenAt)
+	}
+	if baseKey != "" {
+		legacyStore.Record(baseKey, band, mode, spotter, seenAt)
 	}
 }
 
@@ -2509,13 +2512,17 @@ func applySupportFloor(
 			now,
 		)
 		if !recentHit {
-			recentHit = customSCPStore.HasSFloorSupportFamily(
-				spot.CorrectionFamilyKeys(call),
-				band,
-				mode,
-				corrCfg.CustomSCP.SFloorMinUniqueSpottersFamily,
-				now,
-			)
+			key, baseKey, ok := spot.CorrectionFamilyKeyPair(call)
+			if ok {
+				recentHit = customSCPStore.HasSFloorSupportFamilyKeyPair(
+					key,
+					baseKey,
+					band,
+					mode,
+					corrCfg.CustomSCP.SFloorMinUniqueSpottersFamily,
+					now,
+				)
+			}
 		}
 	} else if recentBandStore != nil && corrCfg.RecentBandBonusEnabled {
 		band := s.BandNorm

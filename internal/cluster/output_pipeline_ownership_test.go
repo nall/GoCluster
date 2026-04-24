@@ -51,17 +51,17 @@ func TestOutputPipelineEmitSpotReusesFinalOwnedSnapshot(t *testing.T) {
 	if !ok {
 		t.Fatal("expected spot context")
 	}
-	if !pipeline.finalizeSpotForMetrics(ctx) {
+	if !pipeline.finalizeSpotForMetrics(&ctx) {
 		t.Fatal("expected metrics stage to pass")
 	}
-	if !pipeline.prepareFanoutSpot(ctx) {
+	if !pipeline.prepareFanoutSpot(&ctx) {
 		t.Fatal("expected fanout stage to pass")
 	}
 	if ctx.spot.DXMetadata.Grid != "EN61" || ctx.spot.DEMetadata.Grid != "FN31" {
 		t.Fatalf("expected prepareFanoutSpot to backfill grids, got DX=%q DE=%q", ctx.spot.DXMetadata.Grid, ctx.spot.DEMetadata.Grid)
 	}
 
-	pipeline.emitSpot(ctx, outputDeliveryPlan{
+	pipeline.emitSpot(&ctx, outputDeliveryPlan{
 		archivePeerAllowMed: true,
 		telnetDeliverNow:    true,
 		allowFast:           true,

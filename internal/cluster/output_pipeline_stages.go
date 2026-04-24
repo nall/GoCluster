@@ -14,9 +14,9 @@ import (
 	"dxcluster/strutil"
 )
 
-func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (*outputSpotContext, bool) {
+func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (outputSpotContext, bool) {
 	if s == nil {
-		return nil, false
+		return outputSpotContext{}, false
 	}
 	s.EnsureNormalized()
 	spot.ApplySourceHumanFlag(s)
@@ -38,10 +38,10 @@ func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (*outputSpotContext, b
 	}
 	if !s.IsBeacon && p.spotPolicy.MaxAgeSeconds > 0 {
 		if time.Since(s.Time) > time.Duration(p.spotPolicy.MaxAgeSeconds)*time.Second {
-			return nil, false
+			return outputSpotContext{}, false
 		}
 	}
-	return &outputSpotContext{
+	return outputSpotContext{
 		spot:      s,
 		ctyDB:     ctyDB,
 		modeUpper: s.ModeNorm,

@@ -507,16 +507,27 @@ func CorrectionVoteKey(call string) string {
 
 // CorrectionFamilyKeys returns deterministic keys for family-aware lookups.
 func CorrectionFamilyKeys(call string) []string {
-	identity := normalizeCorrectionCallIdentity(call)
-	if identity.VoteKey == "" {
+	voteKey, baseKey, ok := CorrectionFamilyKeyPair(call)
+	if !ok {
 		return nil
 	}
-	keys := make([]string, 0, 2)
-	keys = append(keys, identity.VoteKey)
-	if identity.BaseKey != "" && identity.BaseKey != identity.VoteKey {
-		keys = append(keys, identity.BaseKey)
+	if baseKey == "" {
+		return []string{voteKey}
 	}
-	return keys
+	return []string{voteKey, baseKey}
+}
+
+// CorrectionFamilyKeyPair returns the vote key plus an optional base-family key
+// without requiring callers to allocate a slice for the common single-key case.
+func CorrectionFamilyKeyPair(call string) (voteKey, baseKey string, ok bool) {
+	identity := normalizeCorrectionCallIdentity(call)
+	if identity.VoteKey == "" {
+		return "", "", false
+	}
+	if identity.BaseKey != "" && identity.BaseKey != identity.VoteKey {
+		return identity.VoteKey, identity.BaseKey, true
+	}
+	return identity.VoteKey, "", true
 }
 
 // DetectCorrectionFamily reports whether two calls are in the same correction family.
@@ -592,6 +603,14 @@ func normalizeCorrectionCallIdentity(call string) correctionCallIdentity {
 	raw := strutil.NormalizeUpper(call)
 	if raw == "" {
 		return correctionCallIdentity{}
+	}
+	if !strings.Contains(raw, "/") {
+		return correctionCallIdentity{
+			Raw:      raw,
+			VoteKey:  raw,
+			BaseKey:  raw,
+			HasSlash: false,
+		}
 	}
 	segments := strings.Split(raw, "/")
 	parts := make([]string, 0, len(segments))

@@ -4,8 +4,31 @@ import (
 	"runtime"
 	"testing"
 
+	"dxcluster/cty"
 	"dxcluster/spot"
 )
+
+func BenchmarkOutputPipelinePrepareSpotContext(b *testing.B) {
+	pipeline := &outputPipeline{
+		ctyLookup: func() *cty.CTYDatabase { return nil },
+	}
+	src := spot.NewSpot("K1ABC", "W1XYZ-1", 14074.0, "FT8")
+	src.Comment = "CQ TEST"
+	src.SourceType = spot.SourceManual
+	src.DXMetadata.Grid = "EN61"
+	src.DEMetadata.Grid = "FN31"
+	src.EnsureNormalized()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ctx, ok := pipeline.prepareSpotContext(src)
+		if !ok {
+			b.Fatal("expected spot context")
+		}
+		runtime.KeepAlive(ctx)
+	}
+}
 
 func BenchmarkOutputPipelineEmitSpotOwnership(b *testing.B) {
 	src := spot.NewSpot("K1ABC", "W1XYZ-1", 14074.0, "FT8")

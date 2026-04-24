@@ -1,5 +1,6 @@
 # Launch gocluster with pprof enabled and capture 1m CPU profiles every 15m.
-# Captures heap (inuse), allocs (alloc_space), block, mutex, and goroutine profiles as well.
+# Captures heap (inuse), allocs (alloc_space), block, mutex, trace, goroutine,
+# map cardinality logs, and OS process samples as well.
 # Usage: run this script from PowerShell; it will start the cluster in a new window
 # and keep collecting profiles until the process exits.
 
@@ -8,10 +9,13 @@ $exePath         = Join-Path $repoRoot "gocluster.exe"
 $configDir       = Join-Path $repoRoot "data\config"
 $pprofAddr       = "localhost:6061"
 $profileSeconds  = 60      # duration of each CPU profile
+$traceSeconds    = 30      # duration of each Go execution trace
 $intervalSeconds = 900     # time between captures
+$osSampleSeconds = 15      # OS process sample cadence
 $logsDir         = Join-Path $repoRoot "logs"
 $blockProfileRate = "10ms" # block profile sampling threshold
 $mutexProfileFraction = "10" # 1/N mutex events sampled
+$mapLogInterval  = "60s"   # retained-state cardinality log cadence
 $goMemLimit      = "750MiB" # soft runtime memory target; tune lower only after GC p99 review
 $goGC            = "50"     # more frequent GC to keep heap smaller
 
@@ -24,6 +28,7 @@ $envVars = @{
     DXC_PPROF_ADDR  = $pprofAddr
     # Enable periodic heap logging to match the CPU profiling cadence:
     DXC_HEAP_LOG_INTERVAL = "60s"
+    DXC_MAP_LOG_INTERVAL = $mapLogInterval
     DXC_BLOCK_PROFILE_RATE = $blockProfileRate
     DXC_MUTEX_PROFILE_FRACTION = $mutexProfileFraction
     DXC_PSKR_MQTT_DEBUG = "false"
@@ -43,6 +48,77 @@ $proc = [System.Diagnostics.Process]::Start($startInfo)
 if (-not $proc) { Write-Error "Failed to start gocluster"; exit 1 }
 
 Write-Host "gocluster started (PID=$($proc.Id)); pprof at http://$pprofAddr; GOMEMLIMIT=$goMemLimit; GOGC=$goGC"
+
+$launchTs = Get-Date -Format "yyyyMMdd-HHmmss"
+$osSamplePath = Join-Path $logsDir ("os-process-$launchTs-pid$($proc.Id).csv")
+$osSampleWarningPath = Join-Path $logsDir ("os-process-$launchTs-pid$($proc.Id).warnings.log")
+$osSamplerJob = Start-Job -ArgumentList $proc.Id, $osSampleSeconds, $osSamplePath, $osSampleWarningPath, [Environment]::ProcessorCount -ScriptBlock {
+    param($targetPid, $sampleSeconds, $csvPath, $warningPath, $processorCount)
+
+    $previous = $null
+    $previousTime = $null
+
+    while ($true) {
+        $now = Get-Date
+        try {
+            $p = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$targetPid" -ErrorAction Stop
+        } catch {
+            Add-Content -Path $warningPath -Value ("{0:o} OS process sample failed: {1}" -f $now, $_)
+            Start-Sleep -Seconds $sampleSeconds
+            continue
+        }
+
+        if (-not $p) { break }
+
+        $elapsedSeconds = $null
+        if ($previousTime) {
+            $elapsedSeconds = ($now - $previousTime).TotalSeconds
+        }
+
+        $cpuPercent = ""
+        $readBytesPerSec = ""
+        $writeBytesPerSec = ""
+        $readOpsPerSec = ""
+        $writeOpsPerSec = ""
+
+        if ($previous -and $elapsedSeconds -and $elapsedSeconds -gt 0) {
+            $cpuDeltaSeconds = (($p.KernelModeTime + $p.UserModeTime) - ($previous.KernelModeTime + $previous.UserModeTime)) / 10000000.0
+            $cpuPercent = [Math]::Round(($cpuDeltaSeconds / $elapsedSeconds / $processorCount) * 100, 3)
+            $readBytesPerSec = [Math]::Round(($p.ReadTransferCount - $previous.ReadTransferCount) / $elapsedSeconds, 2)
+            $writeBytesPerSec = [Math]::Round(($p.WriteTransferCount - $previous.WriteTransferCount) / $elapsedSeconds, 2)
+            $readOpsPerSec = [Math]::Round(($p.ReadOperationCount - $previous.ReadOperationCount) / $elapsedSeconds, 2)
+            $writeOpsPerSec = [Math]::Round(($p.WriteOperationCount - $previous.WriteOperationCount) / $elapsedSeconds, 2)
+        }
+
+        [pscustomobject]@{
+            timestamp_utc = $now.ToUniversalTime().ToString("o")
+            pid = $targetPid
+            working_set_bytes = $p.WorkingSetSize
+            private_page_count_bytes = $p.PrivatePageCount
+            page_file_usage_kb = $p.PageFileUsage
+            virtual_size_bytes = $p.VirtualSize
+            handle_count = $p.HandleCount
+            thread_count = $p.ThreadCount
+            kernel_time_100ns = $p.KernelModeTime
+            user_time_100ns = $p.UserModeTime
+            cpu_percent = $cpuPercent
+            read_operation_count = $p.ReadOperationCount
+            write_operation_count = $p.WriteOperationCount
+            read_transfer_count_bytes = $p.ReadTransferCount
+            write_transfer_count_bytes = $p.WriteTransferCount
+            read_bytes_per_sec = $readBytesPerSec
+            write_bytes_per_sec = $writeBytesPerSec
+            read_ops_per_sec = $readOpsPerSec
+            write_ops_per_sec = $writeOpsPerSec
+        } | Export-Csv -Path $csvPath -NoTypeInformation -Append
+
+        $previous = $p
+        $previousTime = $now
+        Start-Sleep -Seconds $sampleSeconds
+    }
+}
+
+Write-Host "OS process sampling every ${osSampleSeconds}s -> $osSamplePath"
 
 # Wait for pprof to come up
 $pprofUrl = "http://$pprofAddr/debug/pprof/"
@@ -90,6 +166,12 @@ function Get-GoroutineProfile {
     param($destPath, $addr, $debugLevel)
     $url = "http://$addr/debug/pprof/goroutine?debug=$debugLevel"
     Invoke-WebRequest -Uri $url -OutFile $destPath -TimeoutSec 30 -UseBasicParsing
+}
+
+function Get-TraceProfile {
+    param($seconds, $destPath, $addr)
+    $url = "http://$addr/debug/pprof/trace?seconds=$seconds"
+    Invoke-WebRequest -Uri $url -OutFile $destPath -TimeoutSec ($seconds + 10) -UseBasicParsing
 }
 
 # Periodic capture loop (stops when the process exits)
@@ -148,10 +230,24 @@ while (-not $proc.HasExited) {
         Write-Warning "Goroutine capture failed at ${ts}: $($_)"
     }
 
+    $traceDest = Join-Path $logsDir ("trace-$ts.out")
+    try {
+        Get-TraceProfile -seconds $traceSeconds -destPath $traceDest -addr $pprofAddr
+        Write-Host "Captured trace profile -> $traceDest"
+    } catch {
+        Write-Warning "Trace capture failed at ${ts}: $($_)"
+    }
+
     # Sleep, but break early if the process exits
     for ($i=0; $i -lt $intervalSeconds -and -not $proc.HasExited; $i++) {
         Start-Sleep -Seconds 1
     }
+}
+
+if ($osSamplerJob) {
+    Wait-Job -Job $osSamplerJob -Timeout 5 | Out-Null
+    Receive-Job -Job $osSamplerJob | Out-Host
+    Remove-Job -Job $osSamplerJob -Force
 }
 
 Write-Host "gocluster exited; stopping capture loop."

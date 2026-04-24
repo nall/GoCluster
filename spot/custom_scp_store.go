@@ -456,12 +456,15 @@ func (s *CustomSCPStore) RecordSpot(sp *Spot) {
 		cell = uint16(pathreliability.EncodeCoarseCell(grid))
 	}
 
-	keys := CorrectionFamilyKeys(call)
-	if len(keys) == 0 {
-		keys = []string{call}
+	key, baseKey, ok := CorrectionFamilyKeyPair(call)
+	if !ok {
+		key = call
 	}
-	for _, k := range keys {
-		s.recordObservation(k, band, mode, spotter, cell, sp.Report, sp.HasReport, seenAt)
+	if key != "" {
+		s.recordObservation(key, band, mode, spotter, cell, sp.Report, sp.HasReport, seenAt)
+	}
+	if baseKey != "" {
+		s.recordObservation(baseKey, band, mode, spotter, cell, sp.Report, sp.HasReport, seenAt)
 	}
 }
 
@@ -661,11 +664,33 @@ func (s *CustomSCPStore) HasSFloorSupportFamily(calls []string, band, mode strin
 	}
 	best := customSCPSnapshot{}
 	for _, call := range calls {
-		snap := s.snapshotFor(call, band, mode, now)
-		if snap.score > best.score || (snap.score == best.score && snap.uniqueSpotters > best.uniqueSpotters) {
-			best = snap
-		}
+		best = s.bestSFloorFamilySnapshot(best, call, band, mode, now)
 	}
+	return s.hasSFloorFamilySupport(best, minUnique)
+}
+
+// HasSFloorSupportFamilyKeyPair reports family-fallback support without forcing
+// hot callers to allocate a temporary key slice for the common single-key case.
+func (s *CustomSCPStore) HasSFloorSupportFamilyKeyPair(voteKey, baseKey, band, mode string, minUnique int, now time.Time) bool {
+	if s == nil {
+		return false
+	}
+	best := s.bestSFloorFamilySnapshot(customSCPSnapshot{}, voteKey, band, mode, now)
+	if baseKey != "" && baseKey != voteKey {
+		best = s.bestSFloorFamilySnapshot(best, baseKey, band, mode, now)
+	}
+	return s.hasSFloorFamilySupport(best, minUnique)
+}
+
+func (s *CustomSCPStore) bestSFloorFamilySnapshot(best customSCPSnapshot, call, band, mode string, now time.Time) customSCPSnapshot {
+	snap := s.snapshotFor(call, band, mode, now)
+	if snap.score > best.score || (snap.score == best.score && snap.uniqueSpotters > best.uniqueSpotters) {
+		return snap
+	}
+	return best
+}
+
+func (s *CustomSCPStore) hasSFloorFamilySupport(best customSCPSnapshot, minUnique int) bool {
 	if best.score < s.opts.SFloorMinScore {
 		return false
 	}

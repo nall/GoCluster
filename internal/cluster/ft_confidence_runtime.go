@@ -1,12 +1,12 @@
 package cluster
 
 import (
-	"container/heap"
 	"math"
 	"strings"
 	"time"
 
 	"dxcluster/config"
+	"dxcluster/cty"
 	"dxcluster/spot"
 	"dxcluster/stats"
 	"dxcluster/strutil"
@@ -46,8 +46,39 @@ type ftConfidencePendingGroup struct {
 	hardDeadline time.Time
 	due          time.Time
 	seq          uint64
-	contexts     []*outputSpotContext
+	contexts     []ftConfidencePendingContext
 	spotters     map[string]struct{}
+}
+
+type ftConfidencePendingContext struct {
+	spot                       *spot.Spot
+	ctyDB                      *cty.CTYDatabase
+	modeUpper                  string
+	stabilizerResolverKey      spot.ResolverSignalKey
+	hasStabilizerResolverKey   bool
+	stabilizerEvidenceEnqueued bool
+}
+
+func newFTConfidencePendingContext(ctx outputSpotContext) ftConfidencePendingContext {
+	return ftConfidencePendingContext{
+		spot:                       ctx.spot,
+		ctyDB:                      ctx.ctyDB,
+		modeUpper:                  ctx.modeUpper,
+		stabilizerResolverKey:      ctx.stabilizerResolverKey,
+		hasStabilizerResolverKey:   ctx.hasStabilizerResolverKey,
+		stabilizerEvidenceEnqueued: ctx.stabilizerEvidenceEnqueued,
+	}
+}
+
+func (ctx ftConfidencePendingContext) outputContext() outputSpotContext {
+	return outputSpotContext{
+		spot:                       ctx.spot,
+		ctyDB:                      ctx.ctyDB,
+		modeUpper:                  ctx.modeUpper,
+		stabilizerResolverKey:      ctx.stabilizerResolverKey,
+		hasStabilizerResolverKey:   ctx.hasStabilizerResolverKey,
+		stabilizerEvidenceEnqueued: ctx.stabilizerEvidenceEnqueued,
+	}
 }
 
 type ftConfidenceItem struct {
@@ -71,23 +102,63 @@ func (h ftConfidenceHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *ftConfidenceHeap) Push(x any) {
-	item, ok := x.(ftConfidenceItem)
-	if !ok {
+func (h *ftConfidenceHeap) push(item ftConfidenceItem) {
+	if h == nil {
 		return
 	}
 	*h = append(*h, item)
+	h.siftUp(len(*h) - 1)
 }
 
-func (h *ftConfidenceHeap) Pop() any {
-	old := *h
-	n := len(old)
-	if n == 0 {
-		return nil
+func (h *ftConfidenceHeap) pop() (ftConfidenceItem, bool) {
+	if h == nil || h.Len() == 0 {
+		return ftConfidenceItem{}, false
 	}
-	item := old[n-1]
-	*h = old[:n-1]
-	return item
+	items := *h
+	item := items[0]
+	last := len(items) - 1
+	if last == 0 {
+		items[0] = ftConfidenceItem{}
+		*h = items[:0]
+		return item, true
+	}
+	items[0] = items[last]
+	items[last] = ftConfidenceItem{}
+	*h = items[:last]
+	h.siftDown(0)
+	return item, true
+}
+
+func (h *ftConfidenceHeap) siftUp(index int) {
+	items := *h
+	for index > 0 {
+		parent := (index - 1) / 2
+		if !items.Less(index, parent) {
+			return
+		}
+		items.Swap(index, parent)
+		index = parent
+	}
+}
+
+func (h *ftConfidenceHeap) siftDown(index int) {
+	items := *h
+	for {
+		left := 2*index + 1
+		if left >= len(items) {
+			return
+		}
+		smallest := left
+		right := left + 1
+		if right < len(items) && items.Less(right, left) {
+			smallest = right
+		}
+		if !items.Less(smallest, index) {
+			return
+		}
+		items.Swap(index, smallest)
+		index = smallest
+	}
 }
 
 func popFTConfidenceDue(h *ftConfidenceHeap, now time.Time, force bool, scratch []ftConfidenceItem) []ftConfidenceItem {
@@ -100,8 +171,7 @@ func popFTConfidenceDue(h *ftConfidenceHeap, now time.Time, force bool, scratch 
 		if !force && head.due.After(now) {
 			break
 		}
-		itemAny := heap.Pop(h)
-		if item, ok := itemAny.(ftConfidenceItem); ok {
+		if item, ok := h.pop(); ok {
 			out = append(out, item)
 		}
 	}
@@ -184,8 +254,9 @@ func newFTConfidenceController(cfg config.CallCorrectionConfig, tracker *stats.T
 		policy:           newFTConfidencePolicy(cfg),
 		tracker:          tracker,
 		pending:          make(map[ftConfidenceKey]*ftConfidencePendingGroup),
+		queue:            make(ftConfidenceHeap, 0, 4),
+		dueScratch:       make([]ftConfidenceItem, 0, 4),
 	}
-	heap.Init(&controller.queue)
 	controller.reportActiveBursts()
 	return controller
 }
@@ -194,8 +265,8 @@ func (c *ftConfidenceController) Enabled() bool {
 	return c != nil && c.enabled
 }
 
-func (c *ftConfidenceController) Observe(now time.Time, ctx *outputSpotContext) (bool, int) {
-	if !c.Enabled() || ctx == nil || ctx.spot == nil {
+func (c *ftConfidenceController) Observe(now time.Time, ctx outputSpotContext) (bool, int) {
+	if !c.Enabled() || ctx.spot == nil {
 		return false, 1
 	}
 	if now.IsZero() {
@@ -223,7 +294,7 @@ func (c *ftConfidenceController) Observe(now time.Time, ctx *outputSpotContext) 
 			c.reportOverflowRelease()
 			return false, uniqueCount
 		}
-		group.contexts = append(group.contexts, ctx)
+		group.contexts = append(group.contexts, newFTConfidencePendingContext(ctx))
 		if spotter != "" {
 			if group.spotters == nil {
 				group.spotters = make(map[string]struct{}, 2)
@@ -253,9 +324,9 @@ func (c *ftConfidenceController) Observe(now time.Time, ctx *outputSpotContext) 
 		hardDeadline: now.Add(timing.hardCap),
 		due:          due,
 		seq:          c.seq,
-		contexts:     make([]*outputSpotContext, 1, 4),
+		contexts:     make([]ftConfidencePendingContext, 1, 2),
 	}
-	group.contexts[0] = ctx
+	group.contexts[0] = newFTConfidencePendingContext(ctx)
 	if spotter != "" {
 		group.spotters = make(map[string]struct{}, 2)
 		group.spotters[spotter] = struct{}{}
@@ -311,7 +382,7 @@ func (c *ftConfidenceController) NextDue() (time.Time, bool) {
 		head := c.queue[0]
 		group := c.pending[head.key]
 		if group == nil || head.seq != group.seq || !head.due.Equal(group.due) {
-			heap.Pop(&c.queue)
+			c.queue.pop()
 			continue
 		}
 		return head.due, true
@@ -380,7 +451,7 @@ func (c *ftConfidenceController) pushDueItem(group *ftConfidencePendingGroup) {
 	if c == nil || group == nil {
 		return
 	}
-	heap.Push(&c.queue, ftConfidenceItem{
+	c.queue.push(ftConfidenceItem{
 		key: group.key,
 		due: group.due,
 		seq: group.seq,
@@ -467,7 +538,7 @@ func (p *outputPipeline) applyFTConfidenceStage(ctx *outputSpotContext, now time
 		return true
 	}
 	p.releaseDueFT(now, false)
-	held, uniqueCount := p.ftConfidence.Observe(now, ctx)
+	held, uniqueCount := p.ftConfidence.Observe(now, *ctx)
 	if held {
 		return false
 	}
@@ -501,18 +572,19 @@ func (p *outputPipeline) releaseDueFT(now time.Time, force bool) {
 			continue
 		}
 		uniqueSpotters := len(group.spotters)
-		for _, ctx := range group.contexts {
-			if ctx == nil || ctx.spot == nil {
+		for i := range group.contexts {
+			ctx := group.contexts[i].outputContext()
+			if ctx.spot == nil {
 				continue
 			}
-			p.assignFTConfidence(ctx, uniqueSpotters)
-			if !p.finalizeSpotForMetrics(ctx) {
+			p.assignFTConfidence(&ctx, uniqueSpotters)
+			if !p.finalizeSpotForMetrics(&ctx) {
 				continue
 			}
-			if !p.prepareFanoutSpot(ctx) {
+			if !p.prepareFanoutSpot(&ctx) {
 				continue
 			}
-			p.deliverSpot(ctx)
+			p.deliverSpot(&ctx)
 		}
 	}
 }
@@ -586,11 +658,14 @@ func (p *outputPipeline) recordFTRecentBandObservation(s *spot.Spot) {
 	if seenAt.IsZero() {
 		seenAt = time.Now().UTC()
 	}
-	keys := spot.CorrectionFamilyKeys(call)
-	if len(keys) == 0 {
-		keys = []string{call}
+	key, baseKey, ok := spot.CorrectionFamilyKeyPair(call)
+	if !ok {
+		key = call
 	}
-	for _, key := range keys {
+	if key != "" {
 		p.ftRecentBandStore.Record(key, band, mode, spotter, seenAt)
+	}
+	if baseKey != "" {
+		p.ftRecentBandStore.Record(baseKey, band, mode, spotter, seenAt)
 	}
 }

@@ -159,16 +159,14 @@ func HasRecentSupportForCallFamily(store spot.RecentSupportStore, call, band, mo
 	if store == nil {
 		return false
 	}
-	keys := spot.CorrectionFamilyKeys(call)
-	if len(keys) == 0 {
+	key, baseKey, ok := spot.CorrectionFamilyKeyPair(call)
+	if !ok {
 		return store.HasRecentSupport(call, band, mode, minUnique, now)
 	}
-	for _, key := range keys {
-		if store.HasRecentSupport(key, band, mode, minUnique, now) {
-			return true
-		}
+	if store.HasRecentSupport(key, band, mode, minUnique, now) {
+		return true
 	}
-	return false
+	return baseKey != "" && store.HasRecentSupport(baseKey, band, mode, minUnique, now)
 }
 
 func normalizeStabilizerChecks(preferred int, fallback int) int {
@@ -217,15 +215,18 @@ func maxRecentSupportForCallFamily(store spot.RecentSupportStore, call, band, mo
 		return 0
 	}
 	maxSupport := 0
-	keys := spot.CorrectionFamilyKeys(call)
-	if len(keys) == 0 {
-		keys = []string{spot.CorrectionVoteKey(call)}
+	key, baseKey, ok := spot.CorrectionFamilyKeyPair(call)
+	if !ok {
+		return 0
 	}
-	for _, key := range keys {
-		if strings.TrimSpace(key) == "" {
-			continue
-		}
+	if strings.TrimSpace(key) != "" {
 		support := store.RecentSupportCount(key, band, mode, now)
+		if support > maxSupport {
+			maxSupport = support
+		}
+	}
+	if baseKey != "" {
+		support := store.RecentSupportCount(baseKey, band, mode, now)
 		if support > maxSupport {
 			maxSupport = support
 		}
