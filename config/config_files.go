@@ -147,6 +147,8 @@ var runtimeAllowEmptySettings = map[string]struct{}{
 
 var runtimeAllowZeroSettings = map[string]struct{}{
 	"ui.refresh_ms":                                                          {},
+	"go_runtime.memory_limit_mib":                                            {},
+	"go_runtime.gc_percent":                                                  {},
 	"rbn.keepalive_seconds":                                                  {},
 	"rbn_digital.keepalive_seconds":                                          {},
 	"human_telnet.keepalive_seconds":                                         {},

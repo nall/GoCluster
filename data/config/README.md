@@ -9,7 +9,7 @@ Configuration is split by concern so you only edit the relevant file:
 - `pipeline.yaml` - call correction, harmonics, spot policy.
 - `data.yaml` - CTY/FCC/skew sources, grid DB tuning, and H3 table path.
 - `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
-- `runtime.yaml` - telnet server settings, WHOSPOTSME window, buffer capacity, and filter defaults.
+- `runtime.yaml` - Go runtime memory tuning, telnet server settings, WHOSPOTSME window, buffer capacity, and filter defaults.
 - `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.
 - `peering.yaml` - DXSpider peer configuration (inbound/outbound, ACLs, topology cache).
 - `iaru_regions.yaml` - DXCC/ADIF to IARU region mapping used by final regional mode policy.
@@ -25,6 +25,7 @@ Loader behavior:
 - `iaru_regions.yaml`, `iaru_mode_inference.yaml`, and `spot_taxonomy.yaml` are required reference tables. Startup fails if they are missing or malformed; there is no built-in table fallback.
 - Required YAML-owned settings must be present and non-null in YAML. Missing settings and unknown keys fail config load with a file/key error instead of receiving hidden Go defaults.
 - Documented zero values are meaningful. For example, `telnet.broadcast_batch_interval_ms: 0` means immediate delivery, and `*_keepalive_seconds: 0` means the keepalive is disabled.
+- `go_runtime.memory_limit_mib` and `go_runtime.gc_percent` apply the same process-wide Go runtime controls as `GOMEMLIMIT` and `GOGC` without requiring a wrapper script. Set either value to `0` to leave the Go runtime or environment-provided value unchanged.
 - `openai.yaml` is optional for server startup and `prop_report -no-llm`. When propagation-report LLM generation is enabled, the file is required and validated at that tool boundary. Secret values must not be logged or committed.
 - Use `prop_report -config-dir <dir>` to point report generation at an alternate config directory. The older `-path-config` flag accepts either a directory or `path_reliability.yaml` path for compatibility.
 

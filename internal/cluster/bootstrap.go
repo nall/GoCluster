@@ -261,6 +261,7 @@ func Run(versionInfo BuildInfo) error {
 	if err != nil {
 		return err
 	}
+	applyGoRuntimeTuning(cfg.GoRuntime)
 	runtime := newClusterRuntime(versionInfo, cfg, configSource)
 	defer runtime.close()
 	if !runtime.initialize() {

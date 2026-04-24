@@ -3,6 +3,11 @@
 buffer:
   capacity: 75000                   # Number of spots held in the in-memory ring buffer (post-primary dedup)
 
+# Go runtime memory controls. Zero leaves the Go/env default unchanged.
+go_runtime:
+  memory_limit_mib: 750             # Soft runtime memory target, equivalent to GOMEMLIMIT=750MiB
+  gc_percent: 50                    # GC aggressiveness, equivalent to GOGC=50
+
 # Telnet server (user-facing interface)
 telnet:
   port: 8300

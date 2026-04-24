@@ -130,6 +130,7 @@ type Config struct {
 	Telnet              TelnetConfig         `yaml:"telnet"`
 	WhoSpotsMe          WhoSpotsMeConfig     `yaml:"who_spots_me"`
 	UI                  UIConfig             `yaml:"ui"`
+	GoRuntime           GoRuntimeConfig      `yaml:"go_runtime"`
 	Logging             LoggingConfig        `yaml:"logging"`
 	PropReport          PropReportConfig     `yaml:"prop_report"`
 	RBN                 RBNConfig            `yaml:"rbn"`
@@ -310,6 +311,14 @@ type TelnetConfig struct {
 // WHOSPOTSME telnet command.
 type WhoSpotsMeConfig struct {
 	WindowMinutes int `yaml:"window_minutes"`
+}
+
+// GoRuntimeConfig controls process-wide Go runtime memory tuning.
+type GoRuntimeConfig struct {
+	// MemoryLimitMiB mirrors GOMEMLIMIT in MiB. Zero leaves the runtime/env value unchanged.
+	MemoryLimitMiB int `yaml:"memory_limit_mib"`
+	// GCPercent mirrors GOGC. Zero leaves the runtime/env value unchanged.
+	GCPercent int `yaml:"gc_percent"`
 }
 
 // ReputationConfig controls the passwordless telnet reputation gate.
@@ -1529,6 +1538,9 @@ func Load(path string) (*Config, error) {
 	if err := normalizeArchiveAndStatsConfig(&cfg, presence); err != nil {
 		return nil, err
 	}
+	if err := validateGoRuntimeConfig(&cfg); err != nil {
+		return nil, err
+	}
 	if err := normalizeCallCorrectionConfig(&cfg, presence); err != nil {
 		return nil, err
 	}
@@ -1857,6 +1869,13 @@ func normalizeArchiveAndStatsConfig(cfg *Config, presence loadRawPresence) error
 	}
 	if cfg.Stats.DisplayIntervalSeconds <= 0 {
 		cfg.Stats.DisplayIntervalSeconds = 30
+	}
+	return nil
+}
+
+func validateGoRuntimeConfig(cfg *Config) error {
+	if cfg.GoRuntime.MemoryLimitMiB > 0 && cfg.GoRuntime.MemoryLimitMiB < 64 {
+		return fmt.Errorf("invalid go_runtime.memory_limit_mib %d (must be 0 or >= 64)", cfg.GoRuntime.MemoryLimitMiB)
 	}
 	return nil
 }
@@ -3316,6 +3335,9 @@ func (c *Config) Print() {
 	fmt.Printf("Telnet bulletins: dedupe_window=%ds dedupe_max_entries=%d\n",
 		c.Telnet.BulletinDedupeWindowSeconds,
 		c.Telnet.BulletinDedupeMaxEntries)
+	fmt.Printf("Go runtime: memory_limit_mib=%d gc_percent=%d\n",
+		c.GoRuntime.MemoryLimitMiB,
+		c.GoRuntime.GCPercent)
 	fmt.Printf("Who spots me: window=%dm\n", c.WhoSpotsMe.WindowMinutes)
 	fmt.Printf("Telnet Tier-A: prelogin_max=%d prelogin_timeout=%ds ip_rate=%.2f/s ip_burst=%d subnet_rate=%.2f/s subnet_burst=%d global_rate=%.2f/s global_burst=%d ip_concurrency=%d\n",
 		c.Telnet.MaxPreloginSessions,

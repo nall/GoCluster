@@ -1281,6 +1281,7 @@ func (r *clusterRuntime) logStartup() {
 	} else {
 		log.Println("Unified deduplication bypassed (window=0); duplicates are not filtered")
 	}
+	logGoRuntimeTuning(r.cfg.GoRuntime)
 	log.Println("Architecture: ALL sources -> Dedup Engine -> Ring Buffer -> Clients")
 	log.Printf("Statistics will be displayed every %d seconds...", r.cfg.Stats.DisplayIntervalSeconds)
 	log.Println("---")
