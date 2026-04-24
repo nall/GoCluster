@@ -1,5 +1,7 @@
 # Build artifacts
 .tmp/
+ready_to_run/
+gocluster-windows-amd64.zip
 *.exe
 *.dll
 *.pdb

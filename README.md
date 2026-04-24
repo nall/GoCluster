@@ -190,11 +190,14 @@ Developers and advanced users can keep using the source checkout normally:
 `DXC_CONFIG_PATH` can point the binary at an alternate config directory.
 The release packaging script refuses a dirty worktree by default and runs
 `go mod tidy -diff` before staging or compiling the package. Use `-AllowDirty`
-only for local test packages. Scripted builds stamp the console and `--version`
-binary identity as `vYY.DD.MM-<12-char-commit>[+dirty]` using the UTC compile
-date; the `+dirty` suffix is only expected for explicit `-AllowDirty` local
-test packages. Unflagged `go build .` binaries use the same display shape from
-Go VCS metadata when linker-stamped compile time is unavailable.
+only for local test packages. Local script runs write the runnable directory to
+repo-root `ready_to_run/` and the zip to repo-root
+`gocluster-windows-amd64.zip` by default. Scripted builds stamp the console and
+`--version` binary identity as `vYY.DD.MM-<12-char-commit>[+dirty]` using the
+UTC compile date; the `+dirty` suffix is only expected for explicit
+`-AllowDirty` local test packages. Unflagged `go build .` binaries use the same
+display shape from Go VCS metadata when linker-stamped compile time is
+unavailable.
 
 ## Dedupe Policies
 

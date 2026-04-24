@@ -55,7 +55,7 @@ from clean release packages.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go mod tidy -diff`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`
+- Related tests: `go mod tidy -diff`, `scripts/build-release-package.ps1`, `scripts/build-release-package.ps1 -AllowDirty`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`
 - Related docs: `README.md`, `scripts/build-release-package.ps1`, `docs/decisions/ADR-0076-github-release-package.md`, `docs/decisions/ADR-0077-compile-date-binary-version.md`
 - Related TSRs:
 - Supersedes / superseded by:

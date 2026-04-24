@@ -1,5 +1,5 @@
 param(
-    [string]$OutputDir = "dist",
+    [string]$OutputDir = ".",
     [string]$PackageName = "gocluster-windows-amd64",
     [string]$PackageDirectoryName = "ready_to_run",
     [switch]$AllowDirty
@@ -292,15 +292,21 @@ try {
     $buildTime = $buildUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     $outputRoot = Join-Path $repoRoot $OutputDir
-    $stageRoot = Join-Path $outputRoot $PackageDirectoryName
+    $stageRoot = Join-Path $repoRoot $PackageDirectoryName
     $zipPath = Join-Path $outputRoot "$PackageName.zip"
+    $legacyNestedStageRoot = Join-Path $outputRoot $PackageDirectoryName
 
     if (Test-Path -LiteralPath $stageRoot) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force
     }
+    if ([IO.Path]::GetFullPath($legacyNestedStageRoot) -ne [IO.Path]::GetFullPath($stageRoot) -and
+        (Test-Path -LiteralPath $legacyNestedStageRoot)) {
+        Remove-Item -LiteralPath $legacyNestedStageRoot -Recurse -Force
+    }
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
     }
+    New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
 
     Copy-TrackedPayload -RepoRoot $repoRoot -StageRoot $stageRoot -AllowlistPrefixes @(
@@ -327,7 +333,7 @@ try {
         throw "go build failed."
     }
 
-    Push-Location $outputRoot
+    Push-Location $repoRoot
     try {
         Compress-Archive -Path $PackageDirectoryName -DestinationPath $zipPath -Force
     }

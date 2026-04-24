@@ -58,6 +58,11 @@ modifying files, and always compiles a fresh Windows amd64 binary before
 creating the zip. `-AllowDirty` is reserved for local test packages and visibly
 marks the resulting binary version with `+dirty`.
 
+Local package builds create the runnable directory at repo-root `ready_to_run/`
+and write `gocluster-windows-amd64.zip` at the repo root by default. The
+GitHub workflow may still pass a zip output directory such as `dist`; that does
+not move the repo-root `ready_to_run/` staging directory.
+
 ## Alternatives considered
 
 1. Zip the whole repo or whole `data` directory.
@@ -71,6 +76,8 @@ marks the resulting binary version with `+dirty`.
 - Operators can deploy by extracting one zip and running `gocluster.exe`.
 - The download filename remains platform-specific, while the extracted
   runnable directory has an operator-oriented name.
+- Local maintainers can inspect or copy the repo-root `ready_to_run/` directory
+  without digging through temporary validation output.
 - Release contents are reproducible from committed inputs.
 - The default script path fails before staging if local edits or stale module
   metadata would make the artifact differ from committed source.
@@ -111,7 +118,7 @@ marks the resulting binary version with `+dirty`.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -OutputDir .tmp\release-validation`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, zip payload inspection for `ready_to_run/`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
+- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -AllowDirty`, zip payload inspection for repo-root `ready_to_run/`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
 - Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`
 - Related TSRs:
 - Supersedes / superseded by:
