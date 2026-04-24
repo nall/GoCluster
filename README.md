@@ -138,25 +138,56 @@ logging:
 ## Quick Start
 
 1. Install Go `1.26+`.
-2. Review the config files in [`data/config`](data/config).
-   At minimum, set your callsigns in `ingest.yaml` and your telnet port in `runtime.yaml`.
+2. Review the public example config files in [`data/config`](data/config).
+   For a real node, copy that directory to ignored `data/config.local`, put
+   your private callsigns, peer hosts/passwords, and tokens there, then run
+   with `DXC_CONFIG_PATH=data/config.local`.
 3. Run:
 
    ```pwsh
    go mod tidy
+   $env:DXC_CONFIG_PATH = "data/config.local"
    go run .
    ```
 
 4. Connect with telnet:
 
    ```text
-   telnet localhost 9300
+   telnet localhost <telnet.port from data/config/runtime.yaml>
    ```
 
 5. Log in with your callsign and type `HELP`.
 
-You can point the server at another config directory with `DXC_CONFIG_PATH`.
+You can point the server at any complete config directory with
+`DXC_CONFIG_PATH`. Do not commit real peer connection details or service
+tokens to the public example config.
 The propagation-report tool uses the same directory with `-config-dir`; the older `-path-config` flag remains only as a compatibility alias.
+
+## Release Package
+
+GitHub Releases publish a Windows amd64 zip for simple deployments. Download
+`gocluster-windows-amd64.zip`, extract it to a directory, copy the packaged
+public example `data/config` to your private config directory, edit the YAML,
+then run:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+.\gocluster.exe
+```
+
+Keep `gocluster.exe` and the config copied from the same release together. The
+zip contains only curated source-controlled runtime inputs, including public
+example config, H3 tables, CTY data, peer topology, skew correction, and a small
+operator documentation bundle. The packaged `README.md` is rendered from the
+packaged config for runtime-configured values such as the telnet port. Start
+there; use GitHub for full details. The zip intentionally excludes live Pebble
+stores, logs, user state, downloaded caches, private operational config,
+optional secret-bearing files such as `data/config/openai.yaml`, and
+developer/process documentation.
+
+Developers and advanced users can keep using the source checkout normally:
+`go build .` remains the live binary build path from the repo root, and
+`DXC_CONFIG_PATH` can point the binary at an alternate config directory.
 
 ## Dedupe Policies
 

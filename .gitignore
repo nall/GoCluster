@@ -32,6 +32,7 @@ cmd/rbn_backtest/data/
 # Local env/config
 .env
 cmd/daily_analysis/.env
+data/config.local/
 data/config/openai.yaml
 .claude/
 .vscode/

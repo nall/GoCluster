@@ -1,0 +1,49 @@
+# GoCluster Release Package
+
+This zip is the small operator package for Windows amd64. It contains the
+server executable, public example config, required runtime reference data, and a
+small operator documentation bundle.
+
+## Configure
+
+The packaged `data/config` directory is public example config. For a real node:
+
+1. Copy `data/config` to a private config directory such as `data/config.local`.
+2. Edit the private copy with your callsigns, telnet port, spot sources, peer
+   hosts/passwords, and service tokens.
+3. Keep private config out of Git and out of shared zip archives.
+
+The config loader expects a complete directory. If you use `DXC_CONFIG_PATH`,
+point it at the whole private config directory, not at one YAML file.
+
+## Launch
+
+From PowerShell in the extracted package directory:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+.\gocluster.exe
+```
+
+If you are only testing the public example config, omit `DXC_CONFIG_PATH` and
+run `.\gocluster.exe` directly.
+
+## Connect
+
+Use a telnet client against the configured telnet port from the packaged
+`data/config/runtime.yaml`, then log in with your callsign:
+
+```text
+telnet localhost {{ .TelnetPort }}
+```
+
+After login, type `HELP` for the command list.
+
+## Included Docs
+
+- `docs/OPERATOR_GUIDE.md` - one-page operator guide.
+- `data/config/README.md` - config file layout and loader rules.
+
+For full documentation, source, issues, and release history, use GitHub:
+
+https://github.com/N2WQ/GoCluster

@@ -1,7 +1,7 @@
 peering:
   enabled: false                   # Enable DXSpider peering (PC11/PC61/PC92/PC51)
   forward_spots: false             # Peer spot data-plane forwarding; false = receive-only except local DX posts
-  local_callsign: "N2WQ-2"         # Our node callsign sent in PC92/PC19 frames
+  local_callsign: "N0CALL-1"       # Our node callsign sent in PC92/PC19 frames
   listen_port: 6300                # Optional inbound listen port for peers
   hop_count: 99                    # Hop limit we advertise and decrement on forward
   node_version: "5457"             # Node version advertised in pc9x init
@@ -19,69 +19,69 @@ peering:
   max_line_length: 65536           # Drop lines longer than this to avoid abuse
   pc92_max_bytes: 65536            # Drop PC92 topology frames larger than this (<= max_line_length)
   peers:
-    - enabled: true                # Outbound peer definition
+    - enabled: false               # Example peer #1 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "dxs.n2wq.com"         # Remote host
+      host: "peer1.example.invalid" # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "N2WQ-73"   # Expected remote node callsign
-    - enabled: false               # Placeholder peer #2 (set true when ready)
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-1"  # Expected remote node callsign
+    - enabled: false               # Example peer #2 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "dxspider.km3t.net"    # Remote host
+      host: "peer2.example.invalid" # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "KM3T-10"   # Expected remote node callsign
-    - enabled: true                # Placeholder peer #3 (set true when ready)
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-2"  # Expected remote node callsign
+    - enabled: false               # Example peer #3 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "gocluster.km3t.net"   # Remote host
+      host: "peer3.example.invalid" # Remote host
       port: 6300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "KM3T-44"   # Expected remote node callsign
-    - enabled: true                # Outbound peer definition #4
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-3"  # Expected remote node callsign
+    - enabled: false               # Example peer #4 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "f1fca.freeboxos.fr"   # Remote host
-      port: 7300                   # Remote port
-      password: "-N2WQ!2_GoClusterTest?" # Optional password sent after login callsign
-      prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "F1FCA-1"   # Expected remote node callsign
-    - enabled: true                # Outbound peer definition #5
-      family: "dxspider"           # Peer family: dxspider or ccluster
-      direction: "both"            # Allow outbound dial and inbound accept
-      host: "10.0.134.203"         # Remote host
+      host: "peer4.example.invalid" # Remote host
       port: 7300                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "N2WQ-1"    # Expected remote node callsign
-    - enabled: true                # Outbound peer definition #6
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-4"  # Expected remote node callsign
+    - enabled: false               # Example peer #5 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "dxc.n4zkf.com"        # Remote host
+      host: "peer5.example.invalid" # Remote host
+      port: 7300                   # Remote port
+      password: ""                 # Optional password sent after login callsign
+      prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-5"  # Expected remote node callsign
+    - enabled: false               # Example peer #6 (set true only after editing)
+      family: "dxspider"           # Peer family: dxspider or ccluster
+      direction: "both"            # Allow outbound dial and inbound accept
+      host: "peer6.example.invalid" # Remote host
       port: 7373                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "N4ZKF-1"   # Expected remote node callsign
-    - enabled: true                # Outbound peer definition #7
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-6"  # Expected remote node callsign
+    - enabled: false               # Example peer #7 (set true only after editing)
       family: "dxspider"           # Peer family: dxspider or ccluster
       direction: "both"            # Allow outbound dial and inbound accept
-      host: "n8ux.ddns.net"        # Remote host
+      host: "peer7.example.invalid" # Remote host
       port: 7373                   # Remote port
       password: ""                 # Optional password sent after login callsign
       prefer_pc9x: true            # Prefer PC9x (PC92/PC61) over legacy PC19/PC11
-      login_callsign: "N2WQ-2"     # Callsign used to log in to the remote
-      remote_callsign: "N8UX"      # Expected remote node callsign
+      login_callsign: "N0CALL-1"   # Callsign used to log in to the remote
+      remote_callsign: "N0PEER-7"  # Expected remote node callsign
   timeouts:
     login_seconds: 60              # Outbound login timeout
     init_seconds: 60               # Outbound init/handshake timeout

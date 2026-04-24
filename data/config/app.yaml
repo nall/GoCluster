@@ -1,7 +1,7 @@
 # Core app identity and local console UI settings.
 server:
   name: "Go Cluster beta\r\n"
-  node_id: "N2WQ-2"
+  node_id: "N0CALL-1"
 
 stats:
   display_interval_seconds: 60  # How often to print stats to stdout

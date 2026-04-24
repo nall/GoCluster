@@ -5,7 +5,7 @@ rbn:
   name: "RBN-CW-RTTY"
   host: "telnet.reversebeacon.net"
   port: 7000
-  callsign: "N2WQ-2"               # Change this to your callsign!
+  callsign: "N0CALL-1"             # Change this to your callsign.
   telnet_transport: "ziutek"       # Telnet parser/negotiation backend: native or ziutek
   slot_buffer: 1000                # Buffer depth between telnet reader and pipeline (per-spot queue)
   keepalive_seconds: 180           # Periodic CRLF to keep idle connections alive (0 disables)
@@ -17,7 +17,7 @@ rbn_digital:
   name: "RBN-FT4-FT8"
   host: "telnet.reversebeacon.net"
   port: 7001
-  callsign: "N2WQ-2"              # Change this to your callsign!
+  callsign: "N0CALL-1"            # Change this to your callsign.
   telnet_transport: "ziutek"      # Telnet parser/negotiation backend: native or ziutek
   slot_buffer: 1000               # Buffer depth between telnet reader and pipeline (FT4/FT8 bursts are spiky)
   keepalive_seconds: 180          # Periodic CRLF to keep idle connections alive (0 disables)
@@ -27,9 +27,9 @@ rbn_digital:
 human_telnet:
   enabled: false
   name: "HUMAN-SPOTS"
-  host: "dxs.n2wq.com"
+  host: "upstream.example.invalid"
   port: 7300
-  callsign: "N2WQ-22"          # Change this to your callsign or upstream ID
+  callsign: "N0CALL-2"         # Change this to your callsign or upstream ID.
   telnet_transport: "ziutek"   # Telnet parser/negotiation backend: native or ziutek
   slot_buffer: 1000            # Buffer depth between telnet reader and pipeline
   keepalive_seconds: 180       # Periodic CRLF to keep idle connections alive (0 disables)

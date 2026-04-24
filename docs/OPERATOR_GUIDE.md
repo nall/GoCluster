@@ -4,13 +4,17 @@
 This server aggregates real-time spotting data and publishes a single per-band propagation glyph for each path. Think of the glyph as a quick operational hint, not a guarantee.
 
 ## Quick Start
-- Run the server from the repo root: `go run .`
-- Default config directory: `data/config`
+- Release package: extract the zip, copy `data/config` to private
+  `data/config.local`, edit that private copy, then run:
+  `powershell -NoProfile -Command "$env:DXC_CONFIG_PATH='data/config.local'; .\gocluster.exe"`
+- Source checkout: run from the repo root with `go run .`
+- Default config directory: `data/config`; override with `DXC_CONFIG_PATH`.
 - Main config files:
   - `data/config/ingest.yaml` (spot sources)
   - `data/config/path_reliability.yaml` (glyph thresholds, decay, noise)
   - `data/config/solarweather.yaml` (optional R/G overrides)
   - `data/config/peering.yaml` (optional cluster peering)
+- Full docs and source: https://github.com/N2WQ/GoCluster
 
 ## Operator Commands (telnet)
 - `SET GRID <grid>`: set your location (4–6 chars).

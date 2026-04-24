@@ -18,11 +18,11 @@ reputation:
   # When enabled, the scheduler downloads the CSV, imports to Pebble, updates CURRENT_DB,
   # then optionally deletes the CSV (and gzip if desired). When disabled, you must
   # supply an existing Pebble DB at ipinfo_pebble_path.
-  ipinfo_download_enabled: true
+  ipinfo_download_enabled: false
   ipinfo_snapshot_path: "data/ipinfo/location.csv"   # temp extract location used for import
   ipinfo_download_path: "data/ipinfo/ipinfo_lite.csv.gz"
   ipinfo_download_url: "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=$TOKEN"
-  ipinfo_download_token: "8a74cd36c1905b"
+  ipinfo_download_token: "REPLACE_WITH_IPINFO_TOKEN"
   ipinfo_refresh_utc: "03:00"                        # daily UTC time (HH:MM)
   ipinfo_download_timeout_ms: 15000                  # download deadline
   ipinfo_import_timeout_ms: 600000                   # extract + import + optional compaction
@@ -39,7 +39,7 @@ reputation:
   cymru_workers: 2
 
   # IPinfo live API (last resort). Only ASN + country are used; adds latency.
-  ipinfo_api_enabled: true
+  ipinfo_api_enabled: false
   ipinfo_api_token: "" # supply your token; blank disables API fallback
   ipinfo_api_base_url: "https://ipinfo.io"
   ipinfo_api_timeout_ms: 250

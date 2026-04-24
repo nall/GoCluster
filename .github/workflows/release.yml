@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish as a GitHub Release, for example v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows-amd64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "Release tag is required."
+          }
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            git rev-parse --verify "refs/tags/$tag"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release tag '$tag' does not exist."
+            }
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout release tag for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: git checkout --detach "refs/tags/${{ steps.release.outputs.tag }}"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release package
+        shell: pwsh
+        run: ./scripts/build-release-package.ps1 -Version "${{ steps.release.outputs.tag }}" -OutputDir dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gocluster-windows-amd64
+          path: dist/gocluster-windows-amd64.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: dist/gocluster-windows-amd64.zip
+          fail_on_unmatched_files: true
