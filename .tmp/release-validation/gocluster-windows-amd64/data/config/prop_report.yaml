@@ -1,4 +1,0 @@
-# Propagation report generation (daily, on log rotation and on a UTC schedule).
-prop_report:
-  enabled: true
-  refresh_utc: "00:05"
