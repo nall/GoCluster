@@ -22,6 +22,49 @@ $goGC            = "50"     # more frequent GC to keep heap smaller
 # Ensure logs directory exists
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 
+$launchTs = Get-Date -Format "yyyyMMdd-HHmmss"
+$controllerLogPath = Join-Path $logsDir ("profiling-run-$launchTs.log")
+
+function Write-ProfilerInfo {
+    param([string]$Message)
+    $line = "{0:o} {1}" -f (Get-Date).ToUniversalTime(), $Message
+    Add-Content -Path $controllerLogPath -Value $line
+    Write-Host $Message
+}
+
+function Write-ProfilerWarning {
+    param([string]$Message)
+    $line = "{0:o} WARNING: {1}" -f (Get-Date).ToUniversalTime(), $Message
+    Add-Content -Path $controllerLogPath -Value $line
+    Write-Warning $Message
+}
+
+function Quote-PowerShellLiteral {
+    param([string]$Value)
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function Get-ClusterProcessByParent {
+    param(
+        [int]$ParentPid,
+        [string]$TargetExePath
+    )
+
+    $exeName = Split-Path -Path $TargetExePath -Leaf
+    $candidates = @(Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId=$ParentPid" |
+        Where-Object { $_.Name -ieq $exeName })
+
+    foreach ($candidate in $candidates) {
+        if ($candidate.ExecutablePath -and [string]::Equals($candidate.ExecutablePath, $TargetExePath, [StringComparison]::OrdinalIgnoreCase)) {
+            return $candidate
+        }
+    }
+    if ($candidates.Count -eq 1) {
+        return $candidates[0]
+    }
+    return $null
+}
+
 # Env vars for the cluster
 $envVars = @{
     DXC_CONFIG_PATH = $configDir
@@ -36,23 +79,63 @@ $envVars = @{
     GOGC = $goGC
 }
 
-# Start the cluster in a new window so the console UI stays visible.
-$startInfo = New-Object System.Diagnostics.ProcessStartInfo
-$startInfo.FileName = $exePath
-$startInfo.WorkingDirectory = $repoRoot
-$startInfo.UseShellExecute = $false  # required to apply EnvironmentVariables
-$startInfo.Arguments = ""
-foreach ($k in $envVars.Keys) { $startInfo.EnvironmentVariables[$k] = $envVars[$k] }
+# Start the cluster through a wrapper in a new terminal so the UI owns its console.
+$launcherPath = Join-Path $logsDir ("gocluster-profile-launch-$launchTs.ps1")
+$launcherLines = @(
+    '$ErrorActionPreference = ''Stop'''
+    "Set-Location -LiteralPath $(Quote-PowerShellLiteral $repoRoot)"
+)
+foreach ($k in ($envVars.Keys | Sort-Object)) {
+    $launcherLines += ('$env:{0} = {1}' -f $k, (Quote-PowerShellLiteral $envVars[$k]))
+}
+$launcherLines += "& $(Quote-PowerShellLiteral $exePath)"
+$launcherLines += 'exit $LASTEXITCODE'
+Set-Content -Path $launcherPath -Value $launcherLines -Encoding ASCII
 
-$proc = [System.Diagnostics.Process]::Start($startInfo)
-if (-not $proc) { Write-Error "Failed to start gocluster"; exit 1 }
+try {
+    $launcherProc = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList @("-NoLogo", "-ExecutionPolicy", "Bypass", "-File", $launcherPath) `
+        -WorkingDirectory $repoRoot `
+        -WindowStyle Normal `
+        -PassThru
+} catch {
+    Write-ProfilerWarning "Failed to start gocluster launcher terminal: $_"
+    exit 1
+}
+if (-not $launcherProc) {
+    Write-ProfilerWarning "Failed to start gocluster launcher terminal"
+    exit 1
+}
 
-Write-Host "gocluster started (PID=$($proc.Id)); pprof at http://$pprofAddr; GOMEMLIMIT=$goMemLimit; GOGC=$goGC"
+$clusterProcessInfo = $null
+for ($i = 0; $i -lt 30; $i++) {
+    $clusterProcessInfo = Get-ClusterProcessByParent -ParentPid $launcherProc.Id -TargetExePath $exePath
+    if ($clusterProcessInfo) {
+        break
+    }
+    if ($launcherProc.HasExited) {
+        break
+    }
+    Start-Sleep -Seconds 1
+}
+if (-not $clusterProcessInfo) {
+    Write-ProfilerWarning "Unable to discover child gocluster.exe process for launcher PID $($launcherProc.Id); see $launcherPath"
+    exit 1
+}
 
-$launchTs = Get-Date -Format "yyyyMMdd-HHmmss"
-$osSamplePath = Join-Path $logsDir ("os-process-$launchTs-pid$($proc.Id).csv")
-$osSampleWarningPath = Join-Path $logsDir ("os-process-$launchTs-pid$($proc.Id).warnings.log")
-$osSamplerJob = Start-Job -ArgumentList $proc.Id, $osSampleSeconds, $osSamplePath, $osSampleWarningPath, [Environment]::ProcessorCount -ScriptBlock {
+$targetPid = [int]$clusterProcessInfo.ProcessId
+$proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
+if (-not $proc) {
+    Write-ProfilerWarning "Discovered gocluster.exe PID $targetPid, but the process is no longer running"
+    exit 1
+}
+
+Write-ProfilerInfo "gocluster started in separate terminal (launcher PID=$($launcherProc.Id), gocluster PID=$targetPid); pprof at http://$pprofAddr; GOMEMLIMIT=$goMemLimit; GOGC=$goGC"
+Write-ProfilerInfo "Profiler controller log -> $controllerLogPath"
+
+$osSamplePath = Join-Path $logsDir ("os-process-$launchTs-pid$targetPid.csv")
+$osSampleWarningPath = Join-Path $logsDir ("os-process-$launchTs-pid$targetPid.warnings.log")
+$osSamplerJob = Start-Job -ArgumentList $targetPid, $osSampleSeconds, $osSamplePath, $osSampleWarningPath, [Environment]::ProcessorCount -ScriptBlock {
     param($targetPid, $sampleSeconds, $csvPath, $warningPath, $processorCount)
 
     $previous = $null
@@ -118,7 +201,7 @@ $osSamplerJob = Start-Job -ArgumentList $proc.Id, $osSampleSeconds, $osSamplePat
     }
 }
 
-Write-Host "OS process sampling every ${osSampleSeconds}s -> $osSamplePath"
+Write-ProfilerInfo "OS process sampling every ${osSampleSeconds}s -> $osSamplePath"
 
 # Wait for pprof to come up
 $pprofUrl = "http://$pprofAddr/debug/pprof/"
@@ -130,7 +213,7 @@ for ($i=0; $i -lt 15; $i++) {
         break
     } catch { Start-Sleep -Seconds 2 }
 }
-if (-not $ready) { Write-Warning "pprof endpoint not reachable yet; proceeding anyway" }
+if (-not $ready) { Write-ProfilerWarning "pprof endpoint not reachable yet; proceeding anyway" }
 
 function Get-CPUProfile {
     param($seconds, $destPath, $addr)
@@ -180,41 +263,41 @@ while (-not $proc.HasExited) {
     $dest = Join-Path $logsDir ("cpu-$ts.pprof")
     try {
         Get-CPUProfile -seconds $profileSeconds -destPath $dest -addr $pprofAddr
-        Write-Host "Captured CPU profile -> $dest"
+        Write-ProfilerInfo "Captured CPU profile -> $dest"
     } catch {
-        Write-Warning "CPU profile capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "CPU profile capture failed at ${ts}: $($_)"
     }
 
     $heapDest = Join-Path $logsDir ("heap-$ts.pprof")
     try {
         Get-HeapProfile -destPath $heapDest -addr $pprofAddr
-        Write-Host "Captured heap profile -> $heapDest"
+        Write-ProfilerInfo "Captured heap profile -> $heapDest"
     } catch {
-        Write-Warning "Heap profile capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Heap profile capture failed at ${ts}: $($_)"
     }
 
     $allocsDest = Join-Path $logsDir ("allocs-$ts.pprof")
     try {
         Get-AllocsProfile -destPath $allocsDest -addr $pprofAddr
-        Write-Host "Captured allocs profile -> $allocsDest"
+        Write-ProfilerInfo "Captured allocs profile -> $allocsDest"
     } catch {
-        Write-Warning "Allocs profile capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Allocs profile capture failed at ${ts}: $($_)"
     }
 
     $blockDest = Join-Path $logsDir ("block-$ts.pprof")
     try {
         Get-BlockProfile -destPath $blockDest -addr $pprofAddr
-        Write-Host "Captured block profile -> $blockDest"
+        Write-ProfilerInfo "Captured block profile -> $blockDest"
     } catch {
-        Write-Warning "Block profile capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Block profile capture failed at ${ts}: $($_)"
     }
 
     $mutexDest = Join-Path $logsDir ("mutex-$ts.pprof")
     try {
         Get-MutexProfile -destPath $mutexDest -addr $pprofAddr
-        Write-Host "Captured mutex profile -> $mutexDest"
+        Write-ProfilerInfo "Captured mutex profile -> $mutexDest"
     } catch {
-        Write-Warning "Mutex profile capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Mutex profile capture failed at ${ts}: $($_)"
     }
 
     $gorDest = Join-Path $logsDir ("goroutine-$ts.txt")
@@ -222,20 +305,20 @@ while (-not $proc.HasExited) {
         Get-GoroutineProfile -destPath $gorDest -addr $pprofAddr -debugLevel 1
         $firstLine = Get-Content -Path $gorDest -TotalCount 1
         if ($firstLine -match "total\\s+(\\d+)") {
-            Write-Host "Captured goroutine dump -> $gorDest (total=$($matches[1]))"
+            Write-ProfilerInfo "Captured goroutine dump -> $gorDest (total=$($matches[1]))"
         } else {
-            Write-Host "Captured goroutine dump -> $gorDest"
+            Write-ProfilerInfo "Captured goroutine dump -> $gorDest"
         }
     } catch {
-        Write-Warning "Goroutine capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Goroutine capture failed at ${ts}: $($_)"
     }
 
     $traceDest = Join-Path $logsDir ("trace-$ts.out")
     try {
         Get-TraceProfile -seconds $traceSeconds -destPath $traceDest -addr $pprofAddr
-        Write-Host "Captured trace profile -> $traceDest"
+        Write-ProfilerInfo "Captured trace profile -> $traceDest"
     } catch {
-        Write-Warning "Trace capture failed at ${ts}: $($_)"
+        Write-ProfilerWarning "Trace capture failed at ${ts}: $($_)"
     }
 
     # Sleep, but break early if the process exits
@@ -250,4 +333,4 @@ if ($osSamplerJob) {
     Remove-Job -Job $osSamplerJob -Force
 }
 
-Write-Host "gocluster exited; stopping capture loop."
+Write-ProfilerInfo "gocluster exited; stopping capture loop."

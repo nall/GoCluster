@@ -40,3 +40,5 @@ data/config/openai.yaml
 .claude/
 .vscode/
 NUL
+data/cty/cty.plist.status.json
+data/skm_correction/rbnskew.json
