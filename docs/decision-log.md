@@ -15,7 +15,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0079 | WHOSPOTSME Optional Band and Compact Output | Accepted | 2026-04-24 | commands, docs | ADR-0071 (operator command/output contract) | - | `docs/decisions/ADR-0079-whospotsme-optional-band-compact-output.md` |
 | ADR-0078 | Release Package Clean Source Gate | Accepted | 2026-04-24 | release packaging, build reproducibility | - | - | `docs/decisions/ADR-0078-release-package-clean-source-gate.md` |
 | ADR-0077 | Compile-Date Binary Version | Accepted | 2026-04-24 | build metadata, release packaging, operator console | - | - | `docs/decisions/ADR-0077-compile-date-binary-version.md` |
-| ADR-0076 | GitHub Release Package | Accepted | 2026-04-24 | release packaging, deployment, GitHub Actions | - | - | `docs/decisions/ADR-0076-github-release-package.md` |
+| ADR-0076 | GitHub Release Package | Accepted | 2026-04-24 | release packaging, deployment, GitHub Releases | - | - | `docs/decisions/ADR-0076-github-release-package.md` |
 | ADR-0075 | Output Pipeline Context Allocation | Accepted | 2026-04-24 | main output pipeline, FT confidence, allocation | - | - | `docs/decisions/ADR-0075-output-pipeline-context-allocation.md` |
 | ADR-0074 | Go Runtime Memory Tuning | Accepted | 2026-04-24 | config, startup, runtime memory | - | - | `docs/decisions/ADR-0074-go-runtime-memory-tuning.md` |
 | ADR-0073 | Root Live-Runtime Boundary and Root Artifact Hygiene | Accepted | 2026-04-23 | repo structure, internal/cluster, cmd, docs | - | - | `docs/decisions/ADR-0073-root-live-runtime-boundary-and-root-artifact-hygiene.md` |

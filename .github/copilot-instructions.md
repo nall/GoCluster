@@ -24,11 +24,15 @@ Config conventions
   - `admin.http_port`, `admin.bind_address` (config present but no admin server implemented yet)
 
 Build / run / debug
-- Build release packages with the repository script so binary identity is
+- Create release packages with the repository script so binary identity is
   stamped as `vYY.DD.MM-<12-char-commit>[+dirty]`:
   - Windows/PowerShell example:
     ```powershell
-    .\scripts\build-release-package.ps1 -OutputDir dist
+    .\scripts\create-release.ps1 -PackageOnly -AllowDirty
+    ```
+  - Real publishing uses a clean committed tree and GitHub CLI authentication:
+    ```powershell
+    .\scripts\create-release.ps1
     ```
 - Run directly for development:
   - `go run .` (the default `config.yaml` is loaded from the current working directory)

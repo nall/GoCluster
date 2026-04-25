@@ -2,6 +2,16 @@
 
 GoCluster is a Go-based DX cluster for amateur radio operators. It collects spots from skimmer and operator feeds, adds CTY metadata, applies protection and cleanup stages, and serves fixed-width telnet output with filtering, confidence tags, and optional path hints.
 
+## Download
+
+Compiled Windows packages are published on GitHub Releases when a release has
+been created. Start here:
+
+[`download/README.md`](download/README.md)
+
+Download the `gocluster-windows-amd64.zip` release asset, extract it, and open
+the `ready_to_run/` directory.
+
 ## HELP
 
 The section below mirrors the default `go` dialect `HELP` output from [`commands/processor.go`](commands/processor.go) using the shipped config in [`data/config`](data/config).
@@ -165,10 +175,11 @@ The propagation-report tool uses the same directory with `-config-dir`; the olde
 
 ## Release Package
 
-GitHub Releases publish a Windows amd64 zip for simple deployments. Download
-`gocluster-windows-amd64.zip`, extract it, open the `ready_to_run` directory,
-copy the packaged public example `data/config` to your private config
-directory, edit the YAML, then run:
+GitHub Releases publish a Windows amd64 zip for simple deployments. See
+[`download/README.md`](download/README.md) for the direct download path.
+Download `gocluster-windows-amd64.zip`, extract it, open the `ready_to_run`
+directory, copy the packaged public example `data/config` to your private
+config directory, edit the YAML, then run:
 
 ```pwsh
 $env:DXC_CONFIG_PATH = "data/config.local"
@@ -188,16 +199,27 @@ developer/process documentation.
 Developers and advanced users can keep using the source checkout normally:
 `go build .` remains the live binary build path from the repo root, and
 `DXC_CONFIG_PATH` can point the binary at an alternate config directory.
-The release packaging script refuses a dirty worktree by default and runs
-`go mod tidy -diff` before staging or compiling the package. Use `-AllowDirty`
-only for local test packages. Local script runs write the runnable directory to
-repo-root `ready_to_run/` and the zip to repo-root
-`gocluster-windows-amd64.zip` by default. Scripted builds stamp the console and
-`--version` binary identity as `vYY.DD.MM-<12-char-commit>[+dirty]` using the
-UTC compile date; the `+dirty` suffix is only expected for explicit
-`-AllowDirty` local test packages. Unflagged `go build .` binaries use the same
-display shape from Go VCS metadata when linker-stamped compile time is
-unavailable.
+Create a release from a clean committed tree with:
+
+```pwsh
+.\scripts\create-release.ps1
+```
+
+The script refuses a dirty worktree, runs `go mod tidy -diff`, builds
+repo-root `ready_to_run/`, writes `gocluster-windows-amd64.zip`, creates and
+pushes a Git tag, and publishes the GitHub Release asset. The same generated
+identity is used for the binary version, Git tag, and GitHub Release:
+`vYY.DD.MM-<12-char-commit>`.
+
+For local package testing only, use:
+
+```pwsh
+.\scripts\create-release.ps1 -PackageOnly -AllowDirty
+```
+
+Dirty package-only builds are stamped with `+dirty`. Unflagged `go build .`
+binaries use the same display shape from Go VCS metadata when linker-stamped
+compile time is unavailable.
 
 ## Dedupe Policies
 

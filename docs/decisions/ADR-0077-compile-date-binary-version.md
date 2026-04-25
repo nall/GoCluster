@@ -23,8 +23,8 @@ Use `vYY.DD.MM-<12-char-commit>[+dirty]` as the operator-visible binary
 version. The date is the UTC compile date for scripted builds, and `+dirty` is
 included when the Git working tree had changes at build time.
 
-Release tags remain GitHub distribution labels. They do not become the binary's
-runtime `Version` field.
+The release script uses the same generated value for the binary's runtime
+`Version` field, the Git tag, and the GitHub Release name.
 
 The runtime resolver keeps a no-ldflags fallback for plain `go build .`: when
 linker-stamped compile time is unavailable, it derives the same display shape
@@ -42,13 +42,15 @@ from Go VCS metadata rather than exposing the module pseudo-version directly.
 
 - All supported build scripts produce the same concise operator-visible
   identity format.
-- UTC date semantics match existing UTC build timestamps and GitHub Actions.
+- UTC date semantics match existing UTC build timestamps and scripted release
+  builds.
 - The short commit reference keeps the console header readable while preserving
   practical traceability.
 
 ### Risks
 
-- GitHub release tags and runtime binary versions intentionally differ.
+- Release tags and runtime binary versions are intentionally aligned for
+  scripted releases.
 - Plain `go build .` cannot embed true compile time without linker flags, so
   its fallback date is derived from Go VCS metadata.
 
@@ -65,6 +67,6 @@ from Go VCS metadata rather than exposing the module pseudo-version directly.
 
 - Related issues/PRs/commits:
 - Related tests: `go test .`
-- Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`, `scripts/consolidate-and-build-pgo.ps1`, `docs/decisions/ADR-0078-release-package-clean-source-gate.md`
+- Related docs: `README.md`, `scripts/create-release.ps1`, `scripts/consolidate-and-build-pgo.ps1`, `docs/decisions/ADR-0078-release-package-clean-source-gate.md`
 - Related TSRs:
 - Supersedes / superseded by:

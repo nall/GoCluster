@@ -1,8 +1,10 @@
 param(
+    [switch]$PackageOnly,
+    [switch]$AllowDirty,
     [string]$OutputDir = ".",
     [string]$PackageName = "gocluster-windows-amd64",
     [string]$PackageDirectoryName = "ready_to_run",
-    [switch]$AllowDirty
+    [string]$Remote = "origin"
 )
 
 Set-StrictMode -Version Latest
@@ -14,6 +16,19 @@ function Resolve-RepoRoot {
         throw "Unable to resolve repository root with git."
     }
     return $root.Trim()
+}
+
+function Invoke-CheckedCommand {
+    param(
+        [string]$CommandName,
+        [string[]]$Arguments,
+        [string]$FailureMessage
+    )
+
+    & $CommandName @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw $FailureMessage
+    }
 }
 
 function Assert-CleanWorktree {
@@ -29,12 +44,52 @@ function Assert-CleanWorktree {
 
     if ($status.Count -gt 0 -and -not $AllowDirty) {
         throw @"
-Refusing to build a release package from a dirty worktree.
-Commit or stash local changes before packaging, or rerun with -AllowDirty for a local test package.
+Refusing to create a release from a dirty worktree.
+Commit or stash local changes before release, or rerun with -PackageOnly -AllowDirty for a local test package.
 "@
     }
 
     return $status
+}
+
+function Assert-GoModulesTidy {
+    Invoke-GoRunHost -Arguments @("mod", "tidy", "-diff")
+}
+
+function Assert-GitHubCliReady {
+    if ($null -eq (Get-Command gh -ErrorAction SilentlyContinue)) {
+        throw "GitHub CLI 'gh' is required to publish a release. Install gh and run 'gh auth login'."
+    }
+
+    & gh auth status
+    if ($LASTEXITCODE -ne 0) {
+        throw "GitHub CLI is not authenticated. Run 'gh auth login' before creating a release."
+    }
+}
+
+function Assert-ReleaseTargetsAvailable {
+    param(
+        [string]$Remote,
+        [string]$Version
+    )
+
+    & git rev-parse -q --verify "refs/tags/$Version" | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        throw "Local tag $Version already exists."
+    }
+
+    & git ls-remote --exit-code --tags $Remote "refs/tags/$Version" | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        throw "Remote tag $Version already exists on $Remote."
+    }
+    if ($LASTEXITCODE -ne 2) {
+        throw "Unable to check remote tag $Version on $Remote."
+    }
+
+    & gh release view $Version | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        throw "GitHub Release $Version already exists."
+    }
 }
 
 function Copy-TrackedPayload {
@@ -147,10 +202,6 @@ function Invoke-GoRunHost {
             $env:GOARCH = $oldGOARCH
         }
     }
-}
-
-function Assert-GoModulesTidy {
-    Invoke-GoRunHost -Arguments @("mod", "tidy", "-diff")
 }
 
 function Render-ReleaseReadme {
@@ -276,6 +327,65 @@ function Assert-PublicReleaseConfig {
         -Description "data/config/reputation.yaml ipinfo_api_token"
 }
 
+function New-ReleaseNotes {
+    param(
+        [string]$Version,
+        [string]$Commit,
+        [string]$BuildTime
+    )
+
+    return @"
+GoCluster $Version
+
+- Commit: $Commit
+- Built: $BuildTime
+- Asset: $PackageName.zip
+
+Extract the asset and open the $PackageDirectoryName directory.
+"@
+}
+
+function Publish-GitHubRelease {
+    param(
+        [string]$Version,
+        [string]$Commit,
+        [string]$ZipPath,
+        [string]$Remote,
+        [string]$BuildTime
+    )
+
+    Invoke-CheckedCommand -CommandName "git" `
+        -Arguments @("tag", "-a", $Version, "-m", "Release $Version") `
+        -FailureMessage "Failed to create tag $Version."
+    try {
+        Invoke-CheckedCommand -CommandName "git" `
+            -Arguments @("push", $Remote, $Version) `
+            -FailureMessage "Failed to push tag $Version to $Remote."
+
+        $notes = New-ReleaseNotes -Version $Version -Commit $Commit -BuildTime $BuildTime
+        Invoke-CheckedCommand -CommandName "gh" `
+            -Arguments @(
+                "release",
+                "create",
+                $Version,
+                $ZipPath,
+                "--title",
+                $Version,
+                "--notes",
+                $notes
+            ) `
+            -FailureMessage "Failed to create GitHub Release $Version."
+    }
+    catch {
+        Write-Warning "Release publishing failed after creating local tag $Version. Inspect local/remote tag state before retrying."
+        throw
+    }
+}
+
+if ($AllowDirty -and -not $PackageOnly) {
+    throw "-AllowDirty is only permitted with -PackageOnly."
+}
+
 $repoRoot = Resolve-RepoRoot
 Push-Location $repoRoot
 try {
@@ -288,8 +398,13 @@ try {
         $dirtySuffix = "+dirty"
     }
     $buildUtc = (Get-Date).ToUniversalTime()
-    $Version = "v$($buildUtc.ToString("yy.dd.MM"))-$commit$dirtySuffix"
+    $version = "v$($buildUtc.ToString("yy.dd.MM"))-$commit$dirtySuffix"
     $buildTime = $buildUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    if (-not $PackageOnly) {
+        Assert-GitHubCliReady
+        Assert-ReleaseTargetsAvailable -Remote $Remote -Version $version
+    }
 
     $outputRoot = Join-Path $repoRoot $OutputDir
     $stageRoot = Join-Path $repoRoot $PackageDirectoryName
@@ -324,7 +439,7 @@ try {
     Assert-ForbiddenPayloadAbsent -StageRoot $stageRoot
 
     $exePath = Join-Path $stageRoot "gocluster.exe"
-    $ldflags = "-X main.Version=$Version -X main.Commit=$commit -X main.BuildTime=$buildTime"
+    $ldflags = "-X main.Version=$version -X main.Commit=$commit -X main.BuildTime=$buildTime"
 
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
@@ -340,7 +455,17 @@ try {
     finally {
         Pop-Location
     }
+
     Write-Host "Release package: $zipPath"
+    Write-Host "Release version: $version"
+
+    if ($PackageOnly) {
+        Write-Host "Package-only mode: no tag, push, or GitHub Release was created."
+    }
+    else {
+        Publish-GitHubRelease -Version $version -Commit $commit -ZipPath $zipPath -Remote $Remote -BuildTime $buildTime
+        Write-Host "Published GitHub Release: $version"
+    }
 }
 finally {
     Pop-Location

@@ -14,14 +14,19 @@ metadata can make a release build depend on implicit local cleanup.
 
 ## Decision
 
-The release packaging script fails by default when `git status --porcelain`
-reports any uncommitted worktree changes. It also runs `go mod tidy -diff`
-before staging or compiling; any required module-file change fails the package
-build without modifying files.
+The release script fails by default when `git status --porcelain` reports any
+uncommitted worktree changes. It also runs `go mod tidy -diff` before staging
+or compiling; any required module-file change fails the package build without
+modifying files.
 
-For local validation only, the script accepts `-AllowDirty`. Dirty local test
-packages keep the existing `+dirty` version suffix so they are visibly distinct
-from clean release packages.
+For local validation only, the script accepts `-PackageOnly -AllowDirty`. Dirty
+local test packages keep the existing `+dirty` version suffix so they are
+visibly distinct from clean release packages. Publishing never allows dirty
+source.
+
+Generated release outputs stay out of Git history. The repository provides a
+tracked `download/README.md` pointer to GitHub Releases instead of committing
+`ready_to_run/` or `gocluster-windows-amd64.zip`.
 
 ## Alternatives considered
 
@@ -34,10 +39,15 @@ from clean release packages.
 ### Benefits
 
 - Normal release packages correspond to committed source.
-- GitHub Actions and local release builds use the same non-interactive policy.
+- Release publishing and local package-only builds use the same
+  non-interactive cleanliness policy.
 - Module hygiene problems are reported before a zip is created.
 - Local test packages remain possible, but require an explicit switch and are
   marked in the binary version.
+- Publishing is centralized in one script rather than split between local
+  packaging and a tag-triggered workflow.
+- Git visitors can find the compiled binary from a tracked download pointer
+  without adding generated artifacts to commits.
 
 ### Risks
 
@@ -51,11 +61,13 @@ from clean release packages.
   path.
 - A binary version ending in `+dirty` means the package came from an explicit
   local test build, not the default release path.
+- `download/README.md` is the Git-visible download entry point; Releases remain
+  the binary distribution surface.
 
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go mod tidy -diff`, `scripts/build-release-package.ps1`, `scripts/build-release-package.ps1 -AllowDirty`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`
-- Related docs: `README.md`, `scripts/build-release-package.ps1`, `docs/decisions/ADR-0076-github-release-package.md`, `docs/decisions/ADR-0077-compile-date-binary-version.md`
+- Related tests: `go mod tidy -diff`, `scripts/create-release.ps1 -PackageOnly -AllowDirty`, `scripts/create-release.ps1` dirty-worktree failure check
+- Related docs: `README.md`, `download/README.md`, `scripts/create-release.ps1`, `docs/decisions/ADR-0076-github-release-package.md`, `docs/decisions/ADR-0077-compile-date-binary-version.md`
 - Related TSRs:
 - Supersedes / superseded by:

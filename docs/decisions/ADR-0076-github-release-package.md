@@ -52,22 +52,34 @@ The zip-root `README.md` is rendered during packaging from the staged
 This prevents the release instructions from drifting away from the packaged
 YAML.
 
-Release packages are built from committed, module-tidy source by default. The
-packaging script refuses a dirty worktree, runs `go mod tidy -diff` without
-modifying files, and always compiles a fresh Windows amd64 binary before
-creating the zip. `-AllowDirty` is reserved for local test packages and visibly
-marks the resulting binary version with `+dirty`.
+Release packages are created by the single release script
+`scripts/create-release.ps1`. The script refuses a dirty worktree, runs
+`go mod tidy -diff` without modifying files, compiles a fresh Windows amd64
+binary, creates `ready_to_run/`, creates `gocluster-windows-amd64.zip`, creates
+and pushes the Git tag, and publishes the GitHub Release asset. The generated
+identity is used consistently as the binary version, Git tag, and GitHub
+Release name.
 
-Local package builds create the runnable directory at repo-root `ready_to_run/`
-and write `gocluster-windows-amd64.zip` at the repo root by default. The
-GitHub workflow may still pass a zip output directory such as `dist`; that does
-not move the repo-root `ready_to_run/` staging directory.
+Local package-only builds use `scripts/create-release.ps1 -PackageOnly`.
+`-AllowDirty` is reserved for package-only testing and visibly marks the
+resulting binary version with `+dirty`.
+
+Local script runs create the runnable directory at repo-root `ready_to_run/`
+and write `gocluster-windows-amd64.zip` at the repo root by default.
+
+The source tree includes a tracked `download/README.md` so visitors can see the
+download path directly from Git. That file points to GitHub Releases and the
+`gocluster-windows-amd64.zip` asset. The generated zip and `ready_to_run/`
+directory remain untracked build artifacts.
 
 ## Alternatives considered
 
 1. Zip the whole repo or whole `data` directory.
 2. Check a deployable `dist/` folder into the repository.
 3. Publish only a GitHub Actions artifact instead of a GitHub Release asset.
+4. Commit `gocluster-windows-amd64.zip` directly to the source tree.
+5. Keep a tag-triggered GitHub Actions publisher in addition to the release
+   script.
 
 ## Consequences
 
@@ -78,9 +90,13 @@ not move the repo-root `ready_to_run/` staging directory.
   runnable directory has an operator-oriented name.
 - Local maintainers can inspect or copy the repo-root `ready_to_run/` directory
   without digging through temporary validation output.
+- Git visitors have a tracked `download/README.md` pointer to the binary
+  release asset without storing generated binaries in source history.
 - Release contents are reproducible from committed inputs.
 - The default script path fails before staging if local edits or stale module
   metadata would make the artifact differ from committed source.
+- One command creates the local package, tag, pushed tag, GitHub Release, and
+  uploaded asset.
 - Runtime state and secrets are excluded by construction.
 - Source developers keep the current repo layout and build workflow.
 - Normal GitHub commits and release packages use the same public config policy,
@@ -94,16 +110,25 @@ not move the repo-root `ready_to_run/` staging directory.
   dependencies are added without updating release packaging.
 - Windows amd64 only is intentionally narrow; other platforms need a later
   decision and validation pass.
-- Manual workflow dispatch depends on using an existing release tag.
+- The release script depends on the GitHub CLI being installed and
+  authenticated.
+- If publishing fails after tag creation or tag push, the operator must inspect
+  local and remote tag state before retrying.
 - The bundled docs are intentionally incomplete; operators need GitHub for
   detailed architecture, package-local internals, ADRs, and troubleshooting
   history.
+- The source tree depends on GitHub Releases for the actual binary download;
+  repository browsers must follow the tracked download pointer.
 
 ### Operational impact
 
 - Binary and packaged config should be deployed and rolled back together.
 - Operators should run the executable from the extracted `ready_to_run`
   directory.
+- Maintainers create releases with `scripts/create-release.ps1`; package-only
+  validation uses `scripts/create-release.ps1 -PackageOnly`.
+- Git visitors should use `download/README.md` to find the latest compiled
+  release package.
 - The release package does not include learned runtime Pebble data; stores and
   downloads are created or refreshed by runtime behavior according to YAML.
 - Operators should copy the packaged public config to a private config
@@ -118,7 +143,7 @@ not move the repo-root `ready_to_run/` staging directory.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test ./config`, `scripts/build-release-package.ps1 -AllowDirty`, zip payload inspection for repo-root `ready_to_run/`, `scripts/build-release-package.ps1 -AllowDirty -OutputDir .tmp\release-validation`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
-- Related docs: `README.md`, `.github/workflows/release.yml`, `scripts/build-release-package.ps1`
+- Related tests: `go test ./config`, `scripts/create-release.ps1 -PackageOnly -AllowDirty`, zip payload inspection for repo-root `ready_to_run/`, `go test ./...`, `go vet ./...`, `staticcheck ./...`, `golangci-lint run ./... --config=.golangci.yaml`
+- Related docs: `README.md`, `download/README.md`, `scripts/create-release.ps1`
 - Related TSRs:
 - Supersedes / superseded by:
