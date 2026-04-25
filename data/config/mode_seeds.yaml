@@ -1,4 +1,15 @@
-# Derived from C:\Ham\frequencies.ini (FT4/FT8/JS8 only; FT8 wins ties)
+# Seeded digital frequency hints for mode inference.
+#
+# These seeds are used only after explicit mode tokens and recent trusted
+# DX+frequency evidence fail to identify a mode. They help classify common
+# FT4/FT8/JS8 dial frequencies before enough live evidence is learned.
+#
+# Values are in kHz and are matched as exact seed frequencies by the runtime
+# mode-inference code. Keep this table limited to stable dial-frequency hints;
+# use spot_taxonomy.yaml for mode capability/routing and iaru_mode_inference.yaml
+# for final region-aware CW/voice/mixed frequency policy.
+#
+# Original source note: derived from C:\Ham\frequencies.ini. FT8 wins ties.
 mode_inference:
   digital_seeds:
     # 6m

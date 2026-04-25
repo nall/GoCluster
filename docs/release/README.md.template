@@ -1,17 +1,29 @@
 # GoCluster Release Package
 
-This zip is the small operator package for Windows amd64. It contains the
-server executable, public example config, required runtime reference data, and a
-small operator documentation bundle.
+This zip is the ready-to-run Windows amd64 operator package. It contains
+`gocluster.exe`, public example config, required runtime reference data, and a
+small documentation bundle.
 
 ## Configure
 
 The packaged `data/config` directory is public example config. For a real node:
 
-1. Copy `data/config` to a private config directory such as `data/config.local`.
-2. Edit the private copy with your callsigns, telnet port, spot sources, peer
+1. Copy `data/config` to a private complete config directory such as
+   `data/config.local`.
+2. Edit the private copy with your node ID, telnet port, spot sources, peer
    hosts/passwords, and service tokens.
 3. Keep private config out of Git and out of shared zip archives.
+
+Minimum files to review:
+
+- `app.yaml`: server identity, UI/headless mode, and logging paths.
+- `runtime.yaml`: telnet port, default filters, buffers, and memory controls.
+- `ingest.yaml`: RBN, PSKReporter, DXSummit, and human/manual ingest settings.
+- `peering.yaml`: only if peering with other clusters is used.
+- `reputation.yaml`: only if IPinfo/Cymru enrichment is enabled.
+- `solarweather.yaml`: only if solar/geomagnetic path overrides are enabled.
+- `data.yaml`: data paths when this deployment layout differs.
+- `spot_taxonomy.yaml`: only when changing modes, events, or PSKReporter mode routing.
 
 The config loader expects a complete directory. If you use `DXC_CONFIG_PATH`,
 point it at the whole private config directory, not at one YAML file.
@@ -30,18 +42,44 @@ run `.\gocluster.exe` directly.
 
 ## Connect
 
-Use a telnet client against the configured telnet port from the packaged
-`data/config/runtime.yaml`, then log in with your callsign:
+Use a telnet client against the configured telnet port, then log in with your
+callsign:
 
 ```text
 telnet localhost {{ .TelnetPort }}
 ```
 
-After login, type `HELP` for the command list.
+After login, type `HELP` for the command list. Useful first commands:
+
+- `SHOW MYDX` or `SHOW DX`: show filtered spot history.
+- `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
+- `SHOW FILTER`: display active filters.
+- `PASS <type> <list>` and `REJECT <type> <list>`: adjust filters.
+- `SHOW DEDUPE` and `SET DEDUPE FAST|MED|SLOW`: inspect or change duplicate suppression.
+- `BYE`: disconnect.
+
+## Linux
+
+This release package is Windows amd64 only. Linux operators should build from
+source with Go `1.26+`:
+
+```sh
+GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
+```
+
+For `systemd`, run with a private config directory, set `DXC_CONFIG_PATH`, and
+use `ui.mode: headless` in `app.yaml`. Service logs are available with:
+
+```sh
+journalctl -u gocluster -f
+```
+
+The interactive local console requires running the process in a real terminal,
+not as a normal unattended service.
 
 ## Included Docs
 
-- `docs/OPERATOR_GUIDE.md` - one-page operator guide.
+- `docs/OPERATOR_GUIDE.md` - practical operator guide.
 - `data/config/README.md` - config file layout and loader rules.
 
 For full documentation, source, issues, and release history, use GitHub:

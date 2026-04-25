@@ -15,14 +15,15 @@ The handshake transcript tests in this package cover the visible login sequence.
 
 Spot lines are formatted in [`../spot/spot.go`](../spot/spot.go) and sent by the telnet layer.
 
-Key operator-visible facts:
+Key operator-visible facts for the shipped config:
 
-- default line length is `78` characters before CRLF
+- `data/config/runtime.yaml` sets `telnet.output_line_length: 76`, so spot
+  lines are `76` characters before CRLF
 - mode starts at 1-based column `40`
 - the fixed tail holds:
-  - grid at column `67`
-  - confidence at column `72`
-  - time at column `74`
+  - grid at column `65`
+  - confidence at column `70`
+  - time at column `72`
 - the telnet layer normalizes line endings to CRLF
 
 The formatter keeps the right-side tail stable by truncating comment text before it can push the grid, confidence, or time columns around.

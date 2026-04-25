@@ -2,18 +2,167 @@
 
 GoCluster is a Go-based DX cluster for amateur radio operators. It collects spots from skimmer and operator feeds, adds CTY metadata, applies protection and cleanup stages, and serves fixed-width telnet output with filtering, confidence tags, and optional path hints.
 
-## Download
+## Download Latest Ready-To-Run Binary
 
-Compiled Windows packages are published on GitHub Releases when a release has
-been created. Start here:
+Compiled ready-to-run packages are published on GitHub Releases. The current
+published binary package is Windows amd64:
 
-[`download/README.md`](download/README.md)
-
-Download the `gocluster-windows-amd64.zip` release asset, extract it, and open
-the `ready_to_run/` directory.
+1. Open the latest release:
+   [`https://github.com/N2WQ/GoCluster/releases/latest`](https://github.com/N2WQ/GoCluster/releases/latest)
+2. Download the release asset named `gocluster-windows-amd64.zip`.
+3. Extract the zip and open the `ready_to_run/` directory.
+4. Start with the packaged `ready_to_run/README.md`.
 
 Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
-downloads unless you want the developer source tree.
+downloads unless you want the developer source tree. Those archives are not the
+ready-to-run package.
+
+More detail is in [`download/README.md`](download/README.md).
+
+## Configure A Real Node
+
+The checked-in [`data/config`](data/config) directory is public example config.
+For a real node, copy the whole directory to a private complete config
+directory such as ignored `data/config.local`, edit that private copy, and run
+with `DXC_CONFIG_PATH` pointing at the directory:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+```
+
+Minimum files to review before running a real node:
+
+- `app.yaml`: set `server.node_id`, choose local UI mode, and confirm log paths.
+- `runtime.yaml`: confirm telnet port, filter defaults, buffers, and memory controls.
+- `ingest.yaml`: configure RBN, PSKReporter, DXSummit, and local/human ingest settings.
+- `peering.yaml`: edit only if this node peers with other clusters.
+- `reputation.yaml`: edit only if IPinfo/Cymru reputation enrichment is enabled.
+- `solarweather.yaml`: edit only if solar/geomagnetic path overrides are enabled.
+- `data.yaml`: adjust CTY, FCC, H3, skew, and data paths if your deployment layout differs.
+- `spot_taxonomy.yaml`: edit only when changing supported modes, event families, or PSKReporter mode routing.
+
+The loader expects a complete config directory, rejects unknown YAML files and
+unknown keys, and fails fast when required YAML-owned settings or reference
+tables are missing. Keep private callsigns, peer hostnames/IPs, passwords, and
+tokens out of committed example config.
+
+See [`data/config/README.md`](data/config/README.md) for the full config layout.
+
+## Run And Connect
+
+From a ready-to-run Windows package:
+
+```pwsh
+cd ready_to_run
+$env:DXC_CONFIG_PATH = "data/config.local"
+.\gocluster.exe
+```
+
+From a source checkout:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+go run .
+```
+
+Then connect with telnet using the configured port from
+`data/config/runtime.yaml`:
+
+```text
+telnet localhost 8300
+```
+
+Log in with your callsign and type `HELP`.
+
+## Build From Source
+
+GoCluster builds from the repo root with Go `1.26+`.
+
+Windows amd64 binary:
+
+```pwsh
+go test ./...
+go build -trimpath -o gocluster.exe .
+```
+
+Windows release-style package for local testing:
+
+```pwsh
+.\scripts\create-release.ps1 -PackageOnly -AllowDirty
+```
+
+Clean publishable Windows release package:
+
+```pwsh
+.\scripts\create-release.ps1
+```
+
+The release script refuses a dirty worktree, runs `go mod tidy -diff`, stages
+`ready_to_run/`, writes `gocluster-windows-amd64.zip`, creates and pushes the
+Git tag, and publishes the GitHub Release asset.
+
+Linux amd64 binary from source:
+
+```sh
+go test ./...
+GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
+```
+
+Deploy the Linux binary together with a complete config directory and required
+runtime data such as `data/cty`, `data/h3`, `data/peers/topology.db`, and
+`data/skm_correction/rbnskew.json` when those inputs are used by your config.
+There is not currently a published Linux ready-to-run release asset.
+
+## Run As A Linux Service
+
+For unattended Linux operation, use a private config directory and set
+`ui.mode: headless` in that config's `app.yaml`. The interactive local console
+requires a real terminal and is not shown by a normal `systemd` service.
+
+Example service unit:
+
+```ini
+[Unit]
+Description=GoCluster DX Cluster
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gocluster
+Group=gocluster
+WorkingDirectory=/opt/gocluster
+Environment=DXC_CONFIG_PATH=/opt/gocluster/data/config.local
+ExecStart=/opt/gocluster/gocluster
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Typical service commands:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now gocluster
+sudo systemctl status gocluster
+journalctl -u gocluster -f
+telnet localhost 8300
+```
+
+To inspect the interactive console on Linux, stop the service and run the
+binary manually from an interactive terminal with a UI mode such as `ansi` or
+`tview-v2` in your private `app.yaml`:
+
+```sh
+sudo systemctl stop gocluster
+cd /opt/gocluster
+DXC_CONFIG_PATH=/opt/gocluster/data/config.local ./gocluster
+```
+
+Return production service config to `ui.mode: headless` before starting it
+again under `systemd`.
 
 ## HELP
 
@@ -147,85 +296,6 @@ logging:
     no_license: true
     harmonics: true
 ```
-
-## Quick Start
-
-1. Install Go `1.26+`.
-2. Review the public example config files in [`data/config`](data/config).
-   For a real node, copy that directory to ignored `data/config.local`, put
-   your private callsigns, peer hosts/passwords, and tokens there, then run
-   with `DXC_CONFIG_PATH=data/config.local`.
-3. Run:
-
-   ```pwsh
-   go mod tidy
-   $env:DXC_CONFIG_PATH = "data/config.local"
-   go run .
-   ```
-
-4. Connect with telnet:
-
-   ```text
-   telnet localhost <telnet.port from data/config/runtime.yaml>
-   ```
-
-5. Log in with your callsign and type `HELP`.
-
-You can point the server at any complete config directory with
-`DXC_CONFIG_PATH`. Do not commit real peer connection details or service
-tokens to the public example config.
-The propagation-report tool uses the same directory with `-config-dir`; the older `-path-config` flag remains only as a compatibility alias.
-
-## Release Package
-
-GitHub Releases publish a Windows amd64 zip for simple deployments. See
-[`download/README.md`](download/README.md) for the direct download path.
-Download `gocluster-windows-amd64.zip`, extract it, open the `ready_to_run`
-directory, copy the packaged public example `data/config` to your private
-config directory, edit the YAML, then run:
-
-Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
-downloads unless you want the developer source tree.
-
-```pwsh
-$env:DXC_CONFIG_PATH = "data/config.local"
-.\gocluster.exe
-```
-
-Keep `gocluster.exe` and the config copied from the same release together. The
-zip contains only curated source-controlled runtime inputs, including public
-example config, H3 tables, CTY data, peer topology, skew correction, and a small
-operator documentation bundle. The packaged `README.md` is rendered from the
-packaged config for runtime-configured values such as the telnet port. Start
-there; use GitHub for full details. The zip intentionally excludes live Pebble
-stores, logs, user state, downloaded caches, private operational config,
-optional secret-bearing files such as `data/config/openai.yaml`, and
-developer/process documentation.
-
-Developers and advanced users can keep using the source checkout normally:
-`go build .` remains the live binary build path from the repo root, and
-`DXC_CONFIG_PATH` can point the binary at an alternate config directory.
-Create a release from a clean committed tree with:
-
-```pwsh
-.\scripts\create-release.ps1
-```
-
-The script refuses a dirty worktree, runs `go mod tidy -diff`, builds
-repo-root `ready_to_run/`, writes `gocluster-windows-amd64.zip`, creates and
-pushes a Git tag, and publishes the GitHub Release asset. The same generated
-identity is used for the binary version, Git tag, and GitHub Release:
-`vYY.DD.MM-<12-char-commit>`.
-
-For local package testing only, use:
-
-```pwsh
-.\scripts\create-release.ps1 -PackageOnly -AllowDirty
-```
-
-Dirty package-only builds are stamped with `+dirty`. Unflagged `go build .`
-binaries use the same display shape from Go VCS metadata when linker-stamped
-compile time is unavailable.
 
 ## Dedupe Policies
 

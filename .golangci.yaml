@@ -41,7 +41,7 @@ linters:
     - misspell
     - gosec
 
-    # You had settings for this; enable it or remove its settings.
+    # Keep gocritic enabled because settings below define the enforced checks.
     - gocritic
 
   settings:

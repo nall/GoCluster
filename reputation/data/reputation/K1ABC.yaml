@@ -1,3 +1,8 @@
+# Example persisted reputation state for one callsign.
+#
+# Runtime-created files in this shape track recent ASN/country/continent
+# history for the passwordless telnet reputation gate. This checked-in sample
+# is test/reference data, not operator config.
 recent_asns:
     - "64500"
 recent_countries:

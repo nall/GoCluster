@@ -11,6 +11,8 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0082 | YAML Documentation Completeness Pass | Accepted | 2026-04-25 | config, docs, yaml | - | - | `docs/decisions/ADR-0082-yaml-documentation-completeness-pass.md` |
+| ADR-0081 | Operator Docs Completeness Pass | Accepted | 2026-04-25 | docs, operator guide, release package | - | - | `docs/decisions/ADR-0081-operator-docs-completeness-pass.md` |
 | ADR-0080 | Custom SCP Retained Heap Layout | Accepted | 2026-04-25 | custom_scp, retained state, profiling | - | - | `docs/decisions/ADR-0080-custom-scp-retained-heap-layout.md` |
 | ADR-0079 | WHOSPOTSME Optional Band and Compact Output | Accepted | 2026-04-24 | commands, docs | ADR-0071 (operator command/output contract) | - | `docs/decisions/ADR-0079-whospotsme-optional-band-compact-output.md` |
 | ADR-0078 | Release Package Clean Source Gate | Accepted | 2026-04-24 | release packaging, build reproducibility | - | - | `docs/decisions/ADR-0078-release-package-clean-source-gate.md` |

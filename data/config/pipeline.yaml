@@ -135,7 +135,7 @@ call_correction:
   recent_band_record_min_unique_spotters: 3 # Distinct spotters needed to admit call into recent-on-band
 
   # ---------------------------------------------------------------------------
-  # 6) FT corroboration (FT2/FT4/FT8 only)
+  # 7) FT corroboration (FT2/FT4/FT8 only)
   # Purpose: Tune bounded burst timing and count-only P/V thresholds for FT.
   #          These knobs affect FT ?/S/P/V tagging even when resolver
   #          correction is disabled for non-FT modes.
@@ -152,35 +152,35 @@ call_correction:
   # Custom SCP runtime database for S-floor static membership and correction
   # support.
   custom_scp:
-    enabled: true
-    path: "data/scp"
-    history_horizon_days: 60
-    static_horizon_days: 395
-    min_snr_db_cw: 4
-    min_snr_db_rtty: 3
-    resolver_min_score: 5
-    resolver_min_unique_spotters: 4
-    resolver_min_unique_h3_cells: 2
-    stabilizer_min_score: 5
-    stabilizer_min_unique_spotters: 3
-    stabilizer_min_unique_h3_cells: 2
-    s_floor_min_score: 3
-    s_floor_min_unique_spotters_exact: 3
-    s_floor_min_unique_h3_cells_exact: 2
-    s_floor_min_unique_spotters_family: 5
-    s_floor_min_unique_h3_cells_family: 3
-    max_keys: 250000
-    max_spotters_per_key: 12
-    max_db_bytes: 4294967296
-    cleanup_interval_seconds: 600
-    block_cache_mb: 32
-    bloom_filter_bits: 10
-    memtable_size_mb: 32
-    l0_compaction_threshold: 4
-    l0_stop_writes_threshold: 16
+    enabled: true                    # Enable retained static/recent support store
+    path: "data/scp"                 # Pebble directory for Custom SCP state
+    history_horizon_days: 60         # Recent-support history horizon
+    static_horizon_days: 395         # Long-term static-support horizon
+    min_snr_db_cw: 4                 # Minimum CW SNR admitted to support store
+    min_snr_db_rtty: 3               # Minimum RTTY SNR admitted to support store
+    resolver_min_score: 5            # Score required for resolver support
+    resolver_min_unique_spotters: 4  # Unique spotters required for resolver support
+    resolver_min_unique_h3_cells: 2  # Geographic spread required for resolver support
+    stabilizer_min_score: 5          # Score required for stabilizer recent support
+    stabilizer_min_unique_spotters: 3 # Unique spotters required for stabilizer support
+    stabilizer_min_unique_h3_cells: 2 # Geographic spread required for stabilizer support
+    s_floor_min_score: 3             # Score required to promote ? to S
+    s_floor_min_unique_spotters_exact: 3 # Exact-call spotters required for S-floor
+    s_floor_min_unique_h3_cells_exact: 2 # Exact-call geographic spread for S-floor
+    s_floor_min_unique_spotters_family: 5 # Family spotters required for S-floor
+    s_floor_min_unique_h3_cells_family: 3 # Family geographic spread for S-floor
+    max_keys: 250000                 # Hard cap on retained call/band/mode keys
+    max_spotters_per_key: 12         # Hard cap on retained spotter evidence per key
+    max_db_bytes: 4294967296         # Approximate Pebble size cap before cleanup pressure
+    cleanup_interval_seconds: 600    # Background cleanup cadence
+    block_cache_mb: 32               # Pebble block cache size
+    bloom_filter_bits: 10            # Bloom filter bits/key
+    memtable_size_mb: 32             # Pebble memtable size
+    l0_compaction_threshold: 4       # L0 file count before compaction pressure
+    l0_stop_writes_threshold: 16     # L0 file count before write throttling
 
   # ---------------------------------------------------------------------------
-  # 7) Telnet stabilizer (recent-heard gate)
+  # 8) Telnet stabilizer (recent-heard gate)
   # Purpose: Delay telnet delivery only for delay-eligible confidence glyphs (?, S, P).
   # ---------------------------------------------------------------------------
   stabilizer_enabled: true                  # Delay risky telnet spots for ?, S, P (V/C always pass through)
@@ -196,7 +196,7 @@ call_correction:
   stabilizer_max_pending: 20000             # Cap delayed telnet spots in memory; overflow fails open (release)
 
   # ---------------------------------------------------------------------------
-  # 8) Fixed-lag temporal decoder (shared runtime + replay policy)
+  # 9) Fixed-lag temporal decoder (shared runtime + replay policy)
   # Purpose: Hold selected resolver candidates briefly so late corroboration can
   #          recover recall while bounded gates preserve stability.
   # ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ call_correction:
     max_events_per_key: 32                  # Ring depth per resolver key (bounds memory/compute)
 
   # ---------------------------------------------------------------------------
-  # 9) Spotter reliability weights
+  # 10) Spotter reliability weights
   # Purpose: Down-weight/ignore corroborators from less reliable spotters.
   # ---------------------------------------------------------------------------
   spotter_reliability_file: "data/rbn/priors/spotter_reliability.txt" # Optional global path with spotter weights (SPOTTER WEIGHT 0-1)
@@ -228,7 +228,7 @@ call_correction:
   min_spotter_reliability: 0.87       # Ignore reporters below this reliability weight
 
   # ---------------------------------------------------------------------------
-  # 10) Mode-specific distance weight tuning
+  # 11) Mode-specific distance weight tuning
   # Purpose: Tune Morse/Baudot edit-cost behavior.
   # ---------------------------------------------------------------------------
   morse_weights:
@@ -243,7 +243,7 @@ call_correction:
     scale: 2                          # Multiplier for normalized ITA2 cost before rounding
 
   # ---------------------------------------------------------------------------
-  # 11) Adaptive refresh and adaptive min-reports
+  # 12) Adaptive refresh and adaptive min-reports
   # Purpose: Track activity states and adjust correction strictness over time.
   # ---------------------------------------------------------------------------
   adaptive_refresh:

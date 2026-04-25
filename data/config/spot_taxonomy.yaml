@@ -1,5 +1,29 @@
 # Canonical spot taxonomy for modes and EVENT families.
-# Operators may add modes/events here and restart the cluster.
+#
+# This is a required reference table. It is read at startup from the active
+# config directory and is not reloaded while the process is running.
+#
+# Operators may add modes or EVENT families here, but new entries can only opt
+# into behavior families that the binary already knows how to handle. YAML
+# cannot define new parsers, transports, distance models, archive engines, or
+# EVENT grammars beyond the token/prefix matchers below.
+#
+# Mode field guide:
+# - name/display: canonical token and user-facing text.
+# - filter_visible/default_filter_allowed/cc_shortcut: command/filter surface.
+# - comment_tokens/variants/blank_mode_token/synthetic: parser aliases.
+# - pskreporter_route: normal, path_only, or ignore.
+# - mode_inference_seed/voice_by_frequency: mode-inference participation.
+# - ft_* and ft_confidence: FT burst handling owned by existing code.
+# - archive_retention_class/report_format: archive classification and report parsing.
+# - call_correction_profile/frequency_averaging/source_skew_correction:
+#   correction-pipeline capability flags.
+# - custom_scp_bucket/path_reliability_*: retained support and path bucket mapping.
+#
+# EVENT field guide:
+# - standalone_tokens: exact comment tokens such as POTA.
+# - reference_prefixes: acronym-prefixed references such as POTA-1234.
+# - reference_suffix: supported suffix matcher; currently alnum_hyphen.
 modes:
   - name: CW
     display: CW

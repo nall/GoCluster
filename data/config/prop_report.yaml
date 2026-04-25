@@ -1,4 +1,9 @@
-# Propagation report generation (daily, on log rotation and on a UTC schedule).
+# Propagation report generation.
+#
+# The runtime can generate the daily propagation report on log rotation and on
+# this UTC schedule. Report content uses the active config directory; LLM
+# narrative generation is controlled separately by optional openai.yaml at the
+# prop_report tool boundary.
 prop_report:
-  enabled: true
-  refresh_utc: "00:05"
+  enabled: true        # Master switch for scheduled report generation.
+  refresh_utc: "00:05" # Daily report time in HH:MM UTC.

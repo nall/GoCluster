@@ -14,8 +14,10 @@ Configuration is split by concern so you only edit the relevant file:
 - `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.
 - `pipeline.yaml` - call correction, harmonics, spot policy.
 - `data.yaml` - CTY/FCC/skew sources, grid DB tuning, and H3 table path.
+- `mode_seeds.yaml` - seeded FT4/FT8/JS8 frequency hints used by digital mode inference.
 - `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
 - `runtime.yaml` - Go runtime memory tuning, telnet server settings, WHOSPOTSME window, buffer capacity, and filter defaults.
+- `prop_report.yaml` - scheduled propagation-report generation controls.
 - `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.
 - `peering.yaml` - DXSpider peer configuration (inbound/outbound, ACLs, topology cache).
 - `iaru_regions.yaml` - DXCC/ADIF to IARU region mapping used by final regional mode policy.

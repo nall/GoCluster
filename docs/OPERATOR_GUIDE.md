@@ -1,71 +1,177 @@
-# Operator Guide (One Page)
+# GoCluster Operator Guide
 
-## Purpose
-This server aggregates real-time spotting data and publishes a single per-band propagation glyph for each path. Think of the glyph as a quick operational hint, not a guarantee.
+This guide is for running a GoCluster node and connecting to it as a telnet
+DX-cluster user. For implementation details, use the package READMEs linked
+from the repository root.
 
-## Quick Start
-- Release package: extract the zip, copy `data/config` to private
-  `data/config.local`, edit that private copy, then run:
-  `powershell -NoProfile -Command "$env:DXC_CONFIG_PATH='data/config.local'; .\gocluster.exe"`
-- Source checkout: run from the repo root with `go run .`
-- Default config directory: `data/config`; override with `DXC_CONFIG_PATH`.
-- Main config files:
-  - `data/config/ingest.yaml` (spot sources)
-  - `data/config/path_reliability.yaml` (glyph thresholds, decay, noise)
-  - `data/config/solarweather.yaml` (optional R/G overrides)
-  - `data/config/peering.yaml` (optional cluster peering)
-- Full docs and source: https://github.com/N2WQ/GoCluster
+## Get A Binary
 
-## Operator Commands (telnet)
-- `SET GRID <grid>`: set your location (4–6 chars).
-- `SET NOISE <QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL>`: adjusts the band-specific local receive-noise penalty.
-- `SET SOLAR 15|30|60|OFF`: opt‑in cadence for solar summaries (wall‑clock aligned).
+The current ready-to-run release asset is Windows amd64:
 
-## What the Glyphs Mean
-- **High / Medium / Low / Unlikely**: chance of a usable path *right now*, based on recent spots and decay.
-- **Insufficient**: we just don’t have enough recent evidence to rate the path.
-- **R**: radio‑blackout override — strong flare/X‑ray activity on a **sunlit** path.
-- **G**: geomagnetic‑storm override — high Kp on a **high‑latitude** path.
-- Overrides are rare and band‑specific; they only show up when the path geometry makes them relevant.
+```text
+https://github.com/N2WQ/GoCluster/releases/latest
+gocluster-windows-amd64.zip
+```
 
-## How Location Is Used
-- We start with your 4‑digit Maidenhead grid and convert it to the center lat/lon (a 2° × 1° square).
-- That point maps to **H3 res‑2** (local) and **res‑1** (regional) cells so local + regional evidence can be blended.
-- H3 cells are a global hex‑grid index—a consistent way to bucket nearby locations.
-- If H3 tables are missing or grids are invalid, the path will show **Insufficient**.
+Download that asset, not GitHub's automatic source-code archives. Extract it
+and open `ready_to_run/`.
 
-## Health Signals (logs)
-Every 5 minutes, the server logs:
-- `Path predictions (5m)` — combined vs insufficient, including no‑sample, low‑weight, and stale selected evidence.
-- `Path buckets (5m)` — per‑band bucket counts.
-- `Path weight dist (5m)` — per‑band weight histogram.
-Stats ticker adds:
-- `Data` — last updated timestamps for CTY, FCC ULS, and skew table.
-- `Calls` — correction/unlicensed/frequency/harmonic counts plus reputation drops `(R)`.
-- `Calls` decision reasons (resolver-primary) now include conservative recent corroboration labels:
-  - applied: `resolver_applied_recent_plus1`, `resolver_applied_neighbor_recent_plus1`
-  - rejected: `resolver_recent_plus1_reject_*` (distance/family, winner recent insufficient, subject not weaker, contested neighbor)
-  - bayes applied: `resolver_applied_bayes_report`, `resolver_applied_neighbor_bayes_report`, `resolver_applied_bayes_advantage`, `resolver_applied_neighbor_bayes_advantage`
-  - bayes rejected: `resolver_bayes_report_reject_*`, `resolver_bayes_advantage_reject_*`
-- `Stabilizer` — telnet delay counters `(H/I/D/S/O)` when call-correction stabilizer is enabled: held, immediate, delayed, suppressed, overflow-release. Delay eligibility is glyph-scoped to `?`, `S`, and `P`; `V` and `C` always pass through. Local non-test `DX` command self-spots are stamped `V` and skip resolver/temporal/stabilizer delay while still flowing through the normal telnet queues. Reason tuples use `u/a/p/e` for `unknown_or_nonrecent`, `ambiguous_resolver`, `p_low_confidence`, and `edit_neighbor_contested`. Suppressed delayed spots do not update recent-on-band support.
-- `Path only` — per‑interval path‑only updates with drop reasons for WSPR (U=updated, S=stale, N=no SNR, G=no grid, H=bad H3, B=bad band, M=mode).
+Linux operators currently build from source:
 
-## Common Troubleshooting
-- **All paths show Insufficient**: verify `SET GRID`, confirm spot ingestion, and check H3 tables in `data/h3`.
-- **No R/G overrides**: check `solarweather.yaml` enabled flag, feed freshness, and that the band is eligible.
-- **Over‑aggressive overrides**: tighten thresholds or band lists in `solarweather.yaml`.
+```sh
+GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
+```
 
-## FCC ULS Allowlist
-- Optional regex allowlist file is configured in `data/config/data.yaml` under `fcc_uls.allowlist_path`.
-- Patterns are matched against the normalized base callsign (SSID/slash stripped).
-- Prefix a line with `US:` or `ADIF291:` to target a jurisdiction; lines without a prefix default to `US`.
-- Calls with **3+ leading letters before the first digit** are dropped by CTY gating unless allowlisted.
+## Configure A Real Node
 
-## Data Sources (when overrides enabled)
-- GOES X‑ray (corrected 0.1–0.8 nm) for R levels.
-- Observed 3‑hour Kp for G levels and auroral boundary gating.
+The packaged and checked-in `data/config` directory is public example config.
+For a real node:
 
-## Operator Principles
-- Treat glyphs as **probabilistic hints**.
-- Trust **Insufficient** rather than forcing a decision.
-- R/G overrides are **rare by design** — they signal strong, path‑relevant space weather.
+1. Copy the whole directory to a private complete directory, for example
+   `data/config.local`.
+2. Edit the private copy.
+3. Start the server with `DXC_CONFIG_PATH` pointing at that directory.
+
+Review these files before real operation:
+
+- `app.yaml`: server node ID, console/headless mode, and logging paths.
+- `runtime.yaml`: telnet port, default filters, buffers, and memory controls.
+- `ingest.yaml`: RBN, PSKReporter, DXSummit, and human/manual ingest settings.
+- `peering.yaml`: only if this node connects to peer clusters.
+- `reputation.yaml`: only if IPinfo/Cymru reputation enrichment is enabled.
+- `solarweather.yaml`: only if solar/geomagnetic path overrides are enabled.
+- `data.yaml`: CTY, FCC, H3, skew, and runtime data paths.
+- `spot_taxonomy.yaml`: only when changing supported modes, events, or
+  PSKReporter mode routing.
+
+Keep real callsigns, peer hosts/IPs, passwords, and service tokens out of the
+public example config and out of shared archives.
+
+## Run On Windows
+
+From the extracted `ready_to_run` directory:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+.\gocluster.exe
+```
+
+From a source checkout:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+go run .
+```
+
+To compile from source on Windows:
+
+```pwsh
+go test ./...
+go build -trimpath -o gocluster.exe .
+```
+
+## Run On Linux
+
+Build from the repository root with Go `1.26+`:
+
+```sh
+go test ./...
+GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
+```
+
+Install the binary and the required runtime data together, for example under
+`/opt/gocluster`. Keep a complete private config directory at a stable path
+such as `/opt/gocluster/data/config.local`.
+
+For unattended service operation, set `ui.mode: headless` in the private
+`app.yaml`.
+
+Example `systemd` unit:
+
+```ini
+[Unit]
+Description=GoCluster DX Cluster
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gocluster
+Group=gocluster
+WorkingDirectory=/opt/gocluster
+Environment=DXC_CONFIG_PATH=/opt/gocluster/data/config.local
+ExecStart=/opt/gocluster/gocluster
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and inspect the service:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now gocluster
+sudo systemctl status gocluster
+journalctl -u gocluster -f
+```
+
+The interactive local console requires the process to run in a real terminal.
+For console inspection, stop the service and run the binary manually with a UI
+mode such as `ansi` or `tview-v2`:
+
+```sh
+sudo systemctl stop gocluster
+cd /opt/gocluster
+DXC_CONFIG_PATH=/opt/gocluster/data/config.local ./gocluster
+```
+
+Use `ui.mode: headless` again before returning to unattended service mode.
+
+## Connect And Use Commands
+
+Connect to the configured telnet port from `runtime.yaml`:
+
+```text
+telnet localhost 8300
+```
+
+Log in with your callsign. Useful first commands:
+
+- `HELP`: show the command list.
+- `HELP <command>`: show command-specific help.
+- `SHOW MYDX` or `SHOW DX`: show filtered spot history.
+- `SHOW DXCC <call>`: look up DXCC/ADIF and zones.
+- `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
+- `SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL`: set receive noise class.
+- `SHOW FILTER`: display active filters.
+- `PASS <type> <list>`: allow matching spots.
+- `REJECT <type> <list>`: block matching spots.
+- `RESET FILTER`: restore default filters.
+- `PASS NEARBY ON|OFF`: toggle nearby local-area filtering.
+- `SHOW DEDUPE`: show your dedupe policy.
+- `SET DEDUPE FAST|MED|SLOW`: change your dedupe policy.
+- `DX <freq> <call> <comment>`: post a local human spot.
+- `BYE`: disconnect.
+
+The top-level repository README contains the generated default `HELP` output.
+That block is checked against the command processor in tests.
+
+## Logs And Health
+
+System logs and optional dropped-call logs are configured in `app.yaml`.
+Under `systemd`, stdout/stderr also go to journald and can be tailed with:
+
+```sh
+journalctl -u gocluster -f
+```
+
+Common startup failures are usually config-path or config-content issues:
+
+- `DXC_CONFIG_PATH` must point at a complete config directory, not one YAML file.
+- Unknown YAML files or unknown keys fail startup.
+- Required YAML-owned settings and reference tables must be present.
+- The default config directory is `data/config` when `DXC_CONFIG_PATH` is not set.
+
+For config loader details, see `data/config/README.md`.
