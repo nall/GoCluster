@@ -28,6 +28,12 @@ Minimum files to review:
 The config loader expects a complete directory. If you use `DXC_CONFIG_PATH`,
 point it at the whole private config directory, not at one YAML file.
 
+At minimum, replace the public placeholder identity before connecting a real
+node: change `server.node_id` in `app.yaml` from `N0CALL-1`, change the RBN
+login callsigns in `ingest.yaml` from `N0CALL-1`, and update any private
+upstream telnet `host` and login fields you enable. If peering is enabled,
+also replace peer hosts, login callsigns, and passwords in `peering.yaml`.
+
 ## Launch
 
 From PowerShell in the extracted `ready_to_run` directory:
@@ -52,10 +58,14 @@ telnet localhost {{ .TelnetPort }}
 After login, type `HELP` for the command list. Useful first commands:
 
 - `SHOW MYDX` or `SHOW DX`: show filtered spot history.
+- `WHOSPOTSME [band]`: show recent spotter countries for your call.
 - `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
 - `SHOW FILTER`: display active filters.
 - `PASS <type> <list>` and `REJECT <type> <list>`: adjust filters.
 - `SHOW DEDUPE` and `SET DEDUPE FAST|MED|SLOW`: inspect or change duplicate suppression.
+- `SET DIAG ON|OFF`: toggle diagnostic comments on your session.
+- `SET SOLAR 15|30|60|OFF`: opt into or stop periodic solar summaries.
+- `DIALECT`, `DIALECT LIST`, `DIALECT <go|cc>`: show or switch command dialect.
 - `BYE`: disconnect.
 
 ## Linux
@@ -67,8 +77,15 @@ source with Go `1.26+`:
 GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
 ```
 
-For `systemd`, run with a private config directory, set `DXC_CONFIG_PATH`, and
-use `ui.mode: headless` in `app.yaml`. Service logs are available with:
+Deploy the Linux binary together with the required runtime data from the source
+tree, including `data/cty`, `data/h3`, `data/peers/topology.db`, and
+`data/skm_correction/rbnskew.json` when those inputs are used by your config.
+
+For `systemd`, create a dedicated service account, install the binary, config,
+and runtime data under a stable path such as `/opt/gocluster`, assign ownership
+to that account, save the unit as `/etc/systemd/system/gocluster.service`, set
+`DXC_CONFIG_PATH`, and use `ui.mode: headless` in `app.yaml`. Service logs are
+available with:
 
 ```sh
 journalctl -u gocluster -f

@@ -46,6 +46,12 @@ unknown keys, and fails fast when required YAML-owned settings or reference
 tables are missing. Keep private callsigns, peer hostnames/IPs, passwords, and
 tokens out of committed example config.
 
+At minimum, replace the public placeholder identity before connecting a real
+node: change `server.node_id` in `app.yaml` from `N0CALL-1`, change the RBN
+login callsigns in `ingest.yaml` from `N0CALL-1`, and update any private
+upstream telnet `host` and login fields you enable. If peering is enabled,
+also replace peer hosts, login callsigns, and passwords in `peering.yaml`.
+
 See [`data/config/README.md`](data/config/README.md) for the full config layout.
 
 ## Run And Connect
@@ -119,7 +125,17 @@ For unattended Linux operation, use a private config directory and set
 `ui.mode: headless` in that config's `app.yaml`. The interactive local console
 requires a real terminal and is not shown by a normal `systemd` service.
 
-Example service unit:
+Prepare the install path and service account before enabling the unit:
+
+```sh
+sudo useradd -r -s /bin/false gocluster
+sudo mkdir -p /opt/gocluster
+sudo cp gocluster /opt/gocluster/
+sudo cp -R data /opt/gocluster/
+sudo chown -R gocluster:gocluster /opt/gocluster
+```
+
+Create the unit file as `/etc/systemd/system/gocluster.service`:
 
 ```ini
 [Unit]

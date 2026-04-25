@@ -47,6 +47,12 @@ Review these files before real operation:
 Keep real callsigns, peer hosts/IPs, passwords, and service tokens out of the
 public example config and out of shared archives.
 
+At minimum, replace the public placeholder identity before connecting a real
+node: change `server.node_id` in `app.yaml` from `N0CALL-1`, change the RBN
+login callsigns in `ingest.yaml` from `N0CALL-1`, and update any private
+upstream telnet `host` and login fields you enable. If peering is enabled,
+also replace peer hosts, login callsigns, and passwords in `peering.yaml`.
+
 ## Run On Windows
 
 From the extracted `ready_to_run` directory:
@@ -83,10 +89,25 @@ Install the binary and the required runtime data together, for example under
 `/opt/gocluster`. Keep a complete private config directory at a stable path
 such as `/opt/gocluster/data/config.local`.
 
+Runtime data commonly needed beside the binary includes `data/cty`, `data/h3`,
+`data/peers/topology.db`, and `data/skm_correction/rbnskew.json` when those
+inputs are used by your config.
+
 For unattended service operation, set `ui.mode: headless` in the private
 `app.yaml`.
 
-Example `systemd` unit:
+Create the service account, install directory, binary, config, and runtime
+data, then assign ownership to the service user:
+
+```sh
+sudo useradd -r -s /bin/false gocluster
+sudo mkdir -p /opt/gocluster
+sudo cp gocluster /opt/gocluster/
+sudo cp -R data /opt/gocluster/
+sudo chown -R gocluster:gocluster /opt/gocluster
+```
+
+Save this unit file as `/etc/systemd/system/gocluster.service`:
 
 ```ini
 [Unit]
@@ -118,8 +139,9 @@ journalctl -u gocluster -f
 ```
 
 The interactive local console requires the process to run in a real terminal.
-For console inspection, stop the service and run the binary manually with a UI
-mode such as `ansi` or `tview-v2`:
+For console inspection, stop the service, edit `app.yaml` in the private config
+directory, change `ui.mode` to `ansi` or `tview-v2`, then run the binary
+manually:
 
 ```sh
 sudo systemctl stop gocluster
@@ -127,7 +149,8 @@ cd /opt/gocluster
 DXC_CONFIG_PATH=/opt/gocluster/data/config.local ./gocluster
 ```
 
-Use `ui.mode: headless` again before returning to unattended service mode.
+After inspection, set `ui.mode` back to `headless` before returning to
+unattended service mode.
 
 ## Connect And Use Commands
 
@@ -143,8 +166,12 @@ Log in with your callsign. Useful first commands:
 - `HELP <command>`: show command-specific help.
 - `SHOW MYDX` or `SHOW DX`: show filtered spot history.
 - `SHOW DXCC <call>`: look up DXCC/ADIF and zones.
+- `WHOSPOTSME [band]`: show recent spotter countries for your call.
 - `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
 - `SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL`: set receive noise class.
+- `SET DIAG ON|OFF`: toggle diagnostic comments on your session.
+- `SET SOLAR 15|30|60|OFF`: opt into or stop periodic solar summaries.
+- `DIALECT`, `DIALECT LIST`, `DIALECT <go|cc>`: show or switch command dialect.
 - `SHOW FILTER`: display active filters.
 - `PASS <type> <list>`: allow matching spots.
 - `REJECT <type> <list>`: block matching spots.

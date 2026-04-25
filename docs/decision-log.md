@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0083 | Operator Docs Follow-Up | Accepted | 2026-04-25 | docs, operator guide, Linux service | - | - | `docs/decisions/ADR-0083-operator-docs-follow-up.md` |
 | ADR-0082 | YAML Documentation Completeness Pass | Accepted | 2026-04-25 | config, docs, yaml | - | - | `docs/decisions/ADR-0082-yaml-documentation-completeness-pass.md` |
 | ADR-0081 | Operator Docs Completeness Pass | Accepted | 2026-04-25 | docs, operator guide, release package | - | - | `docs/decisions/ADR-0081-operator-docs-completeness-pass.md` |
 | ADR-0080 | Custom SCP Retained Heap Layout | Accepted | 2026-04-25 | custom_scp, retained state, profiling | - | - | `docs/decisions/ADR-0080-custom-scp-retained-heap-layout.md` |
