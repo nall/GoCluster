@@ -337,6 +337,13 @@ function New-ReleaseNotes {
     return @"
 GoCluster $Version
 
+IMPORTANT DOWNLOAD NOTE
+
+Download $PackageName.zip.
+
+Do not use GitHub's automatic "Source code (zip)" or "Source code (tar.gz)"
+downloads unless you want the developer source tree.
+
 - Commit: $Commit
 - Built: $BuildTime
 - Asset: $PackageName.zip

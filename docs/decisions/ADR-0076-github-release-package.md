@@ -72,6 +72,10 @@ download path directly from Git. That file points to GitHub Releases and the
 `gocluster-windows-amd64.zip` asset. The generated zip and `ready_to_run/`
 directory remain untracked build artifacts.
 
+Generated release notes and download docs explicitly warn users to download
+`gocluster-windows-amd64.zip` and not GitHub's automatic source-code archives
+unless they want the developer source tree.
+
 ## Alternatives considered
 
 1. Zip the whole repo or whole `data` directory.
@@ -92,6 +96,8 @@ directory remain untracked build artifacts.
   without digging through temporary validation output.
 - Git visitors have a tracked `download/README.md` pointer to the binary
   release asset without storing generated binaries in source history.
+- Release notes put the binary-asset warning before build metadata so users see
+  it before GitHub's automatic source-code downloads.
 - Release contents are reproducible from committed inputs.
 - The default script path fails before staging if local edits or stale module
   metadata would make the artifact differ from committed source.
@@ -119,6 +125,8 @@ directory remain untracked build artifacts.
   history.
 - The source tree depends on GitHub Releases for the actual binary download;
   repository browsers must follow the tracked download pointer.
+- GitHub's automatic source-code archive links cannot be removed from normal
+  GitHub Releases, so release notes and download docs must disambiguate them.
 
 ### Operational impact
 

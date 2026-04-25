@@ -11,6 +11,9 @@ Download this asset:
 gocluster-windows-amd64.zip
 ```
 
+Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
+downloads unless you want the developer source tree.
+
 Extract the zip and open:
 
 ```text

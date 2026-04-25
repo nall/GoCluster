@@ -12,6 +12,9 @@ been created. Start here:
 Download the `gocluster-windows-amd64.zip` release asset, extract it, and open
 the `ready_to_run/` directory.
 
+Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
+downloads unless you want the developer source tree.
+
 ## HELP
 
 The section below mirrors the default `go` dialect `HELP` output from [`commands/processor.go`](commands/processor.go) using the shipped config in [`data/config`](data/config).
@@ -180,6 +183,9 @@ GitHub Releases publish a Windows amd64 zip for simple deployments. See
 Download `gocluster-windows-amd64.zip`, extract it, open the `ready_to_run`
 directory, copy the packaged public example `data/config` to your private
 config directory, edit the YAML, then run:
+
+Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
+downloads unless you want the developer source tree.
 
 ```pwsh
 $env:DXC_CONFIG_PATH = "data/config.local"
