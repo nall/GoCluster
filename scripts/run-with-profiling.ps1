@@ -135,7 +135,8 @@ Write-ProfilerInfo "Profiler controller log -> $controllerLogPath"
 
 $osSamplePath = Join-Path $logsDir ("os-process-$launchTs-pid$targetPid.csv")
 $osSampleWarningPath = Join-Path $logsDir ("os-process-$launchTs-pid$targetPid.warnings.log")
-$osSamplerJob = Start-Job -ArgumentList $targetPid, $osSampleSeconds, $osSamplePath, $osSampleWarningPath, [Environment]::ProcessorCount -ScriptBlock {
+$processorCount = [Environment]::ProcessorCount
+$osSamplerJob = Start-Job -ArgumentList $targetPid, $osSampleSeconds, $osSamplePath, $osSampleWarningPath, $processorCount -ScriptBlock {
     param($targetPid, $sampleSeconds, $csvPath, $warningPath, $processorCount)
 
     $previous = $null

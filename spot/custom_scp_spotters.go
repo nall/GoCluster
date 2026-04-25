@@ -2,8 +2,25 @@ package spot
 
 type customSCPSpotterEntry struct {
 	spotter  string
-	seenUnix int64
+	seenUnix uint32
 	cellRes1 uint16
+}
+
+const customSCPMaxSpotterSeenUnix int64 = 1<<32 - 1
+
+func encodeCustomSCPSpotterSeenUnix(seenUnix int64) uint32 {
+	switch {
+	case seenUnix <= 0:
+		return 0
+	case seenUnix > customSCPMaxSpotterSeenUnix:
+		return uint32(customSCPMaxSpotterSeenUnix)
+	default:
+		return uint32(seenUnix)
+	}
+}
+
+func decodeCustomSCPSpotterSeenUnix(seenUnix uint32) int64 {
+	return int64(seenUnix)
 }
 
 // customSCPEntry spotters are owned by CustomSCPStore under s.mu. The slice is
@@ -58,7 +75,7 @@ func entrySpotterObs(entry *customSCPEntry, spotter string) (customSCPSpotterObs
 		return customSCPSpotterObs{}, false
 	}
 	item := entry.spotters[idx]
-	return customSCPSpotterObs{seenUnix: item.seenUnix, cellRes1: item.cellRes1}, true
+	return customSCPSpotterObs{seenUnix: decodeCustomSCPSpotterSeenUnix(item.seenUnix), cellRes1: item.cellRes1}, true
 }
 
 func entryUpsertSpotter(entry *customSCPEntry, spotter string, obs customSCPSpotterObs, maxSpotters int) (inserted bool, updated bool) {
@@ -67,14 +84,18 @@ func entryUpsertSpotter(entry *customSCPEntry, spotter string, obs customSCPSpot
 	}
 	idx, ok := findSpotterIndex(entry.spotters, spotter)
 	if ok {
-		if obs.seenUnix <= entry.spotters[idx].seenUnix {
+		if obs.seenUnix <= decodeCustomSCPSpotterSeenUnix(entry.spotters[idx].seenUnix) {
 			return false, false
 		}
-		entry.spotters[idx].seenUnix = obs.seenUnix
+		entry.spotters[idx].seenUnix = encodeCustomSCPSpotterSeenUnix(obs.seenUnix)
 		entry.spotters[idx].cellRes1 = obs.cellRes1
 		return false, true
 	}
-	item := customSCPSpotterEntry{spotter: spotter, seenUnix: obs.seenUnix, cellRes1: obs.cellRes1}
+	item := customSCPSpotterEntry{
+		spotter:  spotter,
+		seenUnix: encodeCustomSCPSpotterSeenUnix(obs.seenUnix),
+		cellRes1: obs.cellRes1,
+	}
 	entry.spotters = insertCustomSCPSpotter(entry.spotters, idx, item, maxSpotters)
 	return true, true
 }

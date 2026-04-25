@@ -31,7 +31,7 @@ func BenchmarkCustomSCPRecordOverflow(b *testing.B) {
 	store := &CustomSCPStore{
 		opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: maxSpotters}),
 		entries:             make(map[customSCPKey]*customSCPEntry, 1),
-		entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
+		entryExpiry:         newCustomSCPEntryExpiryQueue(1),
 		static:              make(map[string]int64, 1),
 		observationSpotters: maxSpotters,
 	}
@@ -70,7 +70,7 @@ func BenchmarkCustomSCPRecordExistingSpotterUpdate(b *testing.B) {
 	store := &CustomSCPStore{
 		opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: 4}),
 		entries:             make(map[customSCPKey]*customSCPEntry, 1),
-		entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
+		entryExpiry:         newCustomSCPEntryExpiryQueue(1),
 		static:              make(map[string]int64, 1),
 		observationSpotters: 1,
 	}
@@ -179,7 +179,7 @@ func BenchmarkCustomSCPSnapshotSupport(b *testing.B) {
 			store := &CustomSCPStore{
 				opts:                sanitizeCustomSCPOptions(CustomSCPOptions{MaxSpottersPerKey: spotters}),
 				entries:             make(map[customSCPKey]*customSCPEntry, 1),
-				entryExpiryItems:    make(map[customSCPKey]*customSCPEntryExpiryItem, 1),
+				entryExpiry:         newCustomSCPEntryExpiryQueue(1),
 				observationSpotters: spotters,
 			}
 			key := customSCPKey{call: "K1BENCH", band: "40m", bucket: "cw"}
@@ -218,11 +218,11 @@ func benchmarkCustomSCPCleanup(b *testing.B, totalEntries, expiredEntries int) {
 
 	buildStore := func() *CustomSCPStore {
 		store := &CustomSCPStore{
-			opts:              opts,
-			entries:           make(map[customSCPKey]*customSCPEntry, totalEntries),
-			entryExpiryItems:  make(map[customSCPKey]*customSCPEntryExpiryItem, totalEntries),
-			static:            make(map[string]int64),
-			staticExpiryItems: make(map[string]*customSCPStaticExpiryItem),
+			opts:         opts,
+			entries:      make(map[customSCPKey]*customSCPEntry, totalEntries),
+			entryExpiry:  newCustomSCPEntryExpiryQueue(totalEntries),
+			static:       make(map[string]int64),
+			staticExpiry: newCustomSCPStaticExpiryQueue(totalEntries),
 		}
 		for i := 0; i < totalEntries; i++ {
 			seenAt := now.Add(-1 * time.Hour)

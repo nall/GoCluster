@@ -147,13 +147,11 @@ type CustomSCPStore struct {
 
 	opts CustomSCPOptions
 
-	entries           map[customSCPKey]*customSCPEntry
-	entryExpiry       customSCPEntryExpiryHeap
-	entryExpiryItems  map[customSCPKey]*customSCPEntryExpiryItem
-	static            map[string]int64
-	staticExpiry      customSCPStaticExpiryHeap
-	staticExpiryItems map[string]*customSCPStaticExpiryItem
-	active            activeBandCallCounter
+	entries      map[customSCPKey]*customSCPEntry
+	entryExpiry  customSCPEntryExpiryQueue
+	static       map[string]int64
+	staticExpiry customSCPStaticExpiryQueue
+	active       activeBandCallCounter
 
 	observationSpotters int
 	diag                customSCPDiagnostics
@@ -268,12 +266,12 @@ func OpenCustomSCPStore(opts CustomSCPOptions) (*CustomSCPStore, error) {
 		return nil, fmt.Errorf("custom_scp: open: %w", err)
 	}
 	store := &CustomSCPStore{
-		opts:              opts,
-		entries:           make(map[customSCPKey]*customSCPEntry, 1024),
-		entryExpiryItems:  make(map[customSCPKey]*customSCPEntryExpiryItem, 1024),
-		static:            make(map[string]int64, 1024),
-		staticExpiryItems: make(map[string]*customSCPStaticExpiryItem, 1024),
-		db:                db,
+		opts:         opts,
+		entries:      make(map[customSCPKey]*customSCPEntry, 1024),
+		entryExpiry:  newCustomSCPEntryExpiryQueue(1024),
+		static:       make(map[string]int64, 1024),
+		staticExpiry: newCustomSCPStaticExpiryQueue(1024),
+		db:           db,
 	}
 	if err := store.loadFromDB(); err != nil {
 		_ = store.Close()
@@ -525,13 +523,17 @@ func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cel
 		entry.spotters = insertCustomSCPSpotter(
 			entry.spotters,
 			idx,
-			customSCPSpotterEntry{spotter: persistSpotter, seenUnix: obs.seenUnix, cellRes1: obs.cellRes1},
+			customSCPSpotterEntry{
+				spotter:  persistSpotter,
+				seenUnix: encodeCustomSCPSpotterSeenUnix(obs.seenUnix),
+				cellRes1: obs.cellRes1,
+			},
 			s.opts.MaxSpottersPerKey,
 		)
 		s.observationSpotters++
 		updated = true
-	} else if seenUnix > entry.spotters[idx].seenUnix {
-		entry.spotters[idx].seenUnix = obs.seenUnix
+	} else if seenUnix > decodeCustomSCPSpotterSeenUnix(entry.spotters[idx].seenUnix) {
+		entry.spotters[idx].seenUnix = encodeCustomSCPSpotterSeenUnix(obs.seenUnix)
 		entry.spotters[idx].cellRes1 = obs.cellRes1
 		persistSpotter = entry.spotters[idx].spotter
 		updated = true
@@ -614,8 +616,8 @@ func (s *CustomSCPStore) StatsSnapshot() CustomSCPStatsSnapshot {
 		InternedStrings:            s.interner.distinct(),
 		InternedRefs:               s.interner.totalRefs,
 		InternReleaseMisses:        s.interner.releaseMisses,
-		EntryExpiryItems:           len(s.entryExpiryItems),
-		StaticExpiryItems:          len(s.staticExpiryItems),
+		EntryExpiryItems:           s.entryExpiry.Len(),
+		StaticExpiryItems:          s.staticExpiry.Len(),
 		OversizedKeysSeenOnLoad:    s.diag.oversizedKeysSeenOnLoad,
 		OverflowObservationsPruned: s.diag.overflowObservationsPruned,
 		StaleObservationsPruned:    s.diag.staleObservationsPruned,
@@ -792,7 +794,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 			}
 		}
 		if len(entry.spotters) == 0 {
-			s.deleteEntryLocked(key)
+			s.deleteEntryAfterExpiryPopLocked(key)
 			continue
 		}
 		s.markEntryForCleanupLocked(key, entry)
@@ -802,7 +804,7 @@ func (s *CustomSCPStore) cleanup(now time.Time) {
 		if !ok {
 			break
 		}
-		if s.deleteStaticLocked(call) {
+		if s.deleteStaticAfterExpiryPopLocked(call) {
 			s.diag.staleStaticPruned++
 			staleStaticCalls = append(staleStaticCalls, call)
 		}
@@ -1073,7 +1075,7 @@ func (s *CustomSCPStore) pruneEntryLocked(entry *customSCPEntry, cutoff int64, r
 	removedCount := 0
 	write := 0
 	for _, spotter := range entry.spotters {
-		if spotter.seenUnix < cutoff {
+		if decodeCustomSCPSpotterSeenUnix(spotter.seenUnix) < cutoff {
 			if s.observationSpotters > 0 {
 				s.observationSpotters--
 			}
@@ -1163,11 +1165,21 @@ func (s *CustomSCPStore) staticHorizonCutoffUnix(now time.Time) int64 {
 }
 
 func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
+	s.deleteEntryWithExpiryLocked(key, true)
+}
+
+func (s *CustomSCPStore) deleteEntryAfterExpiryPopLocked(key customSCPKey) {
+	s.deleteEntryWithExpiryLocked(key, false)
+}
+
+func (s *CustomSCPStore) deleteEntryWithExpiryLocked(key customSCPKey, deleteExpiry bool) {
 	entry := s.entries[key]
 	if entry == nil {
 		return
 	}
-	s.deleteEntryExpiryLocked(key)
+	if deleteExpiry {
+		s.deleteEntryExpiryLocked(key)
+	}
 	s.active.Remove(key.call, key.band)
 	s.observationSpotters -= len(entry.spotters)
 	if s.observationSpotters < 0 {
@@ -1182,16 +1194,14 @@ func (s *CustomSCPStore) deleteEntryLocked(key customSCPKey) {
 	s.releaseInternedStringLocked(key.bucket)
 }
 
-func (s *CustomSCPStore) deleteStaticLocked(call string) bool {
+func (s *CustomSCPStore) deleteStaticAfterExpiryPopLocked(call string) bool {
 	if s == nil || call == "" {
 		return false
 	}
 	if _, ok := s.static[call]; !ok {
-		s.deleteStaticExpiryLocked(call)
 		return false
 	}
 	delete(s.static, call)
-	s.deleteStaticExpiryLocked(call)
 	s.releaseInternedStringLocked(call)
 	return true
 }

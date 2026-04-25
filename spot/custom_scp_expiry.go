@@ -1,7 +1,5 @@
 package spot
 
-import "container/heap"
-
 const customSCPImmediateCleanupDueUnix int64 = -1 << 63
 
 type customSCPEntryExpiryItem struct {
@@ -10,40 +8,130 @@ type customSCPEntryExpiryItem struct {
 	index   int
 }
 
-type customSCPEntryExpiryHeap []*customSCPEntryExpiryItem
+type customSCPEntryExpiryQueue struct {
+	items        []customSCPEntryExpiryItem
+	indexes      map[customSCPKey]int
+	indexesDirty bool
+}
 
-func (h customSCPEntryExpiryHeap) Len() int { return len(h) }
-
-func (h customSCPEntryExpiryHeap) Less(i, j int) bool {
-	if h[i].dueUnix != h[j].dueUnix {
-		return h[i].dueUnix < h[j].dueUnix
+func newCustomSCPEntryExpiryQueue(capacity int) customSCPEntryExpiryQueue {
+	return customSCPEntryExpiryQueue{
+		items:   make([]customSCPEntryExpiryItem, 0, capacity),
+		indexes: make(map[customSCPKey]int, capacity),
 	}
-	return customSCPKeyLess(h[i].key, h[j].key)
 }
 
-func (h customSCPEntryExpiryHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
-}
-
-func (h *customSCPEntryExpiryHeap) Push(x any) {
-	item, ok := x.(*customSCPEntryExpiryItem)
-	if !ok {
-		return
+func (h *customSCPEntryExpiryQueue) Len() int {
+	if h == nil {
+		return 0
 	}
-	item.index = len(*h)
-	*h = append(*h, item)
+	return len(h.items)
 }
 
-func (h *customSCPEntryExpiryHeap) Pop() any {
-	old := *h
+func (h *customSCPEntryExpiryQueue) Less(i, j int) bool {
+	if h.items[i].dueUnix != h.items[j].dueUnix {
+		return h.items[i].dueUnix < h.items[j].dueUnix
+	}
+	return customSCPKeyLess(h.items[i].key, h.items[j].key)
+}
+
+func (h *customSCPEntryExpiryQueue) Swap(i, j int) {
+	h.items[i], h.items[j] = h.items[j], h.items[i]
+	h.items[i].index = i
+	h.items[j].index = j
+	if !h.indexesDirty {
+		h.indexes[h.items[i].key] = i
+		h.indexes[h.items[j].key] = j
+	}
+}
+
+func (h *customSCPEntryExpiryQueue) push(item customSCPEntryExpiryItem) {
+	h.ensureIndexes()
+	item.index = len(h.items)
+	h.items = append(h.items, item)
+	h.indexes[item.key] = item.index
+	h.up(item.index)
+}
+
+func (h *customSCPEntryExpiryQueue) popLast() customSCPEntryExpiryItem {
+	old := h.items
 	n := len(old)
 	item := old[n-1]
-	old[n-1] = nil
+	old[n-1] = customSCPEntryExpiryItem{}
 	item.index = -1
-	*h = old[:n-1]
+	h.items = old[:n-1]
+	if !h.indexesDirty {
+		delete(h.indexes, item.key)
+	}
 	return item
+}
+
+func (h *customSCPEntryExpiryQueue) popRoot() {
+	h.indexesDirty = true
+	h.remove(0)
+}
+
+func (h *customSCPEntryExpiryQueue) remove(idx int) {
+	n := h.Len() - 1
+	if idx < 0 || idx > n {
+		return
+	}
+	if idx != n {
+		h.Swap(idx, n)
+		if !h.down(idx, n) {
+			h.up(idx)
+		}
+	}
+	h.popLast()
+}
+
+func (h *customSCPEntryExpiryQueue) fix(idx int) {
+	if !h.down(idx, h.Len()) {
+		h.up(idx)
+	}
+}
+
+func (h *customSCPEntryExpiryQueue) up(idx int) {
+	for {
+		parent := (idx - 1) / 2
+		if idx == 0 || !h.Less(idx, parent) {
+			break
+		}
+		h.Swap(parent, idx)
+		idx = parent
+	}
+}
+
+func (h *customSCPEntryExpiryQueue) down(idx, n int) bool {
+	start := idx
+	for {
+		left := 2*idx + 1
+		if left >= n || left < 0 {
+			break
+		}
+		child := left
+		if right := left + 1; right < n && h.Less(right, left) {
+			child = right
+		}
+		if !h.Less(child, idx) {
+			break
+		}
+		h.Swap(idx, child)
+		idx = child
+	}
+	return idx > start
+}
+
+func (h *customSCPEntryExpiryQueue) ensureIndexes() {
+	if h.indexes != nil && !h.indexesDirty {
+		return
+	}
+	h.indexes = make(map[customSCPKey]int, len(h.items)+1)
+	for i := range h.items {
+		h.items[i].index = i
+		h.indexes[h.items[i].key] = i
+	}
+	h.indexesDirty = false
 }
 
 type customSCPStaticExpiryItem struct {
@@ -52,40 +140,130 @@ type customSCPStaticExpiryItem struct {
 	index   int
 }
 
-type customSCPStaticExpiryHeap []*customSCPStaticExpiryItem
+type customSCPStaticExpiryQueue struct {
+	items        []customSCPStaticExpiryItem
+	indexes      map[string]int
+	indexesDirty bool
+}
 
-func (h customSCPStaticExpiryHeap) Len() int { return len(h) }
-
-func (h customSCPStaticExpiryHeap) Less(i, j int) bool {
-	if h[i].dueUnix != h[j].dueUnix {
-		return h[i].dueUnix < h[j].dueUnix
+func newCustomSCPStaticExpiryQueue(capacity int) customSCPStaticExpiryQueue {
+	return customSCPStaticExpiryQueue{
+		items:   make([]customSCPStaticExpiryItem, 0, capacity),
+		indexes: make(map[string]int, capacity),
 	}
-	return h[i].call < h[j].call
 }
 
-func (h customSCPStaticExpiryHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
-}
-
-func (h *customSCPStaticExpiryHeap) Push(x any) {
-	item, ok := x.(*customSCPStaticExpiryItem)
-	if !ok {
-		return
+func (h *customSCPStaticExpiryQueue) Len() int {
+	if h == nil {
+		return 0
 	}
-	item.index = len(*h)
-	*h = append(*h, item)
+	return len(h.items)
 }
 
-func (h *customSCPStaticExpiryHeap) Pop() any {
-	old := *h
+func (h *customSCPStaticExpiryQueue) Less(i, j int) bool {
+	if h.items[i].dueUnix != h.items[j].dueUnix {
+		return h.items[i].dueUnix < h.items[j].dueUnix
+	}
+	return h.items[i].call < h.items[j].call
+}
+
+func (h *customSCPStaticExpiryQueue) Swap(i, j int) {
+	h.items[i], h.items[j] = h.items[j], h.items[i]
+	h.items[i].index = i
+	h.items[j].index = j
+	if !h.indexesDirty {
+		h.indexes[h.items[i].call] = i
+		h.indexes[h.items[j].call] = j
+	}
+}
+
+func (h *customSCPStaticExpiryQueue) push(item customSCPStaticExpiryItem) {
+	h.ensureIndexes()
+	item.index = len(h.items)
+	h.items = append(h.items, item)
+	h.indexes[item.call] = item.index
+	h.up(item.index)
+}
+
+func (h *customSCPStaticExpiryQueue) popLast() customSCPStaticExpiryItem {
+	old := h.items
 	n := len(old)
 	item := old[n-1]
-	old[n-1] = nil
+	old[n-1] = customSCPStaticExpiryItem{}
 	item.index = -1
-	*h = old[:n-1]
+	h.items = old[:n-1]
+	if !h.indexesDirty {
+		delete(h.indexes, item.call)
+	}
 	return item
+}
+
+func (h *customSCPStaticExpiryQueue) popRoot() {
+	h.indexesDirty = true
+	h.remove(0)
+}
+
+func (h *customSCPStaticExpiryQueue) remove(idx int) {
+	n := h.Len() - 1
+	if idx < 0 || idx > n {
+		return
+	}
+	if idx != n {
+		h.Swap(idx, n)
+		if !h.down(idx, n) {
+			h.up(idx)
+		}
+	}
+	h.popLast()
+}
+
+func (h *customSCPStaticExpiryQueue) fix(idx int) {
+	if !h.down(idx, h.Len()) {
+		h.up(idx)
+	}
+}
+
+func (h *customSCPStaticExpiryQueue) up(idx int) {
+	for {
+		parent := (idx - 1) / 2
+		if idx == 0 || !h.Less(idx, parent) {
+			break
+		}
+		h.Swap(parent, idx)
+		idx = parent
+	}
+}
+
+func (h *customSCPStaticExpiryQueue) down(idx, n int) bool {
+	start := idx
+	for {
+		left := 2*idx + 1
+		if left >= n || left < 0 {
+			break
+		}
+		child := left
+		if right := left + 1; right < n && h.Less(right, left) {
+			child = right
+		}
+		if !h.Less(child, idx) {
+			break
+		}
+		h.Swap(idx, child)
+		idx = child
+	}
+	return idx > start
+}
+
+func (h *customSCPStaticExpiryQueue) ensureIndexes() {
+	if h.indexes != nil && !h.indexesDirty {
+		return
+	}
+	h.indexes = make(map[string]int, len(h.items)+1)
+	for i := range h.items {
+		h.items[i].index = i
+		h.indexes[h.items[i].call] = i
+	}
+	h.indexesDirty = false
 }
 
 func (s *CustomSCPStore) refreshEntryAgesLocked(entry *customSCPEntry) {
@@ -99,11 +277,12 @@ func (s *CustomSCPStore) refreshEntryAgesLocked(entry *customSCPEntry) {
 	latest := int64(0)
 	oldest := int64(0)
 	for _, spotter := range entry.spotters {
-		if spotter.seenUnix > latest {
-			latest = spotter.seenUnix
+		seenUnix := decodeCustomSCPSpotterSeenUnix(spotter.seenUnix)
+		if seenUnix > latest {
+			latest = seenUnix
 		}
-		if oldest == 0 || spotter.seenUnix < oldest {
-			oldest = spotter.seenUnix
+		if oldest == 0 || seenUnix < oldest {
+			oldest = seenUnix
 		}
 	}
 	entry.lastSeen = latest
@@ -124,9 +303,6 @@ func (s *CustomSCPStore) upsertEntryExpiryLocked(key customSCPKey, entry *custom
 	if s == nil {
 		return
 	}
-	if s.entryExpiryItems == nil {
-		s.entryExpiryItems = make(map[customSCPKey]*customSCPEntryExpiryItem, 16)
-	}
 	if entry == nil || len(entry.spotters) == 0 {
 		s.deleteEntryExpiryLocked(key)
 		return
@@ -136,26 +312,25 @@ func (s *CustomSCPStore) upsertEntryExpiryLocked(key customSCPKey, entry *custom
 		s.deleteEntryExpiryLocked(key)
 		return
 	}
-	if item := s.entryExpiryItems[key]; item != nil {
-		item.dueUnix = dueUnix
-		heap.Fix(&s.entryExpiry, item.index)
+	s.entryExpiry.ensureIndexes()
+	if idx, ok := s.entryExpiry.indexes[key]; ok {
+		s.entryExpiry.items[idx].dueUnix = dueUnix
+		s.entryExpiry.fix(idx)
 		return
 	}
-	item := &customSCPEntryExpiryItem{key: key, dueUnix: dueUnix}
-	heap.Push(&s.entryExpiry, item)
-	s.entryExpiryItems[key] = item
+	s.entryExpiry.push(customSCPEntryExpiryItem{key: key, dueUnix: dueUnix})
 }
 
 func (s *CustomSCPStore) deleteEntryExpiryLocked(key customSCPKey) {
 	if s == nil {
 		return
 	}
-	item := s.entryExpiryItems[key]
-	if item == nil {
+	s.entryExpiry.ensureIndexes()
+	idx, ok := s.entryExpiry.indexes[key]
+	if !ok {
 		return
 	}
-	heap.Remove(&s.entryExpiry, item.index)
-	delete(s.entryExpiryItems, key)
+	s.entryExpiry.remove(idx)
 }
 
 func (s *CustomSCPStore) markEntryForCleanupLocked(key customSCPKey, entry *customSCPEntry) {
@@ -167,12 +342,11 @@ func (s *CustomSCPStore) markEntryForCleanupLocked(key customSCPKey, entry *cust
 }
 
 func (s *CustomSCPStore) popDueEntryExpiryLocked(observationCutoff int64) (customSCPKey, *customSCPEntry, bool) {
-	for s != nil && len(s.entryExpiry) > 0 {
-		item := s.entryExpiry[0]
+	for s != nil && s.entryExpiry.Len() > 0 {
+		item := s.entryExpiry.items[0]
 		entry := s.entries[item.key]
 		if entry == nil {
-			heap.Pop(&s.entryExpiry)
-			delete(s.entryExpiryItems, item.key)
+			s.entryExpiry.popRoot()
 			continue
 		}
 		if item.dueUnix != s.entryCleanupDueUnix(entry) {
@@ -182,8 +356,7 @@ func (s *CustomSCPStore) popDueEntryExpiryLocked(observationCutoff int64) (custo
 		if item.dueUnix >= observationCutoff {
 			return customSCPKey{}, nil, false
 		}
-		heap.Pop(&s.entryExpiry)
-		delete(s.entryExpiryItems, item.key)
+		s.entryExpiry.popRoot()
 		return item.key, entry, true
 	}
 	return customSCPKey{}, nil, false
@@ -194,38 +367,33 @@ func (s *CustomSCPStore) upsertStaticExpiryLocked(call string, seenUnix int64) {
 		s.deleteStaticExpiryLocked(call)
 		return
 	}
-	if s.staticExpiryItems == nil {
-		s.staticExpiryItems = make(map[string]*customSCPStaticExpiryItem, 16)
-	}
-	if item := s.staticExpiryItems[call]; item != nil {
-		item.dueUnix = seenUnix
-		heap.Fix(&s.staticExpiry, item.index)
+	s.staticExpiry.ensureIndexes()
+	if idx, ok := s.staticExpiry.indexes[call]; ok {
+		s.staticExpiry.items[idx].dueUnix = seenUnix
+		s.staticExpiry.fix(idx)
 		return
 	}
-	item := &customSCPStaticExpiryItem{call: call, dueUnix: seenUnix}
-	heap.Push(&s.staticExpiry, item)
-	s.staticExpiryItems[call] = item
+	s.staticExpiry.push(customSCPStaticExpiryItem{call: call, dueUnix: seenUnix})
 }
 
 func (s *CustomSCPStore) deleteStaticExpiryLocked(call string) {
 	if s == nil || call == "" {
 		return
 	}
-	item := s.staticExpiryItems[call]
-	if item == nil {
+	s.staticExpiry.ensureIndexes()
+	idx, ok := s.staticExpiry.indexes[call]
+	if !ok {
 		return
 	}
-	heap.Remove(&s.staticExpiry, item.index)
-	delete(s.staticExpiryItems, call)
+	s.staticExpiry.remove(idx)
 }
 
 func (s *CustomSCPStore) popDueStaticExpiryLocked(staticCutoff int64) (string, bool) {
-	for s != nil && len(s.staticExpiry) > 0 {
-		item := s.staticExpiry[0]
+	for s != nil && s.staticExpiry.Len() > 0 {
+		item := s.staticExpiry.items[0]
 		seen := s.static[item.call]
 		if seen <= 0 {
-			heap.Pop(&s.staticExpiry)
-			delete(s.staticExpiryItems, item.call)
+			s.staticExpiry.popRoot()
 			continue
 		}
 		if item.dueUnix != seen {
@@ -235,8 +403,7 @@ func (s *CustomSCPStore) popDueStaticExpiryLocked(staticCutoff int64) (string, b
 		if item.dueUnix >= staticCutoff {
 			return "", false
 		}
-		heap.Pop(&s.staticExpiry)
-		delete(s.staticExpiryItems, item.call)
+		s.staticExpiry.popRoot()
 		return item.call, true
 	}
 	return "", false

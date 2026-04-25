@@ -472,6 +472,61 @@ func TestCustomSCPSpotterSliceUpsertMaintainsSortedNewestWins(t *testing.T) {
 	}
 }
 
+func TestCustomSCPSpotterSeenUnixEncodingBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   int64
+		want int64
+	}{
+		{name: "negative", in: -1, want: 0},
+		{name: "zero", in: 0, want: 0},
+		{name: "normal", in: 1_776_000_000, want: 1_776_000_000},
+		{name: "max", in: customSCPMaxSpotterSeenUnix, want: customSCPMaxSpotterSeenUnix},
+		{name: "overflow", in: customSCPMaxSpotterSeenUnix + 1, want: customSCPMaxSpotterSeenUnix},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := decodeCustomSCPSpotterSeenUnix(encodeCustomSCPSpotterSeenUnix(tc.in))
+			if got != tc.want {
+				t.Fatalf("encode/decode seenUnix=%d got %d want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCustomSCPExpiryQueuesRebuildIndexesAfterDirtyPop(t *testing.T) {
+	key1 := customSCPKey{call: "K1AAA", band: "20m", bucket: "cw"}
+	key2 := customSCPKey{call: "K1BBB", band: "20m", bucket: "cw"}
+	key3 := customSCPKey{call: "K1CCC", band: "20m", bucket: "cw"}
+
+	entryQueue := newCustomSCPEntryExpiryQueue(3)
+	entryQueue.push(customSCPEntryExpiryItem{key: key1, dueUnix: 1})
+	entryQueue.push(customSCPEntryExpiryItem{key: key2, dueUnix: 2})
+	entryQueue.push(customSCPEntryExpiryItem{key: key3, dueUnix: 3})
+	entryQueue.popRoot()
+	if !entryQueue.indexesDirty {
+		t.Fatalf("expected entry queue index to be dirty after root pop")
+	}
+	entryQueue.ensureIndexes()
+	idx, ok := entryQueue.indexes[key2]
+	if !ok || entryQueue.items[idx].key != key2 {
+		t.Fatalf("expected rebuilt entry index for key2, ok=%v idx=%d", ok, idx)
+	}
+
+	staticQueue := newCustomSCPStaticExpiryQueue(3)
+	staticQueue.push(customSCPStaticExpiryItem{call: "K1AAA", dueUnix: 1})
+	staticQueue.push(customSCPStaticExpiryItem{call: "K1BBB", dueUnix: 2})
+	staticQueue.push(customSCPStaticExpiryItem{call: "K1CCC", dueUnix: 3})
+	staticQueue.popRoot()
+	if !staticQueue.indexesDirty {
+		t.Fatalf("expected static queue index to be dirty after root pop")
+	}
+	staticQueue.ensureIndexes()
+	staticIdx, ok := staticQueue.indexes["K1BBB"]
+	if !ok || staticQueue.items[staticIdx].call != "K1BBB" {
+		t.Fatalf("expected rebuilt static index for K1BBB, ok=%v idx=%d", ok, staticIdx)
+	}
+}
+
 func TestCustomSCPStoreSpotterSliceChurnBoundsInternerAndCounters(t *testing.T) {
 	opts := CustomSCPOptions{
 		Path:                   filepath.Join(t.TempDir(), "scp"),
@@ -797,11 +852,12 @@ func TestCustomSCPStoreCleanupPrunesOverflowAndStaleStatic(t *testing.T) {
 	store.markEntryForCleanupLocked(key, store.entries[key])
 	store.mu.Unlock()
 	for _, spotter := range store.entries[key].spotters {
-		setRawObservation(t, store, key, spotter.spotter, spotter.seenUnix, spotter.cellRes1)
+		setRawObservation(t, store, key, spotter.spotter, decodeCustomSCPSpotterSeenUnix(spotter.seenUnix), spotter.cellRes1)
 	}
 	store.persistStaticLocked("K1OLD", now.Add(-31*24*time.Hour).Unix())
-	if item := store.entryExpiryItems[key]; item == nil || item.dueUnix != customSCPImmediateCleanupDueUnix {
-		t.Fatalf("expected oversized entry queued for immediate cleanup, item=%+v", item)
+	idx, ok := store.entryExpiry.indexes[key]
+	if !ok || store.entryExpiry.items[idx].dueUnix != customSCPImmediateCleanupDueUnix {
+		t.Fatalf("expected oversized entry queued for immediate cleanup, ok=%v idx=%d", ok, idx)
 	}
 
 	store.cleanup(now)
