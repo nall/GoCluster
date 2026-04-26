@@ -137,11 +137,12 @@ func TestUserRecordRoundTrip(t *testing.T) {
 	f.SetEvent("POTA", true)
 	f.NearbyEnabled = true
 	record := &UserRecord{
-		Filter:       *f,
-		RecentIPs:    []string{"203.0.113.10", "198.51.100.42"},
-		DedupePolicy: DedupePolicySlow,
-		Grid:         "FN31",
-		NoiseClass:   "URBAN",
+		Filter:                  *f,
+		RecentIPs:               []string{"203.0.113.10", "198.51.100.42"},
+		DedupePolicy:            DedupePolicySlow,
+		Grid:                    "FN31",
+		NoiseClass:              "URBAN",
+		PathMinObservationCount: 42,
 	}
 	if err := SaveUserRecord("k3to", record); err != nil {
 		t.Fatalf("SaveUserRecord failed: %v", err)
@@ -165,6 +166,9 @@ func TestUserRecordRoundTrip(t *testing.T) {
 	}
 	if loaded.NoiseClass != "URBAN" {
 		t.Fatalf("expected noise class URBAN, got %s", loaded.NoiseClass)
+	}
+	if loaded.PathMinObservationCount != 42 {
+		t.Fatalf("expected path min observation count 42, got %d", loaded.PathMinObservationCount)
 	}
 	if loaded.DedupePolicy != DedupePolicySlow {
 		t.Fatalf("expected dedupe policy SLOW, got %s", loaded.DedupePolicy)

@@ -421,6 +421,17 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	)
 	add("SET NOISE", "SET NOISE - Set noise class.", setNoiseLines)
 
+	setPathSamplesLines := helpEntryLines(
+		"SET PATHSAMPLES - Set your path sample floor.",
+		[]string{"SET PATHSAMPLES <count|DEFAULT>"},
+		nil,
+		[]string{
+			"Count must be higher than the cluster default.",
+			"DEFAULT clears your personal override.",
+		},
+	)
+	add("SET PATHSAMPLES", "SET PATHSAMPLES - Set path sample floor.", setPathSamplesLines)
+
 	passNearbyLines := helpEntryLines(
 		"PASS NEARBY - Toggle nearby filtering.",
 		[]string{"PASS NEARBY ON|OFF"},
@@ -624,6 +635,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SET DIAG",
 			"SET GRID",
 			"SET NOISE",
+			"SET PATHSAMPLES",
 			"PASS NEARBY",
 			"SHOW/FILTER",
 			"SH/FILTER",
@@ -750,6 +762,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SET DIAG",
 			"SET GRID",
 			"SET NOISE",
+			"SET PATHSAMPLES",
 			"PASS NEARBY",
 			"SHOW FILTER",
 			"PASS",
@@ -789,6 +802,8 @@ func normalizeHelpTopic(dialect string, topic string) string {
 		return "SET GRID"
 	case strings.HasPrefix(upper, "SET NOISE"):
 		return "SET NOISE"
+	case strings.HasPrefix(upper, "SET PATHSAMPLES"):
+		return "SET PATHSAMPLES"
 	case strings.HasPrefix(upper, "RESET FILTER"):
 		return "RESET FILTER"
 	case strings.HasPrefix(upper, "DIALECT"):

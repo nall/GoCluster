@@ -97,6 +97,17 @@ type Result struct {
 
 // Predict returns a single merged glyph for the path.
 func (p *Predictor) Predict(userCell, dxCell CellID, userCoarse, dxCoarse CellID, band string, mode string, noisePenalty float64, now time.Time) Result {
+	minObservationCount := 0
+	if p != nil {
+		minObservationCount = p.cfg.MinObservationCount
+	}
+	return p.PredictWithMinObservationCount(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, minObservationCount, now)
+}
+
+// PredictWithMinObservationCount returns a merged glyph using the supplied raw
+// observation floor. Callers may pass a floor above the configured default when
+// applying stricter per-session display or filter policy.
+func (p *Predictor) PredictWithMinObservationCount(userCell, dxCell CellID, userCoarse, dxCoarse CellID, band string, mode string, noisePenalty float64, minObservationCount int, now time.Time) Result {
 	insufficient := "?"
 	if p != nil && p.cfg.GlyphSymbols.Insufficient != "" {
 		insufficient = p.cfg.GlyphSymbols.Insufficient
@@ -114,12 +125,15 @@ func (p *Predictor) Predict(userCell, dxCell CellID, userCoarse, dxCoarse CellID
 	}
 
 	mergedPower, mergedWeight, mergedAge, mergedCount, reason, ok := p.mergeFromStore(p.combined, userCell, dxCell, userCoarse, dxCoarse, band, noisePenalty, now)
-	if ok && mergedWeight >= p.cfg.MinEffectiveWeight && countMeetsMinimum(mergedCount, p.cfg.MinObservationCount) {
+	if minObservationCount < p.cfg.MinObservationCount {
+		minObservationCount = p.cfg.MinObservationCount
+	}
+	if ok && mergedWeight >= p.cfg.MinEffectiveWeight && countMeetsMinimum(mergedCount, minObservationCount) {
 		return makeResult(mergedPower, mergedWeight, mergedAge, mergedCount, SourceCombined)
 	}
 	if ok {
 		if reason == InsufficientNone {
-			if !countMeetsMinimum(mergedCount, p.cfg.MinObservationCount) {
+			if !countMeetsMinimum(mergedCount, minObservationCount) {
 				reason = InsufficientLowCount
 			} else {
 				reason = InsufficientLowWeight

@@ -83,6 +83,7 @@ If a duplicate is suppressed, slow clients do not see another control-queue enqu
 
 - `SET GRID` stores the user's Maidenhead grid for path reliability
 - `SET NOISE` stores the user's noise class and applies a band-specific DX-to-user path penalty
+- `SET PATHSAMPLES` stores a stricter per-user path sample floor; it cannot lower the cluster default
 - `PASS NEARBY ON` requires a grid and keeps spots whose DX side or DE side falls in the user's nearby area
 
 `NEARBY` uses H3 cells:
@@ -108,6 +109,7 @@ When `PASS NEARBY OFF` is used, the telnet layer restores the saved location-fil
 The telnet layer asks the path predictor for a class and glyph when path display is enabled and the user has a grid.
 
 - normal classes come from [`../pathreliability`](../pathreliability)
+- a per-user `SET PATHSAMPLES` override can only require more observations than the cluster default
 - optional `R` and `G` solar-weather overrides are applied afterward
 - the insufficient state is preserved and is not replaced by solar overrides
 

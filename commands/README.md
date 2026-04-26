@@ -43,6 +43,7 @@ The operator-facing commands handled here are:
 - `SET DIAG`
 - `SET GRID`
 - `SET NOISE`
+- `SET PATHSAMPLES`
 - `SET SOLAR`
 - `RESET FILTER`
 - `DIALECT`

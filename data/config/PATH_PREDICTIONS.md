@@ -102,9 +102,14 @@ When you see a glyph next to a spot, here's what happened behind the scenes:
 
 5. **Merge directions**: Receive and transmit paths combine (60/40 split), with your noise penalty applied to the receive side.
 
-6. **Check confidence**: If the combined data weight is below the minimum threshold (default 0.6), the system shows a space (insufficient data) instead of making an unreliable prediction.
+6. **Check evidence floor**: If the selected raw observation count is below
+   the cluster minimum, the system shows a space (insufficient data). Users can
+   make their own view stricter with `SET PATHSAMPLES <count>`, but cannot lower
+   the cluster default.
 
-7. **Map to glyph**: The final signal strength gets compared against mode-specific thresholds to pick the right symbol.
+7. **Check confidence**: If the combined data weight is below the minimum threshold (default 0.6), the system shows a space (insufficient data) instead of making an unreliable prediction.
+
+8. **Map to glyph**: The final signal strength gets compared against mode-specific thresholds to pick the right symbol.
 
 ## How to Use This Information
 
@@ -128,6 +133,10 @@ The glyphs help you prioritize. If you see:
 It's giving you a statistical estimate based on what thousands of other stations are experiencing on similar paths. You might do better or worse depending on your setup.
 
 **New paths take time**: If a band just opened to a new area, there might not be data yet. A space character doesn't mean the path is bad - it means the prediction system is still learning.
+
+**You can require more samples**: `SET PATHSAMPLES 30` makes your session wait
+for at least 30 selected observations before showing a path tag. Use
+`SET PATHSAMPLES DEFAULT` to return to the cluster default.
 
 **Beacons get capped**: The system limits how much any single beacon can dominate the data to prevent bias from loud beacons.
 
@@ -155,6 +164,7 @@ The system is highly configurable (see [path_reliability.yaml](path_reliability.
 - **Freshness gate**: Maximum selected evidence age as a multiple of band half-life
 - **Noise penalties**: band-specific dB adjustments per environment type
 - **Mode thresholds**: What signal strength qualifies as high/medium/low for each mode
+- **Minimum observation count**: How many selected raw observations are needed before showing a prediction
 - **Minimum weight**: How much data is needed before showing a prediction
 
 ## The Bottom Line

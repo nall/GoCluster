@@ -84,6 +84,8 @@ const (
 	diagModeMode
 )
 
+const maxUserPathMinObservationCount = 10000
+
 func parseDedupePolicy(value string) dedupePolicy {
 	switch filter.NormalizeDedupePolicy(value) {
 	case filter.DedupePolicyMed:
@@ -271,29 +273,30 @@ type Server struct {
 //
 // The client remains active until they type BYE or their connection drops.
 type Client struct {
-	conn           net.Conn               // TCP connection to client
-	reader         *bufio.Reader          // Buffered reader for client input
-	writer         *bufio.Writer          // Buffered writer for client output
-	writeMu        sync.Mutex             // Guards writer/deadline usage for echo + writer loop
-	callsign       string                 // Client's amateur radio callsign
-	connected      time.Time              // Timestamp when client connected
-	server         *Server                // Back-reference to server for formatting/helpers
-	address        string                 // Client's IP address
-	recentIPs      []string               // Most-recent-first IP history for this callsign
-	spotChan       chan *spotEnvelope     // Buffered channel for spot delivery (configurable capacity)
-	controlChan    chan controlMessage    // Buffered channel for control/bulletin delivery
-	done           chan struct{}          // Closed to stop writer and prevent new enqueues
-	closeOnce      sync.Once              // Ensures close logic runs once
-	echoInput      bool                   // True when we should echo typed characters back to the client
-	dialect        DialectName            // Active command dialect for filter commands
-	grid           string                 // User grid (4+ chars) for path reliability
-	gridDerived    bool                   // True when grid was derived from CTY prefix info
-	gridCell       pathreliability.CellID // Cached cell for path reliability
-	gridCoarseCell pathreliability.CellID // Cached coarse (res-1) cell for nearby filtering
-	noiseClass     string                 // Noise class token (e.g., QUIET, URBAN)
-	skipNextEOL    bool                   // Consume a single LF/NUL after CR (RFC 854 compliance)
-	dedupePolicy   atomic.Uint32          // Secondary dedupe policy (fast/med/slow)
-	diagMode       atomic.Uint32          // Diagnostic comment override mode
+	conn                    net.Conn               // TCP connection to client
+	reader                  *bufio.Reader          // Buffered reader for client input
+	writer                  *bufio.Writer          // Buffered writer for client output
+	writeMu                 sync.Mutex             // Guards writer/deadline usage for echo + writer loop
+	callsign                string                 // Client's amateur radio callsign
+	connected               time.Time              // Timestamp when client connected
+	server                  *Server                // Back-reference to server for formatting/helpers
+	address                 string                 // Client's IP address
+	recentIPs               []string               // Most-recent-first IP history for this callsign
+	spotChan                chan *spotEnvelope     // Buffered channel for spot delivery (configurable capacity)
+	controlChan             chan controlMessage    // Buffered channel for control/bulletin delivery
+	done                    chan struct{}          // Closed to stop writer and prevent new enqueues
+	closeOnce               sync.Once              // Ensures close logic runs once
+	echoInput               bool                   // True when we should echo typed characters back to the client
+	dialect                 DialectName            // Active command dialect for filter commands
+	grid                    string                 // User grid (4+ chars) for path reliability
+	gridDerived             bool                   // True when grid was derived from CTY prefix info
+	gridCell                pathreliability.CellID // Cached cell for path reliability
+	gridCoarseCell          pathreliability.CellID // Cached coarse (res-1) cell for nearby filtering
+	noiseClass              string                 // Noise class token (e.g., QUIET, URBAN)
+	pathMinObservationCount int                    // Optional stricter per-user path sample floor
+	skipNextEOL             bool                   // Consume a single LF/NUL after CR (RFC 854 compliance)
+	dedupePolicy            atomic.Uint32          // Secondary dedupe policy (fast/med/slow)
+	diagMode                atomic.Uint32          // Diagnostic comment override mode
 	// solarMu guards solar summary settings shared across goroutines.
 	solarMu             sync.Mutex
 	solarSummaryMinutes int
@@ -354,6 +357,9 @@ func (c *Client) saveFilter() error {
 		DedupePolicy: c.getDedupePolicy().label(),
 		Grid:         strutil.NormalizeUpper(state.grid),
 		NoiseClass:   strutil.NormalizeUpper(state.noiseClass),
+	}
+	if state.pathMinObservationCount > 0 {
+		record.PathMinObservationCount = state.pathMinObservationCount
 	}
 	record.SolarSummaryMinutes = c.getSolarSummaryMinutes()
 	if existing, err := filter.LoadUserRecord(callsign); err == nil {
@@ -465,11 +471,12 @@ func (c *Client) updateFilter(fn func(f *filter.Filter)) {
 }
 
 type pathState struct {
-	grid           string
-	gridDerived    bool
-	gridCell       pathreliability.CellID
-	gridCoarseCell pathreliability.CellID
-	noiseClass     string
+	grid                    string
+	gridDerived             bool
+	gridCell                pathreliability.CellID
+	gridCoarseCell          pathreliability.CellID
+	noiseClass              string
+	pathMinObservationCount int
 }
 
 func (c *Client) pathSnapshot() pathState {
@@ -478,11 +485,12 @@ func (c *Client) pathSnapshot() pathState {
 	}
 	c.pathMu.RLock()
 	state := pathState{
-		grid:           c.grid,
-		gridDerived:    c.gridDerived,
-		gridCell:       c.gridCell,
-		gridCoarseCell: c.gridCoarseCell,
-		noiseClass:     c.noiseClass,
+		grid:                    c.grid,
+		gridDerived:             c.gridDerived,
+		gridCell:                c.gridCell,
+		gridCoarseCell:          c.gridCoarseCell,
+		noiseClass:              c.noiseClass,
+		pathMinObservationCount: c.pathMinObservationCount,
 	}
 	c.pathMu.RUnlock()
 	return state
@@ -1386,7 +1394,7 @@ func (s *Server) formatPathStatusMessage(client *Client) string {
 	return replacer.Replace(template)
 }
 
-// handlePathSettingsCommand processes SET GRID/SET NOISE commands.
+// handlePathSettingsCommand processes SET GRID/SET NOISE/SET PATHSAMPLES commands.
 func (s *Server) handlePathSettingsCommand(client *Client, line string) (string, bool) {
 	if client == nil {
 		return "", false
@@ -1439,9 +1447,69 @@ func (s *Server) handlePathSettingsCommand(client *Client, line string) (string,
 			return fmt.Sprintf("Noise class set to %s (warning: failed to persist: %v)\n", class, err), true
 		}
 		return fmt.Sprintf("Noise class set to %s\n", class), true
+	case "PATHSAMPLES":
+		if len(upper) < 3 {
+			return "Usage: SET PATHSAMPLES <count|DEFAULT>\n", true
+		}
+		clusterDefault, ok := s.pathMinObservationDefault()
+		if !ok {
+			return "Path reliability is disabled.\n", true
+		}
+		token := upper[2]
+		if token == "DEFAULT" {
+			client.pathMu.Lock()
+			client.pathMinObservationCount = 0
+			client.pathMu.Unlock()
+			if err := client.saveFilter(); err != nil {
+				return fmt.Sprintf("Path sample minimum reset to cluster default %d (warning: failed to persist: %v)\n", clusterDefault, err), true
+			}
+			return fmt.Sprintf("Path sample minimum reset to cluster default %d\n", clusterDefault), true
+		}
+		count, err := strconv.Atoi(token)
+		if err != nil || count <= 0 {
+			return "Usage: SET PATHSAMPLES <count|DEFAULT>\n", true
+		}
+		if count > maxUserPathMinObservationCount {
+			return fmt.Sprintf("Path sample minimum must be %d or lower\n", maxUserPathMinObservationCount), true
+		}
+		if count <= clusterDefault {
+			return fmt.Sprintf("Path sample minimum must be greater than cluster default %d\n", clusterDefault), true
+		}
+		client.pathMu.Lock()
+		client.pathMinObservationCount = count
+		client.pathMu.Unlock()
+		if err := client.saveFilter(); err != nil {
+			return fmt.Sprintf("Path sample minimum set to %d (cluster default %d; warning: failed to persist: %v)\n", count, clusterDefault, err), true
+		}
+		return fmt.Sprintf("Path sample minimum set to %d (cluster default %d)\n", count, clusterDefault), true
 	default:
 		return "", false
 	}
+}
+
+func (s *Server) pathMinObservationDefault() (int, bool) {
+	if s == nil || s.pathPredictor == nil {
+		return 0, false
+	}
+	cfg := s.pathPredictor.Config()
+	if !cfg.Enabled || cfg.MinObservationCount <= 0 {
+		return 0, false
+	}
+	return cfg.MinObservationCount, true
+}
+
+func (s *Server) pathPredictorMinObservationCount() int {
+	if s == nil || s.pathPredictor == nil {
+		return 0
+	}
+	return s.pathPredictor.Config().MinObservationCount
+}
+
+func effectivePathMinObservationCount(state pathState, cfg pathreliability.Config) int {
+	if state.pathMinObservationCount > cfg.MinObservationCount {
+		return state.pathMinObservationCount
+	}
+	return cfg.MinObservationCount
 }
 
 func (s *Server) resolveDedupePolicy(requested dedupePolicy) dedupePolicy {
@@ -3021,6 +3089,9 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		client.gridCell = pathreliability.EncodeCell(client.grid)
 		client.gridCoarseCell = pathreliability.EncodeCoarseCell(client.grid)
 		client.noiseClass = strutil.NormalizeUpper(record.NoiseClass)
+		if record.PathMinObservationCount > s.pathPredictorMinObservationCount() {
+			client.pathMinObservationCount = record.PathMinObservationCount
+		}
 		client.setSolarSummaryMinutes(record.SolarSummaryMinutes, loginTime)
 		if created {
 			log.Printf("Created default filter for %s", client.callsign)
@@ -3036,6 +3107,7 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		client.gridCoarseCell = pathreliability.InvalidCell
 		client.gridDerived = false
 		client.noiseClass = "QUIET"
+		client.pathMinObservationCount = 0
 		log.Printf("Warning: failed to load user record for %s: %v", client.callsign, err)
 		if err := client.saveFilter(); err != nil {
 			log.Printf("Warning: failed to save user record for %s: %v", client.callsign, err)
@@ -3451,7 +3523,8 @@ func (s *Server) pathPredictionForClient(client *Client, sp *spot.Spot) (pathPre
 	}
 	now := s.now()
 	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
-	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
+	minObservationCount := effectivePathMinObservationCount(state, cfg)
+	res := s.pathPredictor.PredictWithMinObservationCount(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, minObservationCount, now)
 	s.recordPathPrediction(res, state.gridDerived, sp.DXMetadata.GridDerived)
 	return pathPrediction{
 		result:   res,
@@ -3540,7 +3613,8 @@ func (s *Server) pathClassForClient(client *Client, sp *spot.Spot) string {
 	}
 	now := s.now()
 	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
-	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
+	minObservationCount := effectivePathMinObservationCount(state, cfg)
+	res := s.pathPredictor.PredictWithMinObservationCount(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, minObservationCount, now)
 	if res.Source == pathreliability.SourceInsufficient {
 		return filter.PathClassInsufficient
 	}

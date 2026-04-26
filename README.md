@@ -199,6 +199,7 @@ SET DEDUPE - Select dedupe policy.
 SET DIAG - Select diagnostic comments.
 SET GRID - Set your grid (4-6 chars).
 SET NOISE - Set noise class.
+SET PATHSAMPLES - Set path sample floor.
 PASS NEARBY - Toggle nearby filtering.
 SHOW FILTER - Display filter state.
 PASS - Allow filter matches.
@@ -521,6 +522,9 @@ Important operational notes:
 - `SET NOISE` changes the receive-side penalty used in the calculation. The
   penalty is band-specific: low bands get stronger local-noise corrections than
   10m and 6m.
+- `SET PATHSAMPLES <count>` lets you require more selected observations than
+  the cluster default before your session shows a path tag. `SET PATHSAMPLES
+  DEFAULT` clears that personal override.
 - Stale evidence becomes `INSUFFICIENT`; age alone does not demote a strong
   path through weaker glyph tiers.
 - If grids are missing, evidence is stale, too sparse, too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.

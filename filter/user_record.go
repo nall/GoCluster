@@ -25,6 +25,8 @@ type UserRecord struct {
 	LastLoginUTC time.Time `yaml:"last_login_utc,omitempty"`
 	Grid         string    `yaml:"grid,omitempty"`        // Optional user-supplied grid (uppercased)
 	NoiseClass   string    `yaml:"noise_class,omitempty"` // Optional noise class token (uppercased)
+	// PathMinObservationCount stores a per-user stricter path sample floor (0=cluster default).
+	PathMinObservationCount int `yaml:"path_min_observation_count,omitempty"`
 	// SolarSummaryMinutes controls opt-in solar summary cadence (0=off).
 	SolarSummaryMinutes int `yaml:"solar_summary_minutes,omitempty"`
 }
@@ -56,6 +58,7 @@ func LoadUserRecord(callsign string) (*UserRecord, error) {
 	record.DedupePolicy = NormalizeDedupePolicy(record.DedupePolicy)
 	record.Grid = strutil.NormalizeUpper(record.Grid)
 	record.NoiseClass = strutil.NormalizeUpper(record.NoiseClass)
+	record.PathMinObservationCount = normalizePathMinObservationCount(record.PathMinObservationCount)
 	record.SolarSummaryMinutes = normalizeSolarSummaryMinutes(record.SolarSummaryMinutes)
 	return &record, nil
 }
@@ -129,6 +132,7 @@ func SaveUserRecord(callsign string, record *UserRecord) error {
 	}
 	record.RecentIPs = trimRecentIPs(record.RecentIPs)
 	record.DedupePolicy = NormalizeDedupePolicy(record.DedupePolicy)
+	record.PathMinObservationCount = normalizePathMinObservationCount(record.PathMinObservationCount)
 	record.SolarSummaryMinutes = normalizeSolarSummaryMinutes(record.SolarSummaryMinutes)
 	bs, err := yaml.Marshal(record)
 	if err != nil {
@@ -228,4 +232,11 @@ func normalizeSolarSummaryMinutes(minutes int) int {
 	default:
 		return 0
 	}
+}
+
+func normalizePathMinObservationCount(count int) int {
+	if count <= 0 {
+		return 0
+	}
+	return count
 }

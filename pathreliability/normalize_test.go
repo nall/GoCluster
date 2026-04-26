@@ -420,3 +420,28 @@ func TestPredictLowObservationCountInsufficient(t *testing.T) {
 		t.Fatalf("expected enough weight so count is the failing gate, got weight=%v", res.Weight)
 	}
 }
+
+func TestPredictWithMinObservationCountCannotLowerConfiguredFloor(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 5
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	for i := 0; i < 3; i++ {
+		predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -5, 10, now, false)
+	}
+
+	res := predictor.PredictWithMinObservationCount(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, 1, now)
+	if res.Source != SourceInsufficient {
+		t.Fatalf("expected configured observation floor to remain enforced, got %v", res.Source)
+	}
+	if res.InsufficientReason != InsufficientLowCount {
+		t.Fatalf("expected low-count insufficient reason, got %v", res.InsufficientReason)
+	}
+}

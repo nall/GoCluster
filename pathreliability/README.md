@@ -113,6 +113,10 @@ The shipped config currently uses:
 
 If only one direction exists, the predictor still uses it, but discounts the effective weight with `reverse_hint_discount`.
 
+Telnet users can set a stricter personal observation floor with
+`SET PATHSAMPLES <count>`. That setting is applied as
+`max(min_observation_count, user setting)` and cannot lower the cluster default.
+
 Noise is applied only to the DX-to-user side in the power domain. The shipped
 table uses P.372-17-informed operational receive penalties: low bands retain
 strong local-noise penalties, while 10m and 6m are tapered because absolute
