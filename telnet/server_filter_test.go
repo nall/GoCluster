@@ -20,6 +20,7 @@ func newTestClient() *Client {
 
 func newTestPathPredictor() *pathreliability.Predictor {
 	cfg := pathreliability.DefaultConfig()
+	cfg.MinObservationCount = 1
 	return pathreliability.NewPredictor(cfg, []string{"20m"})
 }
 

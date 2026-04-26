@@ -23,6 +23,7 @@ type Config struct {
 	StaleAfterHalfLifeMultiplier       float64                       `yaml:"stale_after_half_life_multiplier"`        // stale = k * half-life (per band)
 	MaxPredictionAgeHalfLifeMultiplier float64                       `yaml:"max_prediction_age_half_life_multiplier"` // prediction age gate = k * half-life; 0 disables
 	MinEffectiveWeight                 float64                       `yaml:"min_effective_weight"`                    // minimum decayed weight to report
+	MinObservationCount                int                           `yaml:"min_observation_count"`                   // minimum raw selected observations to report
 	MinFineWeight                      float64                       `yaml:"min_fine_weight"`                         // minimum fine weight to blend with coarse
 	FineOnlyWeight                     float64                       `yaml:"fine_only_weight"`                        // minimum fine weight to use fine only
 	ReverseHintDiscount                float64                       `yaml:"reverse_hint_discount"`                   // multiplier when using reverse direction
@@ -61,6 +62,7 @@ var requiredConfigPaths = []yamlconfig.Path{
 	{"stale_after_half_life_multiplier"},
 	{"max_prediction_age_half_life_multiplier"},
 	{"min_effective_weight"},
+	{"min_observation_count"},
 	{"min_fine_weight"},
 	{"fine_only_weight"},
 	{"reverse_hint_discount"},
@@ -212,6 +214,7 @@ func DefaultConfig() Config {
 		StaleAfterHalfLifeMultiplier:       5,
 		MaxPredictionAgeHalfLifeMultiplier: 1.25,
 		MinEffectiveWeight:                 1.0,
+		MinObservationCount:                19,
 		MinFineWeight:                      5.0,
 		FineOnlyWeight:                     20.0,
 		ReverseHintDiscount:                0.5,
@@ -289,6 +292,9 @@ func (c *Config) finalize() error {
 	}
 	if c.MinEffectiveWeight <= 0 {
 		return fmt.Errorf("min_effective_weight must be > 0")
+	}
+	if c.MinObservationCount <= 0 {
+		return fmt.Errorf("min_observation_count must be > 0")
 	}
 	if c.MinFineWeight <= 0 {
 		return fmt.Errorf("min_fine_weight must be > 0")

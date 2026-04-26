@@ -146,6 +146,13 @@ func TestDefaultMaxPredictionAgeMultiplier(t *testing.T) {
 	}
 }
 
+func TestDefaultMinObservationCount(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.MinObservationCount != 19 {
+		t.Fatalf("default min observation count = %v, want 19", cfg.MinObservationCount)
+	}
+}
+
 func TestLoadFileRejectsNegativeMaxPredictionAgeMultiplier(t *testing.T) {
 	path := writeTempConfigOverlay(t, `
 max_prediction_age_half_life_multiplier: -1
@@ -155,6 +162,19 @@ max_prediction_age_half_life_multiplier: -1
 		t.Fatalf("expected negative max prediction age multiplier to fail")
 	}
 	if !strings.Contains(err.Error(), "max_prediction_age_half_life_multiplier") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileRejectsNonPositiveMinObservationCount(t *testing.T) {
+	path := writeTempConfigOverlay(t, `
+min_observation_count: 0
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected non-positive min observation count to fail")
+	}
+	if !strings.Contains(err.Error(), "min_observation_count") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -192,6 +212,7 @@ func TestLoadFileRejectsMissingRequiredYAMLSettings(t *testing.T) {
 	}{
 		{name: "enabled", path: []string{"enabled"}, want: "enabled"},
 		{name: "display enabled", path: []string{"display_enabled"}, want: "display_enabled"},
+		{name: "min observation count", path: []string{"min_observation_count"}, want: "min_observation_count"},
 		{name: "ft4 offset", path: []string{"mode_offsets", "ft4"}, want: "mode_offsets.ft4"},
 	}
 	for _, tc := range cases {

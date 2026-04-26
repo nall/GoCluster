@@ -42,6 +42,7 @@ func BenchmarkPredictFreshnessGate(b *testing.B) {
 	cfg := DefaultConfig()
 	cfg.BandHalfLifeSec = map[string]int{"20m": 300}
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1.25
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := CellID(1)

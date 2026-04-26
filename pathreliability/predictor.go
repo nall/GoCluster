@@ -62,6 +62,7 @@ type InsufficientReason uint8
 const (
 	InsufficientNone InsufficientReason = iota
 	InsufficientNoSample
+	InsufficientLowCount
 	InsufficientLowWeight
 	InsufficientStale
 )
@@ -72,6 +73,8 @@ func (r InsufficientReason) String() string {
 		return "none"
 	case InsufficientNoSample:
 		return "no_sample"
+	case InsufficientLowCount:
+		return "low_count"
 	case InsufficientLowWeight:
 		return "low_weight"
 	case InsufficientStale:
@@ -111,12 +114,16 @@ func (p *Predictor) Predict(userCell, dxCell CellID, userCoarse, dxCoarse CellID
 	}
 
 	mergedPower, mergedWeight, mergedAge, mergedCount, reason, ok := p.mergeFromStore(p.combined, userCell, dxCell, userCoarse, dxCoarse, band, noisePenalty, now)
-	if ok && mergedWeight >= p.cfg.MinEffectiveWeight {
+	if ok && mergedWeight >= p.cfg.MinEffectiveWeight && countMeetsMinimum(mergedCount, p.cfg.MinObservationCount) {
 		return makeResult(mergedPower, mergedWeight, mergedAge, mergedCount, SourceCombined)
 	}
 	if ok {
 		if reason == InsufficientNone {
-			reason = InsufficientLowWeight
+			if !countMeetsMinimum(mergedCount, p.cfg.MinObservationCount) {
+				reason = InsufficientLowCount
+			} else {
+				reason = InsufficientLowWeight
+			}
 		}
 		return makeInsufficient(mergedPower, mergedWeight, mergedAge, mergedCount, reason)
 	}
@@ -124,6 +131,10 @@ func (p *Predictor) Predict(userCell, dxCell CellID, userCoarse, dxCoarse CellID
 		reason = InsufficientNoSample
 	}
 	return makeInsufficient(0, 0, 0, mergedCount, reason)
+}
+
+func countMeetsMinimum(count uint32, min int) bool {
+	return min <= 0 || uint64(count) >= uint64(min)
 }
 
 func mergeSamples(receive Sample, transmit Sample, cfg Config, noisePenalty float64) (float64, float64, int64, uint32, bool) {

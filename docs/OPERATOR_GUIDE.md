@@ -217,6 +217,8 @@ n<count>|<reason>
 - `a<age>` is the effective age of the selected evidence. Bare numbers are
   seconds; `m` and `h` mean minutes and hours.
 - `none` means no usable selected sample existed.
+- `lown` means selected samples existed, but their raw observation count was
+  below the configured minimum.
 - `loww` means selected samples existed, but their effective weight was below
   the configured minimum.
 - `stale` means selected samples existed, but the selected evidence was too old
@@ -230,6 +232,8 @@ Example readings:
 
 - `n18|w7`: 18 selected raw observations, rounded effective weight 7.
 - `n0|none`: no usable selected sample.
+- `n3|lown`: three selected observations existed, but not enough to emit a
+  path class.
 - `n1|loww`: one selected observation existed, but the effective weight was
   below the minimum.
 - `n32|w1`: large raw sample count but low rounded effective weight.

@@ -43,6 +43,7 @@ func TestPathPredictionUsesBandSpecificNoisePenalty(t *testing.T) {
 	requireH3Mappings(t)
 	cfg := pathreliability.DefaultConfig()
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	predictor := pathreliability.NewPredictor(cfg, []string{"160m", "6m"})
 
 	userCell := pathreliability.EncodeCell("FN31")
@@ -93,6 +94,7 @@ func TestPathPredictionStaleEvidenceIsInsufficientForDisplayAndFilter(t *testing
 	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
 	cfg.StaleAfterHalfLifeMultiplier = 100
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
 	predictor := pathreliability.NewPredictor(cfg, []string{"20m"})
 

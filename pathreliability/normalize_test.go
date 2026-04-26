@@ -155,6 +155,7 @@ func TestPredictStaleEvidenceInsufficient(t *testing.T) {
 	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
 	cfg.StaleAfterHalfLifeMultiplier = 100
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
@@ -188,6 +189,7 @@ func TestPredictMaxAgeMultiplierZeroPreservesOldBehavior(t *testing.T) {
 	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
 	cfg.StaleAfterHalfLifeMultiplier = 100
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 0
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
@@ -210,6 +212,7 @@ func TestPredictDropsOnlyStaleDirection(t *testing.T) {
 	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
 	cfg.StaleAfterHalfLifeMultiplier = 100
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
@@ -236,6 +239,7 @@ func TestPredictStaleDropLowFreshWeightReportsStale(t *testing.T) {
 	cfg.BandHalfLifeSec = map[string]int{"20m": 10}
 	cfg.StaleAfterHalfLifeMultiplier = 100
 	cfg.MinEffectiveWeight = 0.6
+	cfg.MinObservationCount = 1
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
@@ -312,6 +316,7 @@ func TestPredictUsesCombinedBuckets(t *testing.T) {
 	requireH3Mappings(t)
 	cfg := DefaultConfig()
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
 	dxCell := EncodeCell("FN32")
@@ -354,6 +359,7 @@ func TestPredictUsesCoarseWhenFineMissing(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	predictor.Update(BucketCombined, InvalidCell, InvalidCell, userCoarse, dxCoarse, "20m", -5, 1.0, now, false)
 
@@ -367,6 +373,7 @@ func TestPredictCarriesObservationCount(t *testing.T) {
 	requireH3Mappings(t)
 	cfg := DefaultConfig()
 	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 1
 	predictor := NewPredictor(cfg, []string{"20m"})
 	userCell := EncodeCell("FN31")
 	dxCell := EncodeCell("FN32")
@@ -380,5 +387,36 @@ func TestPredictCarriesObservationCount(t *testing.T) {
 	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
 	if res.Count != 2 {
 		t.Fatalf("expected selected count 2 without fine/coarse double count, got %d", res.Count)
+	}
+}
+
+func TestPredictLowObservationCountInsufficient(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.MinEffectiveWeight = 0.1
+	cfg.MinObservationCount = 19
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	for i := 0; i < 3; i++ {
+		predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -5, 10, now, false)
+	}
+
+	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
+	if res.Source != SourceInsufficient {
+		t.Fatalf("expected low observation count to be insufficient, got %v", res.Source)
+	}
+	if res.InsufficientReason != InsufficientLowCount {
+		t.Fatalf("expected low-count insufficient reason, got %v", res.InsufficientReason)
+	}
+	if res.Count != 3 {
+		t.Fatalf("expected selected count 3, got %d", res.Count)
+	}
+	if res.Weight <= cfg.MinEffectiveWeight {
+		t.Fatalf("expected enough weight so count is the failing gate, got weight=%v", res.Weight)
 	}
 }

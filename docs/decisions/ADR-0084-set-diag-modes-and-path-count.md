@@ -43,7 +43,8 @@ provides that context:
 - `CONF`: `<score>%` when the pipeline calculated a confidence percent,
   otherwise `--%`
 - `PATH`: `n<count>|w<weight>|a<age>` for usable evidence, or
-  `n<count>|<reason>` for insufficient evidence.
+  `n<count>|<reason>` for insufficient evidence. Known compact reasons include
+  `none`, `lown`, `loww`, and `stale`.
 - `MODE`: `<mode>|<provenance>` using the final normalized mode and the
   existing mode provenance recorded on the spot.
 

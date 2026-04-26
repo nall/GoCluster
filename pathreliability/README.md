@@ -104,6 +104,7 @@ fade through weaker glyph tiers just because it got older.
 The shipped config currently uses:
 
 - `min_effective_weight: 0.6`
+- `min_observation_count: 19`
 - `min_fine_weight: 5`
 - `fine_only_weight: 20`
 - `reverse_hint_discount: 0.5`
@@ -142,7 +143,8 @@ Prediction returns either:
 - `INSUFFICIENT`
 
 `INSUFFICIENT` is returned when there is no usable sample, selected evidence is
-too old for the freshness gate, or the merged effective weight stays below
+too old for the freshness gate, the selected raw observation count is below
+`min_observation_count`, or the merged effective weight stays below
 `min_effective_weight`.
 
 The shipped glyph symbols are:

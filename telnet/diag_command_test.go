@@ -170,6 +170,12 @@ func TestFormatSpotForClientPathDiagCommentIncludesCount(t *testing.T) {
 	}
 }
 
+func TestDiagPathInsufficientLowCountReason(t *testing.T) {
+	if got := diagPathInsufficientReason(pathreliability.InsufficientLowCount); got != "lown" {
+		t.Fatalf("expected low-count path diagnostic reason lown, got %q", got)
+	}
+}
+
 func TestFormatSpotForClientModeDiagComment(t *testing.T) {
 	server := NewServer(ServerOptions{}, nil)
 	client := &Client{}

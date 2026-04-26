@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0085 | Path Reliability Minimum Observation Count | Accepted | 2026-04-26 | pathreliability, config, telnet diagnostics | - | - | `docs/decisions/ADR-0085-path-reliability-min-observation-count.md` |
 | ADR-0084 | SET DIAG Modes and Path Observation Count | Accepted | 2026-04-26 | telnet diagnostics, pathreliability | - | - | `docs/decisions/ADR-0084-set-diag-modes-and-path-count.md` |
 | ADR-0083 | Operator Docs Follow-Up | Accepted | 2026-04-25 | docs, operator guide, Linux service | - | - | `docs/decisions/ADR-0083-operator-docs-follow-up.md` |
 | ADR-0082 | YAML Documentation Completeness Pass | Accepted | 2026-04-25 | config, docs, yaml | - | - | `docs/decisions/ADR-0082-yaml-documentation-completeness-pass.md` |

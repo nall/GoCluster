@@ -434,7 +434,7 @@ For the exact FT timing knobs, burst rules, and decision history, see [`spot/REA
 - `SET DIAG DEDUPE`: `<DE-DXCC>|<DE-key>|<src>|<policy>`, where `<src>` is `H` for human-class or `S` for skimmer/automated-class.
 - `SET DIAG SOURCE`: `<source>` with `MAN`, `RBN`, `RBNFT`, `PSK`, `DXS`, `UP`, or `P:<peer>` for peer-origin spots.
 - `SET DIAG CONF`: `<score>%` when the pipeline calculated a confidence percent, otherwise `--%`.
-- `SET DIAG PATH`: `n<count>|w<weight>|a<age>` for usable path evidence, or `n<count>|<reason>` for insufficient evidence (`none`, `loww`, or `stale`).
+- `SET DIAG PATH`: `n<count>|w<weight>|a<age>` for usable path evidence, or `n<count>|<reason>` for insufficient evidence (`none`, `lown`, `loww`, or `stale`).
 - `SET DIAG MODE`: `<mode>|<provenance>` to show the final normalized mode and why it was assigned.
 
 Mode provenance tokens:
@@ -468,6 +468,8 @@ area:
 - `a<age>` is the effective age of the selected evidence. Ages under one minute
   are seconds, then rounded up to `m` or `h`.
 - `n<count>|none` means there was no usable selected path sample.
+- `n<count>|lown` means selected evidence existed but the raw observation count
+  stayed below the configured minimum.
 - `n<count>|loww` means selected evidence existed but the effective weight
   stayed below the configured minimum.
 - `n<count>|stale` means selected evidence existed but was too old for the
@@ -484,6 +486,8 @@ Example readings:
 - `n18|w7`: 18 selected raw observations, rounded effective weight 7. The age
   token may be clipped if it does not fit before the fixed tail.
 - `n0|none`: no usable selected path sample.
+- `n3|lown`: three selected observations existed, but the configured minimum
+  sample size was not met.
 - `n1|loww`: one selected observation existed, but the effective weight was
   below the minimum.
 - `n32|w1`: large raw sample count but low rounded effective weight. Treat this
@@ -519,7 +523,7 @@ Important operational notes:
   10m and 6m.
 - Stale evidence becomes `INSUFFICIENT`; age alone does not demote a strong
   path through weaker glyph tiers.
-- If grids are missing, evidence is stale or too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.
+- If grids are missing, evidence is stale, too sparse, too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.
 - `PATH` filters work on the class names, not on the glyph characters.
 
 If solar-weather support is enabled, a normal path glyph can be replaced by:

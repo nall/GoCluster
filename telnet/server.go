@@ -3717,6 +3717,8 @@ func diagPathInsufficientReason(reason pathreliability.InsufficientReason) strin
 	switch reason {
 	case pathreliability.InsufficientStale:
 		return "stale"
+	case pathreliability.InsufficientLowCount:
+		return "lown"
 	case pathreliability.InsufficientLowWeight:
 		return "loww"
 	default:
