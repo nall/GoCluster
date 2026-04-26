@@ -30,8 +30,9 @@ The runtime resolver keeps a no-ldflags fallback for plain `go build .`: when
 linker-stamped compile time is unavailable, it derives the same display shape
 from Go VCS metadata rather than exposing the module pseudo-version directly.
 
-Telnet `SHOW BUILD` reports the startup-resolved build snapshot. It does not
-probe VCS or rebuild metadata at command time.
+Telnet `SHOW BUILD` reports the startup-resolved short version and Go toolchain
+version when available. It does not probe VCS or rebuild metadata at command
+time.
 
 ## Alternatives considered
 
@@ -59,8 +60,9 @@ probe VCS or rebuild metadata at command time.
 
 ### Operational impact
 
-- Operators should cite both the console `Version` and `commit`/`built` fields
-  from `--version` or telnet `SHOW BUILD` when reporting deployment state.
+- Operators should cite the console `Version` and, when needed, the
+  `commit`/`built` fields from `--version` when reporting deployment state.
+  Telnet `SHOW BUILD` is intentionally compact and omits commit/build time.
 - Dirty builds are visibly marked in the version string and still expose the
   separate Go VCS modified flag when available.
 - Normal release packages reject dirty source before build; a `+dirty` release

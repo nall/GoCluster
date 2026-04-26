@@ -1573,11 +1573,6 @@ func (p *Processor) handleShowBuild() string {
 	info := normalizeBuildInfo(p.buildInfo)
 	lines := []string{
 		"Build version: " + info.Version,
-		"Commit: " + info.Commit,
-		"Built: " + info.BuildTime,
-	}
-	if info.VCSModified != "" {
-		lines = append(lines, "Dirty: "+info.VCSModified)
 	}
 	if info.GoVersion != "" {
 		lines = append(lines, "Go: "+info.GoVersion)

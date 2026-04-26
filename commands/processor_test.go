@@ -700,14 +700,16 @@ func TestShowBuild(t *testing.T) {
 	resp := p.ProcessCommandForClient("SHOW BUILD", "N2WQ", "", nil, "go")
 	want := []string{
 		"Build version: v26.24.04-76fa6eac04fb",
-		"Commit: 76fa6eac04fb",
-		"Built: 2026-04-24T12:34:56Z",
-		"Dirty: true",
 		"Go: go1.26.2",
 	}
 	for _, line := range want {
 		if !strings.Contains(resp, line) {
 			t.Fatalf("SHOW BUILD missing %q in %q", line, resp)
+		}
+	}
+	for _, line := range []string{"Commit:", "Built:", "Dirty:"} {
+		if strings.Contains(resp, line) {
+			t.Fatalf("SHOW BUILD should omit %q, got %q", line, resp)
 		}
 	}
 
@@ -733,15 +735,14 @@ func TestShowBuildDefaults(t *testing.T) {
 	resp := p.ProcessCommandForClient("SHOW BUILD", "N2WQ", "", nil, "go")
 	want := []string{
 		"Build version: dev",
-		"Commit: unknown",
-		"Built: unknown",
 	}
 	for _, line := range want {
 		if !strings.Contains(resp, line) {
 			t.Fatalf("SHOW BUILD defaults missing %q in %q", line, resp)
 		}
 	}
-	if strings.Contains(resp, "Dirty:") || strings.Contains(resp, "Go:") {
+	if strings.Contains(resp, "Commit:") || strings.Contains(resp, "Built:") ||
+		strings.Contains(resp, "Dirty:") || strings.Contains(resp, "Go:") {
 		t.Fatalf("expected empty optional build fields to be omitted, got %q", resp)
 	}
 }
