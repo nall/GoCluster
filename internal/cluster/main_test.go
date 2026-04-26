@@ -2586,6 +2586,8 @@ func TestBuildOverviewLinesIncludesRecentSupportByBand(t *testing.T) {
 		0,
 		0,
 		0,
+		0,
+		0,
 		"Path: n/a",
 		"Resolver: n/a",
 		"Resolver Pressure: n/a",

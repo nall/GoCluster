@@ -49,6 +49,7 @@ func TestRBNIngestDeltasUsesRBNFT(t *testing.T) {
 		"RBN|RTTY":       2,
 		"RBN-FT|FT8":     6,
 		"RBN-FT|FT4":     1,
+		"RBN-FT|FT2":     4,
 		"RBN-DIGITAL|CW": 9,
 	}
 	prevSourceModeTotals := map[string]uint64{
@@ -56,16 +57,53 @@ func TestRBNIngestDeltasUsesRBNFT(t *testing.T) {
 		"RBN|RTTY":   0,
 		"RBN-FT|FT8": 4,
 		"RBN-FT|FT4": 1,
+		"RBN-FT|FT2": 1,
 	}
 
-	rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4 :=
+	rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4, rbnFT2 :=
 		rbnIngestDeltas(sourceTotals, prevSourceTotals, sourceModeTotals, prevSourceModeTotals)
 
 	if rbnTotal != 7 || rbnCW != 4 || rbnRTTY != 2 {
 		t.Fatalf("unexpected RBN CW/RTTY deltas: total=%d cw=%d rtty=%d", rbnTotal, rbnCW, rbnRTTY)
 	}
-	if rbnFTTotal != 5 || rbnFT8 != 2 || rbnFT4 != 0 {
-		t.Fatalf("unexpected RBN-FT deltas: total=%d ft8=%d ft4=%d", rbnFTTotal, rbnFT8, rbnFT4)
+	if rbnFTTotal != 5 || rbnFT8 != 2 || rbnFT4 != 0 || rbnFT2 != 3 {
+		t.Fatalf("unexpected RBN-FT deltas: total=%d ft8=%d ft4=%d ft2=%d", rbnFTTotal, rbnFT8, rbnFT4, rbnFT2)
+	}
+}
+
+func TestFormatIngestLineIncludesFT2AndCommaAwareWidths(t *testing.T) {
+	got := formatIngestLine("[green]PSK[-]", 24711, 314, 0, 23651, 724, 336, 0, true)
+	want := "[green]PSK[-]: 24,711 | [yellow]CW[-] 314   | [yellow]RTTY[-] 0     | [yellow]FT8[-] 23,651 | [yellow]FT4[-] 724    | [yellow]FT2[-] 336    | [yellow]MSK[-] 0   "
+	if got != want {
+		t.Fatalf("unexpected ingest line:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestBuildOverviewLinesIncludesFT2IngestRates(t *testing.T) {
+	lines := buildOverviewLines(
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		"N2WQ-2",
+		true, true, false,
+		nil,
+		2420, 1337, 0, 981, 102, 18,
+		24711, 314, 0, 23651, 724, 336, 0, 0,
+		0,
+		0, 0, 0, 0,
+		"[yellow]Path[-]: n/a",
+		"Resolver: n/a",
+		"Resolver Pressure: n/a",
+		"",
+		nil,
+		"n/a",
+	)
+	joined := strings.Join(lines, "\n")
+	for _, want := range []string{
+		"[green]RBN[-]: 2,420  | [yellow]CW[-] 1,337 | [yellow]RTTY[-] 0     | [yellow]FT8[-] 981    | [yellow]FT4[-] 102    | [yellow]FT2[-] 18",
+		"[green]PSK[-]: 24,711 | [yellow]CW[-] 314   | [yellow]RTTY[-] 0     | [yellow]FT8[-] 23,651 | [yellow]FT4[-] 724    | [yellow]FT2[-] 336    | [yellow]MSK[-] 0    | [yellow]PSK[-] 0",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected overview lines to include %q, got %v", want, lines)
+		}
 	}
 }
 

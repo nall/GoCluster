@@ -689,7 +689,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		sourceTotals := tracker.GetSourceCounts()
 		sourceModeTotals := tracker.GetSourceModeCounts()
 
-		rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4 :=
+		rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4, rbnFT2 :=
 			rbnIngestDeltas(sourceTotals, prevSourceCounts, sourceModeTotals, prevSourceModeCounts)
 
 		// PSKReporter includes a per-mode breakdown in the stats ticker.
@@ -698,6 +698,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		pskRTTY := diffSourceMode(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "RTTY")
 		pskFT8 := diffSourceMode(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "FT8")
 		pskFT4 := diffSourceMode(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "FT4")
+		pskFT2 := diffSourceMode(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "FT2")
 		pskMSK144 := diffSourceMode(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "MSK144")
 		// PSK31/63 is tracked separately from canonical PSK to match Overview semantics.
 		psk31_63 := diffSourceModes(sourceModeTotals, prevSourceModeCounts, "PSKREPORTER", "PSK31", "PSK63")
@@ -855,15 +856,16 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			fmt.Sprintf("%s   %s", formatUptimeLine(tracker.GetUptime()), formatMemoryLine(buf, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache)), // 1
 			formatGridLineOrPlaceholder(gridStats, gridDB, pathPredictor),                                                                                      // 2
 			formatDataLineOrPlaceholder(ctyLookup, ctyState, fccSnap),                                                                                          // 3
-			fmt.Sprintf("%s: %d TOTAL / %d CW / %d RTTY / %d FT8 / %d FT4",
-				withIngestStatusLabel("RBN", rbnLive), combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4), // 4
-			fmt.Sprintf("%s: %s TOTAL / %s CW / %s RTTY / %s FT8 / %s FT4 / %s MSK144",
+			fmt.Sprintf("%s: %d TOTAL / %d CW / %d RTTY / %d FT8 / %d FT4 / %d FT2",
+				withIngestStatusLabel("RBN", rbnLive), combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4, rbnFT2), // 4
+			fmt.Sprintf("%s: %s TOTAL / %s CW / %s RTTY / %s FT8 / %s FT4 / %s FT2 / %s MSK144",
 				withIngestStatusLabel("PSKReporter", pskLive),
 				humanize.Comma(int64(pskTotal)),
 				humanize.Comma(int64(pskCW)),
 				humanize.Comma(int64(pskRTTY)),
 				humanize.Comma(int64(pskFT8)),
 				humanize.Comma(int64(pskFT4)),
+				humanize.Comma(int64(pskFT2)),
 				humanize.Comma(int64(pskMSK144)),
 			), // 5
 			fmt.Sprintf("%s: %s TOTAL", withIngestStatusLabel("P92", p92Live), humanize.Comma(int64(p92Total))), // 6
@@ -893,8 +895,8 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			overviewLines := buildOverviewLines(tracker, dedup, secondaryFast, secondaryMed, secondarySlow, metaCache, recentBandStore, ctyState, fccSnap, gridStats, gridDB, pathPredictor, modeAssigner, telnetSrv, clusterCall,
 				rbnLive, pskLive, p92Live,
 				ingestSources,
-				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4,
-				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63,
+				combinedRBN, rbnCW, rbnRTTY, rbnFT8, rbnFT4, rbnFT2,
+				pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskFT2, pskMSK144, psk31_63,
 				p92Total,
 				totalCorrections, totalUnlicensed, totalHarmonics, reputationTotal,
 				pathOnlyLine,
@@ -4161,8 +4163,8 @@ func buildOverviewLines(
 	clusterCall string,
 	rbnLive, pskLive, p92Live bool,
 	ingestSources []dashboardIngestSource,
-	rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4 uint64,
-	pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, psk31_63 uint64,
+	rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4, rbnFT2 uint64,
+	pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskFT2, pskMSK144, psk31_63 uint64,
 	p92Total uint64,
 	totalCorrections, totalUnlicensed, totalHarmonics, reputationTotal uint64,
 	pathOnlyLine string,
@@ -4276,14 +4278,14 @@ func buildOverviewLines(
 	}
 
 	lines := make([]string, 0, 16+len(cacheBars))
-	pskLine := formatIngestLine(withIngestStatusLabel("PSK", pskLive), pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskMSK144, true)
-	pskLine += " | " + formatIngestField("[yellow]PSK[-]", psk31_63, 5)
+	pskLine := formatIngestLine(withIngestStatusLabel("PSK", pskLive), pskTotal, pskCW, pskRTTY, pskFT8, pskFT4, pskFT2, pskMSK144, true)
+	pskLine += " | " + formatIngestField("[yellow]PSK[-]", psk31_63, ingestWidthPSK)
 	lines = append(lines,
 		fmt.Sprintf("[yellow]Cluster[-]: %s  [yellow]Version[-]: %s  [yellow]Uptime[-]: %s", clusterCall, currentBuildInfo.Version, formatUptimeShort(uptime)),
 		"MEMORY / GC",
 		fmt.Sprintf("[yellow]Heap[-]: %s  [yellow]Sys[-]: %s  [yellow]GC p99 (interval)[-]: %s  [yellow]Last GC[-]: %s ago  [yellow]Goroutines[-]: %d", heap, sys, gcP99Label, formatDurationShort(lastGC), runtime.NumGoroutine()),
 		"INGEST RATES (per min)",
-		formatIngestLine(withIngestStatusLabel("RBN", rbnLive), rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4, 0, false),
+		formatIngestLine(withIngestStatusLabel("RBN", rbnLive), rbnTotal, rbnCW, rbnRTTY, rbnFT8, rbnFT4, rbnFT2, 0, false),
 		pskLine,
 		fmt.Sprintf("%s: %s", withIngestStatusLabel("P92", p92Live), humanize.Comma(int64(p92Total))),
 		pathOnlyLine,
@@ -4465,17 +4467,26 @@ func visibleLen(s string) int {
 	return count
 }
 
-func formatIngestLine(label string, total, cw, rtty, ft8, ft4, msk uint64, includeMSK bool) string {
-	totalStr := padRight(humanize.Comma(int64(total)), 6)
+const (
+	ingestWidthTotal  = 6
+	ingestWidthNarrow = 4
+	ingestWidthMid    = 5
+	ingestWidthFT     = 6
+	ingestWidthPSK    = ingestWidthNarrow
+)
+
+func formatIngestLine(label string, total, cw, rtty, ft8, ft4, ft2, msk uint64, includeMSK bool) string {
+	totalStr := padRight(humanize.Comma(int64(total)), ingestWidthTotal)
 	fields := []string{
 		fmt.Sprintf("%s: %s", label, totalStr),
-		formatIngestField("[yellow]CW[-]", cw, 6),
-		formatIngestField("[yellow]RTTY[-]", rtty, 6),
-		formatIngestField("[yellow]FT8[-]", ft8, 6),
-		formatIngestField("[yellow]FT4[-]", ft4, 6),
+		formatIngestField("[yellow]CW[-]", cw, ingestWidthMid),
+		formatIngestField("[yellow]RTTY[-]", rtty, ingestWidthMid),
+		formatIngestField("[yellow]FT8[-]", ft8, ingestWidthFT),
+		formatIngestField("[yellow]FT4[-]", ft4, ingestWidthFT),
+		formatIngestField("[yellow]FT2[-]", ft2, ingestWidthFT),
 	}
 	if includeMSK {
-		fields = append(fields, formatIngestField("[yellow]MSK[-]", msk, 5))
+		fields = append(fields, formatIngestField("[yellow]MSK[-]", msk, ingestWidthNarrow))
 	}
 	return strings.Join(fields, " | ")
 }
@@ -4931,14 +4942,14 @@ func dxsummitIsLive(snap dxsummit.HealthSnapshot, pollIntervalSeconds int, now t
 	return now.Sub(snap.LastPollAt) <= maxAge
 }
 
-// Purpose: Compute per-interval RBN ingest deltas (CW/RTTY + FT8/FT4).
+// Purpose: Compute per-interval RBN ingest deltas (CW/RTTY + FT8/FT4/FT2).
 // Key aspects: Reads FT counts from the "RBN-FT" source label.
 // Upstream: displayStatsWithFCC stats ticker.
 // Downstream: diffCounter and diffSourceMode.
 func rbnIngestDeltas(
 	sourceTotals, prevSourceCounts map[string]uint64,
 	sourceModeTotals, prevSourceModeCounts map[string]uint64,
-) (rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4 uint64) {
+) (rbnTotal, rbnCW, rbnRTTY, rbnFTTotal, rbnFT8, rbnFT4, rbnFT2 uint64) {
 	rbnTotal = diffCounter(sourceTotals, prevSourceCounts, "RBN")
 	rbnCW = diffSourceMode(sourceModeTotals, prevSourceModeCounts, "RBN", "CW")
 	rbnRTTY = diffSourceMode(sourceModeTotals, prevSourceModeCounts, "RBN", "RTTY")
@@ -4946,6 +4957,7 @@ func rbnIngestDeltas(
 	rbnFTTotal = diffCounter(sourceTotals, prevSourceCounts, "RBN-FT")
 	rbnFT8 = diffSourceMode(sourceModeTotals, prevSourceModeCounts, "RBN-FT", "FT8")
 	rbnFT4 = diffSourceMode(sourceModeTotals, prevSourceModeCounts, "RBN-FT", "FT4")
+	rbnFT2 = diffSourceMode(sourceModeTotals, prevSourceModeCounts, "RBN-FT", "FT2")
 	return
 }
 

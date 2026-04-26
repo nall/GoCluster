@@ -135,6 +135,24 @@ func TestOverviewPathPaneGrowsToFitBandBuckets(t *testing.T) {
 	}
 }
 
+func TestIngestPlaceholderIncludesFT2Counters(t *testing.T) {
+	d := &DashboardV2{
+		ingestHdr:        newBoxedTextView("Overview"),
+		ingestIngest:     newBoxedTextView("Ingest Rates (per min)"),
+		ingestValidation: newStreamPanel("Validation", 10, true),
+		ingestUnlicensed: newStreamPanel("Unlicensed", 10, true),
+	}
+
+	d.seedIngestPlaceholders()
+
+	got := d.ingestIngest.GetText(true)
+	for _, want := range []string{"RBN: --", "FT8 --", "FT4 --", "FT2 --", "MSK --", "PSK --"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected ingest placeholder to include %q, got %q", want, got)
+		}
+	}
+}
+
 func TestOverviewCachesPaneResizesToContentHeight(t *testing.T) {
 	lines := []string{
 		"Cluster: test  Version: 1  Uptime: 00:01",
