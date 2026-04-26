@@ -126,7 +126,22 @@ func SelectSample(fine Sample, coarse Sample, minFineWeight float64, fineOnlyWei
 		Value:  (fine.Value*fine.Weight + coarseCandidate.Value*coarseCandidate.Weight) / sum,
 		Weight: sum,
 		AgeSec: weightedSampleAge(fine, coarseCandidate),
+		Count:  maxCount(fine.Count, coarseCandidate.Count),
 	}
+}
+
+func maxCount(left uint32, right uint32) uint32 {
+	if left >= right {
+		return left
+	}
+	return right
+}
+
+func saturatingAddCounts(left uint32, right uint32) uint32 {
+	if maxBucketObservationCount-left < right {
+		return maxBucketObservationCount
+	}
+	return left + right
 }
 
 func weightedSampleAge(left Sample, right Sample) int64 {

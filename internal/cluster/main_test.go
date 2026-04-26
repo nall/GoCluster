@@ -1474,6 +1474,9 @@ func TestMaybeApplyResolverCorrectionNoApplyUsesEmittedCallConfidence(t *testing
 	if got := strings.TrimSpace(s.Confidence); got != "P" {
 		t.Fatalf("expected emitted-call confidence P, got %q", got)
 	}
+	if !s.ConfidencePercentOK || s.ConfidencePercent != 33 {
+		t.Fatalf("expected emitted-call confidence percent 33, got percent=%d ok=%v", s.ConfidencePercent, s.ConfidencePercentOK)
+	}
 	if got := tracker.CorrectionDecisionReasons()["resolver_gate_advantage"]; got != 1 {
 		t.Fatalf("expected resolver_gate_advantage=1, got %d", got)
 	}

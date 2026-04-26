@@ -169,7 +169,7 @@ Log in with your callsign. Useful first commands:
 - `WHOSPOTSME [band]`: show recent spotter countries for your call.
 - `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
 - `SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL`: set receive noise class.
-- `SET DIAG ON|OFF`: toggle diagnostic comments on your session.
+- `SET DIAG OFF|DEDUPE|SOURCE|CONF|PATH|MODE`: replace spot comments with compact per-session diagnostics.
 - `SET SOLAR 15|30|60|OFF`: opt into or stop periodic solar summaries.
 - `DIALECT`, `DIALECT LIST`, `DIALECT <go|cc>`: show or switch command dialect.
 - `SHOW FILTER`: display active filters.
@@ -184,6 +184,55 @@ Log in with your callsign. Useful first commands:
 
 The top-level repository README contains the generated default `HELP` output.
 That block is checked against the command processor in tests.
+
+`SET DIAG MODE` is useful when the displayed mode is surprising. It shows
+`<mode>|<provenance>`, where blank modes are shown as `--`. Provenance tokens
+are `SRC` source explicit, `CMT` comment explicit, `EVD` recent evidence, `FQ`
+digital frequency, `RCW` regional CW default, `RVO` regional voice default,
+`RMIX` regional mixed blank, `RUNK` regional unknown blank, and `UNK` unknown.
+
+### Reading `SET DIAG PATH`
+
+`SET DIAG PATH` replaces the normal spot comment with the path-reliability data
+used for that spot. The mode/report and fixed tail columns are preserved.
+
+The compact format omits the path class glyph because the normal path
+column already shows it when path display is enabled:
+
+```text
+n<count>|w<weight>|a<age>
+```
+
+Insufficient evidence is shown as:
+
+```text
+n<count>|<reason>
+```
+
+- `n<count>` is the raw number of selected observations behind the displayed
+  path decision. It is a sample-size clue, not a confidence percent.
+- `w<weight>` is the rounded effective weight after decay and path selection.
+  It is not SNR or dB. Weight is an evidence-strength gate, not the displayed
+  path class itself.
+- `a<age>` is the effective age of the selected evidence. Bare numbers are
+  seconds; `m` and `h` mean minutes and hours.
+- `none` means no usable selected sample existed.
+- `loww` means selected samples existed, but their effective weight was below
+  the configured minimum.
+- `stale` means selected samples existed, but the selected evidence was too old
+  for the band's freshness gate.
+
+The fixed-width cluster format may clip the right edge of a long diagnostic
+comment to keep the grid, confidence, and time columns aligned. The leftmost
+fields remain the important ones: count and effective weight or reason.
+
+Example readings:
+
+- `n18|w7`: 18 selected raw observations, rounded effective weight 7.
+- `n0|none`: no usable selected sample.
+- `n1|loww`: one selected observation existed, but the effective weight was
+  below the minimum.
+- `n32|w1`: large raw sample count but low rounded effective weight.
 
 ## Logs And Health
 

@@ -196,7 +196,7 @@ SHOW DXCC - Look up DXCC/ADIF and zones.
 WHOSPOTSME - Show recent spotter countries.
 SHOW DEDUPE - Show dedupe policy.
 SET DEDUPE - Select dedupe policy.
-SET DIAG - Toggle diagnostic comments.
+SET DIAG - Select diagnostic comments.
 SET GRID - Set your grid (4-6 chars).
 SET NOISE - Set noise class.
 PASS NEARBY - Toggle nearby filtering.
@@ -425,6 +425,69 @@ With the shipped defaults:
 Local non-test `DX` self-spots are treated as operator-authoritative and are forced to `V`.
 
 For the exact FT timing knobs, burst rules, and decision history, see [`spot/README.md`](spot/README.md).
+
+## Diagnostic Comments
+
+`SET DIAG <mode>` replaces the free-form spot comment for your telnet session only. The spot mode/report and fixed tail columns remain in their normal positions.
+
+- `SET DIAG OFF`: show normal comments.
+- `SET DIAG DEDUPE`: `<DE-DXCC>|<DE-key>|<src>|<policy>`, where `<src>` is `H` for human-class or `S` for skimmer/automated-class.
+- `SET DIAG SOURCE`: `<source>` with `MAN`, `RBN`, `RBNFT`, `PSK`, `DXS`, `UP`, or `P:<peer>` for peer-origin spots.
+- `SET DIAG CONF`: `<score>%` when the pipeline calculated a confidence percent, otherwise `--%`.
+- `SET DIAG PATH`: `n<count>|w<weight>|a<age>` for usable path evidence, or `n<count>|<reason>` for insufficient evidence (`none`, `loww`, or `stale`).
+- `SET DIAG MODE`: `<mode>|<provenance>` to show the final normalized mode and why it was assigned.
+
+Mode provenance tokens:
+
+- `SRC`: source supplied the mode explicitly.
+- `CMT`: mode parsed from the spot comment.
+- `EVD`: inferred from recent same-DX/frequency evidence.
+- `FQ`: inferred from digital frequency evidence.
+- `RCW`: regional band-plan CW default.
+- `RVO`: regional voice default.
+- `RMIX`: regional mixed segment, left blank intentionally.
+- `RUNK`: unknown-region blank default.
+- `UNK`: no provenance recorded.
+
+`SET DIAG PATH` explains the path-reliability hint behind the spot. The fields
+are intentionally short because they must fit in the normal DX-cluster comment
+area:
+
+- `n<count>` is the raw observation count behind the selected path evidence.
+  This is a sample-size indicator, not a decayed confidence score. `n0` means no
+  usable selected observations; `n1` means one selected observation; higher
+  values such as `n18` or `n32` mean a larger evidence base.
+- `w<weight>` is the rounded effective weight after decay, fine/coarse sample
+  selection, receive/transmit merge, and reverse-direction discounting. It is
+  not dB, SNR, or a percent. A count can be much larger than the weight when the
+  observations are old, discounted, or weakly applicable to the exact path.
+  Weight is an evidence-strength gate; it is not the path class itself. A path
+  can show `>` in the normal path column with `w1` in the diagnostic comment
+  when the effective weight is just above the minimum and the normalized signal
+  estimate maps to `HIGH`.
+- `a<age>` is the effective age of the selected evidence. Ages under one minute
+  are seconds, then rounded up to `m` or `h`.
+- `n<count>|none` means there was no usable selected path sample.
+- `n<count>|loww` means selected evidence existed but the effective weight
+  stayed below the configured minimum.
+- `n<count>|stale` means selected evidence existed but was too old for the
+  band's display/filter freshness gate.
+
+The cluster line keeps the spot mode/report and fixed tail columns in their
+normal positions. If the diagnostic comment is too long for the remaining
+comment space, the right edge is clipped. Read clipped path diagnostics from
+left to right; the omitted rightmost characters are display loss only, not
+different path logic.
+
+Example readings:
+
+- `n18|w7`: 18 selected raw observations, rounded effective weight 7. The age
+  token may be clipped if it does not fit before the fixed tail.
+- `n0|none`: no usable selected path sample.
+- `n1|loww`: one selected observation existed, but the effective weight was
+  below the minimum.
+- `n32|w1`: large raw sample count but low rounded effective weight. Treat this
+  as useful but thinner evidence than `w7`.
 
 ## Path Reliability Tags
 

@@ -32,32 +32,34 @@ const (
 
 // Spot represents a DX spot in canonical form
 type Spot struct {
-	ID                uint64         // Unique spot ID (monotonic counter)
-	DXCall            string         // Station being spotted (normalized callsign, portable suffix stripped)
-	DECall            string         // Station reporting the spot (normalized callsign, portable suffix stripped)
-	Frequency         float64        // Frequency in kHz (e.g., 14074.5)
-	ObservedFrequency float64        // Raw source-reported RF frequency in kHz when Frequency is canonicalized; 0 means "same as Frequency"
-	Band              string         // Band (e.g., "20m")
-	Mode              string         // Mode (e.g., "CW", "USB", "FT8")
-	ModeProvenance    ModeProvenance // How Mode was assigned (explicit/evidence/default)
-	Report            int            // Signal report in dB (SNR for digital modes, signal strength for CW)
-	Time              time.Time      // When the spot was created
-	Comment           string         // User comment or additional info
-	Events            EventMask      // Portable/activation event families parsed from Comment
-	SourceType        SourceType     // Where this spot came from
-	SourceNode        string         // Originating node/cluster
-	SpotterIP         string         // Spotter IP address for PC61 frames (optional)
-	TTL               uint8          // Time-to-live for loop prevention
-	IsHuman           bool           // Whether the spot originated from a human operator
-	IsTestSpotter     bool           // True when the spotter callsign is a CTY-valid TEST identifier.
-	IsBeacon          bool           // True when DX call ends with /B (beacon identifiers)
-	HasReport         bool           // Whether Report is present (distinguishes real 0 dB from "unknown")
-	DXMetadata        CallMetadata   // Metadata for the DX station
-	DEMetadata        CallMetadata   // Metadata for the spotter station
-	Confidence        string         // Consensus confidence label (e.g., "75%" or "?")
-	ownedSnapshot     bool
-	formatted         string
-	formatOnce        sync.Once // ensures FormatDXCluster builds expensive string only once per spot
+	ID                  uint64         // Unique spot ID (monotonic counter)
+	DXCall              string         // Station being spotted (normalized callsign, portable suffix stripped)
+	DECall              string         // Station reporting the spot (normalized callsign, portable suffix stripped)
+	Frequency           float64        // Frequency in kHz (e.g., 14074.5)
+	ObservedFrequency   float64        // Raw source-reported RF frequency in kHz when Frequency is canonicalized; 0 means "same as Frequency"
+	Band                string         // Band (e.g., "20m")
+	Mode                string         // Mode (e.g., "CW", "USB", "FT8")
+	ModeProvenance      ModeProvenance // How Mode was assigned (explicit/evidence/default)
+	Report              int            // Signal report in dB (SNR for digital modes, signal strength for CW)
+	Time                time.Time      // When the spot was created
+	Comment             string         // User comment or additional info
+	Events              EventMask      // Portable/activation event families parsed from Comment
+	SourceType          SourceType     // Where this spot came from
+	SourceNode          string         // Originating node/cluster
+	SpotterIP           string         // Spotter IP address for PC61 frames (optional)
+	TTL                 uint8          // Time-to-live for loop prevention
+	IsHuman             bool           // Whether the spot originated from a human operator
+	IsTestSpotter       bool           // True when the spotter callsign is a CTY-valid TEST identifier.
+	IsBeacon            bool           // True when DX call ends with /B (beacon identifiers)
+	HasReport           bool           // Whether Report is present (distinguishes real 0 dB from "unknown")
+	DXMetadata          CallMetadata   // Metadata for the DX station
+	DEMetadata          CallMetadata   // Metadata for the spotter station
+	Confidence          string         // Consensus confidence label (e.g., "P", "V", "?")
+	ConfidencePercent   int            // Pipeline-calculated confidence percent when ConfidencePercentOK is true
+	ConfidencePercentOK bool
+	ownedSnapshot       bool
+	formatted           string
+	formatOnce          sync.Once // ensures FormatDXCluster builds expensive string only once per spot
 
 	// Normalized/cache fields to avoid repeated string ops on hot paths.
 	ModeNorm        string
@@ -451,44 +453,46 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		return nil
 	}
 	clone := &Spot{
-		ID:                 s.ID,
-		DXCall:             s.DXCall,
-		DECall:             s.DECall,
-		Frequency:          s.Frequency,
-		ObservedFrequency:  s.ObservedFrequency,
-		Band:               s.Band,
-		Mode:               s.Mode,
-		ModeProvenance:     s.ModeProvenance,
-		Report:             s.Report,
-		Time:               s.Time,
-		Comment:            comment,
-		Events:             s.Events,
-		SourceType:         s.SourceType,
-		SourceNode:         s.SourceNode,
-		SpotterIP:          s.SpotterIP,
-		TTL:                s.TTL,
-		IsHuman:            s.IsHuman,
-		IsTestSpotter:      s.IsTestSpotter,
-		IsBeacon:           s.IsBeacon,
-		HasReport:          s.HasReport,
-		DXMetadata:         s.DXMetadata,
-		DEMetadata:         s.DEMetadata,
-		Confidence:         s.Confidence,
-		ModeNorm:           s.ModeNorm,
-		BandNorm:           s.BandNorm,
-		DXCallNorm:         s.DXCallNorm,
-		DECallNorm:         s.DECallNorm,
-		DXContinentNorm:    s.DXContinentNorm,
-		DEContinentNorm:    s.DEContinentNorm,
-		DXGridNorm:         s.DXGridNorm,
-		DEGridNorm:         s.DEGridNorm,
-		DXGrid2:            s.DXGrid2,
-		DEGrid2:            s.DEGrid2,
-		DXCellID:           s.DXCellID,
-		DECellID:           s.DECellID,
-		DECallStripped:     s.DECallStripped,
-		DECallNormStripped: s.DECallNormStripped,
-		ownedSnapshot:      true,
+		ID:                  s.ID,
+		DXCall:              s.DXCall,
+		DECall:              s.DECall,
+		Frequency:           s.Frequency,
+		ObservedFrequency:   s.ObservedFrequency,
+		Band:                s.Band,
+		Mode:                s.Mode,
+		ModeProvenance:      s.ModeProvenance,
+		Report:              s.Report,
+		Time:                s.Time,
+		Comment:             comment,
+		Events:              s.Events,
+		SourceType:          s.SourceType,
+		SourceNode:          s.SourceNode,
+		SpotterIP:           s.SpotterIP,
+		TTL:                 s.TTL,
+		IsHuman:             s.IsHuman,
+		IsTestSpotter:       s.IsTestSpotter,
+		IsBeacon:            s.IsBeacon,
+		HasReport:           s.HasReport,
+		DXMetadata:          s.DXMetadata,
+		DEMetadata:          s.DEMetadata,
+		Confidence:          s.Confidence,
+		ConfidencePercent:   s.ConfidencePercent,
+		ConfidencePercentOK: s.ConfidencePercentOK,
+		ModeNorm:            s.ModeNorm,
+		BandNorm:            s.BandNorm,
+		DXCallNorm:          s.DXCallNorm,
+		DECallNorm:          s.DECallNorm,
+		DXContinentNorm:     s.DXContinentNorm,
+		DEContinentNorm:     s.DEContinentNorm,
+		DXGridNorm:          s.DXGridNorm,
+		DEGridNorm:          s.DEGridNorm,
+		DXGrid2:             s.DXGrid2,
+		DEGrid2:             s.DEGrid2,
+		DXCellID:            s.DXCellID,
+		DECellID:            s.DECellID,
+		DECallStripped:      s.DECallStripped,
+		DECallNormStripped:  s.DECallNormStripped,
+		ownedSnapshot:       true,
 	}
 	return clone
 }

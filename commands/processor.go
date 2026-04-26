@@ -388,14 +388,18 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	add("SET DEDUPE", "SET DEDUPE - Select dedupe policy.", setDedupeLines)
 
 	setDiagLines := helpEntryLines(
-		"SET DIAG - Toggle diagnostic comments.",
-		[]string{"SET DIAG <ON|OFF>"},
+		"SET DIAG - Select diagnostic comments.",
+		[]string{"SET DIAG <OFF|DEDUPE|SOURCE|CONF|PATH|MODE>"},
 		nil,
 		[]string{
-			"ON replaces the comment field with a diagnostic tag.",
+			"DEDUPE shows <DE-DXCC>|<DE-key>|<src>|<policy>.",
+			"SOURCE shows compact ingest provenance.",
+			"CONF shows pipeline confidence percent when available.",
+			"PATH shows observation count, weight, and age.",
+			"MODE shows <mode>|<provenance>.",
 		},
 	)
-	add("SET DIAG", "SET DIAG - Toggle diagnostic comments.", setDiagLines)
+	add("SET DIAG", "SET DIAG - Select diagnostic comments.", setDiagLines)
 
 	setGridLines := helpEntryLines(
 		"SET GRID - Set your grid for path reliability glyphs.",

@@ -2124,7 +2124,7 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 		snapshot = selection.Snapshot
 		snapshotOK = selection.SnapshotOK
 	}
-	spotEntry.Confidence = resolverConfidenceGlyph(snapshot, snapshotOK, preCorrectionCall)
+	setResolverConfidence(spotEntry, snapshot, snapshotOK, preCorrectionCall)
 	if !snapshotOK {
 		observeResolverPrimaryDecision(tracker, "rejected", resolverDecisionNoSnapshot, 0)
 		return false
@@ -2220,6 +2220,8 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 			return true
 		}
 		spotEntry.Confidence = "B"
+		spotEntry.ConfidencePercent = winnerConfidence
+		spotEntry.ConfidencePercentOK = true
 		return false
 	}
 
@@ -2233,6 +2235,8 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 			spotEntry.DXCall = winnerCall
 			spotEntry.DXCallNorm = winnerCall
 			spotEntry.Confidence = "C"
+			spotEntry.ConfidencePercent = winnerConfidence
+			spotEntry.ConfidencePercentOK = true
 			if tracker != nil {
 				tracker.IncrementCallCorrections()
 			}
@@ -2246,6 +2250,8 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 				return true
 			}
 			spotEntry.Confidence = "B"
+			spotEntry.ConfidencePercent = winnerConfidence
+			spotEntry.ConfidencePercentOK = true
 		}
 		return false
 	}
@@ -2258,6 +2264,8 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 	spotEntry.DXCall = winnerCall
 	spotEntry.DXCallNorm = winnerCall
 	spotEntry.Confidence = "C"
+	spotEntry.ConfidencePercent = winnerConfidence
+	spotEntry.ConfidencePercentOK = true
 	if tracker != nil {
 		tracker.IncrementCallCorrections()
 	}
@@ -2268,6 +2276,20 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 
 func resolverConfidenceGlyph(snapshot spot.ResolverSnapshot, snapshotOK bool, emittedCall string) string {
 	return correctionflow.ResolverConfidenceGlyphForCall(snapshot, snapshotOK, emittedCall)
+}
+
+func setResolverConfidence(s *spot.Spot, snapshot spot.ResolverSnapshot, snapshotOK bool, emittedCall string) {
+	if s == nil {
+		return
+	}
+	s.Confidence = resolverConfidenceGlyph(snapshot, snapshotOK, emittedCall)
+	if percent, ok := correctionflow.ResolverCallConfidencePercent(snapshot, emittedCall); snapshotOK && ok {
+		s.ConfidencePercent = percent
+		s.ConfidencePercentOK = true
+	} else {
+		s.ConfidencePercent = 0
+		s.ConfidencePercentOK = false
+	}
 }
 
 // Purpose: Compute the time window for call correction recency.

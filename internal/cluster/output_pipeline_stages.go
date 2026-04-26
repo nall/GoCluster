@@ -103,7 +103,8 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 			}
 		case correctionflow.TemporalDecisionActionAbstain:
 			skipResolverApply = true
-			s.Confidence = correctionflow.ResolverConfidenceGlyphForCall(
+			setResolverConfidence(
+				s,
 				temporalRelease.pending.selection.Snapshot,
 				temporalRelease.pending.selection.SnapshotOK,
 				normalizedDXCall(s),
@@ -223,11 +224,7 @@ func (p *outputPipeline) maybeHoldTemporalSpot(
 	case "abstain":
 		overflowDecision.Action = correctionflow.TemporalDecisionActionAbstain
 		p.recordRuntimeTemporalDecision(overflowDecision)
-		ctx.spot.Confidence = correctionflow.ResolverConfidenceGlyphForCall(
-			selection.Snapshot,
-			selection.SnapshotOK,
-			subject,
-		)
+		setResolverConfidence(ctx.spot, selection.Snapshot, selection.SnapshotOK, subject)
 		return false, true
 	case "bypass":
 		overflowDecision.Action = correctionflow.TemporalDecisionActionBypass

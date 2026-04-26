@@ -15,6 +15,7 @@ const (
 type bucket struct {
 	sumPower float64
 	weight   float64
+	count    uint32
 	// lastUpdate stores Unix seconds.
 	lastUpdate int64
 }
@@ -42,6 +43,8 @@ type pathStoreStatsSnapshot struct {
 	coarse   int
 	byBand   []bandCounts
 }
+
+const maxBucketObservationCount uint32 = 1<<32 - 1
 
 // NewStore constructs a path store with normalized config.
 func NewStore(cfg Config, bands []string) *Store {
@@ -98,6 +101,7 @@ func (s *Store) updateBucket(key uint64, power float64, weight float64, now time
 		sh.buckets[key] = &bucket{
 			sumPower:   power * weight,
 			weight:     weight,
+			count:      1,
 			lastUpdate: nowSec,
 		}
 		if len(sh.buckets) > sh.peak {
@@ -119,6 +123,9 @@ func (s *Store) updateBucket(key uint64, power float64, weight float64, now time
 	newSumPower := oldSumPower + power*weight
 	b.sumPower = newSumPower
 	b.weight = newWeight
+	if b.count < maxBucketObservationCount {
+		b.count++
+	}
 	b.lastUpdate = nowSec
 }
 
@@ -127,6 +134,7 @@ type Sample struct {
 	Value  float64
 	Weight float64
 	AgeSec int64
+	Count  uint32
 }
 
 type bandCounts struct {
@@ -191,6 +199,7 @@ func (s *Store) sample(key uint64, halfLife int, now time.Time) Sample {
 		Value:  decayedSumPower / decayedWeight,
 		Weight: decayedWeight,
 		AgeSec: age,
+		Count:  b.count,
 	}
 }
 

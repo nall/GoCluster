@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -70,6 +71,17 @@ const (
 	dedupePolicyFast dedupePolicy = iota
 	dedupePolicyMed
 	dedupePolicySlow
+)
+
+type diagMode uint32
+
+const (
+	diagModeOff diagMode = iota
+	diagModeDedupe
+	diagModeSource
+	diagModeConfidence
+	diagModePath
+	diagModeMode
 )
 
 func parseDedupePolicy(value string) dedupePolicy {
@@ -281,7 +293,7 @@ type Client struct {
 	noiseClass     string                 // Noise class token (e.g., QUIET, URBAN)
 	skipNextEOL    bool                   // Consume a single LF/NUL after CR (RFC 854 compliance)
 	dedupePolicy   atomic.Uint32          // Secondary dedupe policy (fast/med/slow)
-	diagEnabled    atomic.Bool            // Diagnostic comment override enabled
+	diagMode       atomic.Uint32          // Diagnostic comment override mode
 	// solarMu guards solar summary settings shared across goroutines.
 	solarMu             sync.Mutex
 	solarSummaryMinutes int
@@ -367,6 +379,26 @@ func (c *Client) getDedupePolicy() dedupePolicy {
 		return dedupePolicyFast
 	}
 	return dedupePolicy(c.dedupePolicy.Load())
+}
+
+func (c *Client) setDiagMode(mode diagMode) {
+	if c == nil {
+		return
+	}
+	c.diagMode.Store(uint32(mode))
+}
+
+func (c *Client) getDiagMode() diagMode {
+	if c == nil {
+		return diagModeOff
+	}
+	mode := diagMode(c.diagMode.Load())
+	switch mode {
+	case diagModeDedupe, diagModeSource, diagModeConfidence, diagModePath, diagModeMode:
+		return mode
+	default:
+		return diagModeOff
+	}
 }
 
 func (c *Client) getSolarSummaryMinutes() int {
@@ -1475,17 +1507,29 @@ func (s *Server) handleDiagCommand(client *Client, line string) (string, bool) {
 		return "", false
 	}
 	if len(upper) < 3 {
-		return "Usage: SET DIAG <ON|OFF>\n", true
+		return "Usage: SET DIAG <OFF|DEDUPE|SOURCE|CONF|PATH|MODE>\n", true
 	}
 	switch upper[2] {
-	case "ON":
-		client.diagEnabled.Store(true)
-		return "Diagnostic comments: ON\n", true
+	case "DEDUPE":
+		client.setDiagMode(diagModeDedupe)
+		return "Diagnostic comments: DEDUPE\n", true
 	case "OFF":
-		client.diagEnabled.Store(false)
+		client.setDiagMode(diagModeOff)
 		return "Diagnostic comments: OFF\n", true
+	case "SOURCE":
+		client.setDiagMode(diagModeSource)
+		return "Diagnostic comments: SOURCE\n", true
+	case "CONF", "CONFIDENCE":
+		client.setDiagMode(diagModeConfidence)
+		return "Diagnostic comments: CONF\n", true
+	case "PATH":
+		client.setDiagMode(diagModePath)
+		return "Diagnostic comments: PATH\n", true
+	case "MODE":
+		client.setDiagMode(diagModeMode)
+		return "Diagnostic comments: MODE\n", true
 	default:
-		return "Usage: SET DIAG <ON|OFF>\n", true
+		return "Usage: SET DIAG <OFF|DEDUPE|SOURCE|CONF|PATH|MODE>\n", true
 	}
 }
 
@@ -3301,8 +3345,12 @@ func (s *Server) formatSpotForClient(client *Client, sp *spot.Spot) string {
 	if sp == nil {
 		return ""
 	}
-	if client != nil && client.diagEnabled.Load() {
-		return s.formatSpotForClientWithDiag(client, sp)
+	mode := diagModeOff
+	if client != nil {
+		mode = client.getDiagMode()
+	}
+	if mode != diagModeOff {
+		return s.formatSpotForClientWithDiag(client, sp, mode)
 	}
 	base := sp.FormatDXCluster()
 	if s == nil || s.pathPredictor == nil || !s.pathDisplay {
@@ -3315,28 +3363,56 @@ func (s *Server) formatSpotForClient(client *Client, sp *spot.Spot) string {
 	return base + "\n"
 }
 
-func (s *Server) formatSpotForClientWithDiag(client *Client, sp *spot.Spot) string {
+func (s *Server) formatSpotForClientWithDiag(client *Client, sp *spot.Spot, mode diagMode) string {
 	if sp == nil {
 		return ""
 	}
-	base := sp.FormatDXClusterWithComment(diagTagForSpot(client, sp))
+	var prediction pathPrediction
+	havePrediction := false
+	if mode == diagModePath || (s != nil && s.pathPredictor != nil && s.pathDisplay) {
+		prediction, havePrediction = s.pathPredictionForClient(client, sp)
+	}
+	base := sp.FormatDXClusterWithComment(diagTagForSpot(client, sp, mode, prediction, havePrediction))
 	if s == nil || s.pathPredictor == nil || !s.pathDisplay {
 		return base + "\n"
 	}
-	glyphs := s.pathGlyphsForClient(client, sp)
+	var glyphs string
+	if havePrediction {
+		glyphs = s.pathGlyphFromPrediction(prediction)
+	} else {
+		glyphs = s.pathGlyphsForClient(client, sp)
+	}
 	if glyphs != "" {
 		base = injectGlyphs(base, glyphs)
 	}
 	return base + "\n"
 }
 
+type pathPrediction struct {
+	result   pathreliability.Result
+	grid     string
+	dxGrid   string
+	userCell pathreliability.CellID
+	dxCell   pathreliability.CellID
+	band     string
+	at       time.Time
+}
+
 func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
-	if client == nil || sp == nil {
+	prediction, ok := s.pathPredictionForClient(client, sp)
+	if !ok {
 		return ""
+	}
+	return s.pathGlyphFromPrediction(prediction)
+}
+
+func (s *Server) pathPredictionForClient(client *Client, sp *spot.Spot) (pathPrediction, bool) {
+	if s == nil || client == nil || sp == nil || s.pathPredictor == nil {
+		return pathPrediction{}, false
 	}
 	cfg := s.pathPredictor.Config()
 	if !cfg.Enabled {
-		return ""
+		return pathPrediction{}, false
 	}
 	state := client.pathSnapshot()
 	userCell := state.gridCell
@@ -3353,7 +3429,7 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 		}
 	}
 	if userCell == pathreliability.InvalidCell {
-		return ""
+		return pathPrediction{}, false
 	}
 	dxCell := pathreliability.InvalidCell
 	if sp.DXCellID != 0 {
@@ -3363,7 +3439,7 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 		dxCell = pathreliability.EncodeCell(sp.DXMetadata.Grid)
 	}
 	if dxCell == pathreliability.InvalidCell {
-		return ""
+		return pathPrediction{}, false
 	}
 	userCoarse := pathreliability.EncodeCoarseCell(grid)
 	dxCoarse := pathreliability.EncodeCoarseCell(sp.DXMetadata.Grid)
@@ -3377,17 +3453,30 @@ func (s *Server) pathGlyphsForClient(client *Client, sp *spot.Spot) string {
 	noisePenalty := s.noisePenaltyForClassBand(state.noiseClass, band)
 	res := s.pathPredictor.Predict(userCell, dxCell, userCoarse, dxCoarse, band, mode, noisePenalty, now)
 	s.recordPathPrediction(res, state.gridDerived, sp.DXMetadata.GridDerived)
+	return pathPrediction{
+		result:   res,
+		grid:     grid,
+		dxGrid:   sp.DXMetadata.Grid,
+		userCell: userCell,
+		dxCell:   dxCell,
+		band:     band,
+		at:       now,
+	}, true
+}
+
+func (s *Server) pathGlyphFromPrediction(prediction pathPrediction) string {
+	res := prediction.result
 	if res.Source == pathreliability.SourceInsufficient {
 		return res.Glyph
 	}
 	g := res.Glyph
 	if s.solarWeather != nil {
-		override, kind := s.solarWeather.OverrideGlyph(now, solarweather.PathInput{
-			UserGrid: grid,
-			DXGrid:   sp.DXMetadata.Grid,
-			UserCell: userCell,
-			DXCell:   dxCell,
-			Band:     band,
+		override, kind := s.solarWeather.OverrideGlyph(prediction.at, solarweather.PathInput{
+			UserGrid: prediction.grid,
+			DXGrid:   prediction.dxGrid,
+			UserCell: prediction.userCell,
+			DXCell:   prediction.dxCell,
+			Band:     prediction.band,
 		})
 		if kind != solarweather.OverrideNone && override != "" {
 			g = override
@@ -3472,45 +3561,180 @@ func pathPredictionBand(sp *spot.Spot) string {
 	return strings.TrimSpace(spot.NormalizeBand(band))
 }
 
-func diagTagForSpot(client *Client, sp *spot.Spot) string {
+func diagTagForSpot(client *Client, sp *spot.Spot, mode diagMode, prediction pathPrediction, havePrediction bool) string {
 	if client == nil || sp == nil {
 		return ""
 	}
-	source := diagSourceToken(sp)
-	dedxcc := " "
+	switch mode {
+	case diagModeSource:
+		return diagIngestSourceToken(sp)
+	case diagModeConfidence:
+		return diagConfidenceTag(sp)
+	case diagModePath:
+		return diagPathTag(prediction, havePrediction)
+	case diagModeMode:
+		return diagModeTag(sp)
+	default:
+		return diagDedupeTag(client, sp)
+	}
+}
+
+func diagDedupeTag(client *Client, sp *spot.Spot) string {
+	dedxcc := "0"
 	if sp.DEMetadata.ADIF > 0 {
 		dedxcc = strconv.Itoa(sp.DEMetadata.ADIF)
 	}
 	keyToken := diagDedupeKeyToken(client.getDedupePolicy(), sp)
 	if keyToken == "" {
-		keyToken = " "
+		keyToken = "--"
 	}
-	band := diagBandToken(sp)
-	if band == "" {
-		band = " "
-	}
+	source := diagDedupeSourceClass(sp)
 	policy := diagPolicyToken(client.getDedupePolicy())
 
 	var b strings.Builder
-	b.Grow(len(source) + len(dedxcc) + len(keyToken) + len(band) + len(policy))
-	b.WriteString(source)
+	b.Grow(len(dedxcc) + len(keyToken) + len(source) + len(policy) + 3)
 	b.WriteString(dedxcc)
+	b.WriteByte('|')
 	b.WriteString(keyToken)
-	b.WriteString(band)
+	b.WriteByte('|')
+	b.WriteString(source)
+	b.WriteByte('|')
 	b.WriteString(policy)
 	return b.String()
 }
 
-func diagSourceToken(sp *spot.Spot) string {
+func diagDedupeSourceClass(sp *spot.Spot) string {
+	if spot.IsSkimmerSource(sp.SourceType) {
+		return "S"
+	}
+	return "H"
+}
+
+func diagIngestSourceToken(sp *spot.Spot) string {
+	node := strutil.NormalizeUpper(sp.SourceNode)
 	switch sp.SourceType {
-	case spot.SourceRBN, spot.SourceFT8, spot.SourceFT4:
-		return "R"
+	case spot.SourceManual:
+		return "MAN"
+	case spot.SourceRBN:
+		if node == "RBN-DIGITAL" {
+			return "RBNFT"
+		}
+		return "RBN"
+	case spot.SourceFT8, spot.SourceFT4:
+		return "RBNFT"
 	case spot.SourcePSKReporter:
-		return "P"
-	case spot.SourceUpstream, spot.SourcePeer, spot.SourceManual:
-		return "H"
+		return "PSK"
+	case spot.SourcePeer:
+		if peer := diagPeerToken(sp.SourceNode); peer != "" {
+			return "P:" + peer
+		}
+		return "PEER"
+	case spot.SourceUpstream:
+		if node == "DXSUMMIT" {
+			return "DXS"
+		}
+		return "UP"
 	default:
-		return "H"
+		if node == "DXSUMMIT" {
+			return "DXS"
+		}
+		return "UP"
+	}
+}
+
+func diagPeerToken(node string) string {
+	node = strutil.NormalizeUpper(node)
+	if node == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(8)
+	for i := 0; i < len(node) && b.Len() < 8; i++ {
+		ch := node[i]
+		if (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
+			b.WriteByte(ch)
+		}
+	}
+	return b.String()
+}
+
+func diagConfidenceTag(sp *spot.Spot) string {
+	if sp.ConfidencePercentOK {
+		return strconv.Itoa(sp.ConfidencePercent) + "%"
+	}
+	return "--%"
+}
+
+func diagPathTag(prediction pathPrediction, havePrediction bool) string {
+	if !havePrediction {
+		return "n0|none"
+	}
+	res := prediction.result
+	count := strconv.FormatUint(uint64(res.Count), 10)
+	if res.Source == pathreliability.SourceInsufficient {
+		reason := diagPathInsufficientReason(res.InsufficientReason)
+		return "n" + count + "|" + reason
+	}
+	weight := strconv.FormatInt(int64(math.Round(res.Weight)), 10)
+	return "n" + count + "|w" + weight + "|a" + diagAgeToken(res.AgeSec)
+}
+
+func diagModeTag(sp *spot.Spot) string {
+	mode := strings.TrimSpace(sp.ModeNorm)
+	if mode == "" {
+		mode = strutil.NormalizeUpper(sp.Mode)
+	}
+	if mode == "" {
+		mode = "--"
+	}
+	return mode + "|" + diagModeProvenanceToken(sp.ModeProvenance)
+}
+
+func diagModeProvenanceToken(provenance spot.ModeProvenance) string {
+	switch provenance {
+	case spot.ModeProvenanceSourceExplicit:
+		return "SRC"
+	case spot.ModeProvenanceCommentExplicit:
+		return "CMT"
+	case spot.ModeProvenanceRecentEvidence:
+		return "EVD"
+	case spot.ModeProvenanceDigitalFrequency:
+		return "FQ"
+	case spot.ModeProvenanceRegionalCW:
+		return "RCW"
+	case spot.ModeProvenanceRegionalVoiceDefault:
+		return "RVO"
+	case spot.ModeProvenanceRegionalMixedBlank:
+		return "RMIX"
+	case spot.ModeProvenanceRegionalUnknownBlank:
+		return "RUNK"
+	default:
+		return "UNK"
+	}
+}
+
+func diagPathInsufficientReason(reason pathreliability.InsufficientReason) string {
+	switch reason {
+	case pathreliability.InsufficientStale:
+		return "stale"
+	case pathreliability.InsufficientLowWeight:
+		return "loww"
+	default:
+		return "none"
+	}
+}
+
+func diagAgeToken(ageSec int64) string {
+	if ageSec < 0 {
+		ageSec = 0
+	}
+	switch {
+	case ageSec < 60:
+		return strconv.FormatInt(ageSec, 10)
+	case ageSec < 3600:
+		return strconv.FormatInt(int64(math.Ceil(float64(ageSec)/60.0)), 10) + "m"
+	default:
+		return strconv.FormatInt(int64(math.Ceil(float64(ageSec)/3600.0)), 10) + "h"
 	}
 }
 
@@ -3551,24 +3775,6 @@ func diagDECQZone(sp *spot.Spot) string {
 		return ""
 	}
 	return fmt.Sprintf("%02d", zone)
-}
-
-func diagBandToken(sp *spot.Spot) string {
-	band := strings.TrimSpace(sp.BandNorm)
-	if band == "" {
-		band = strings.TrimSpace(sp.Band)
-	}
-	if band == "" {
-		band = spot.FreqToBand(sp.Frequency)
-	}
-	band = strings.TrimSpace(spot.NormalizeBand(band))
-	if band == "" || band == "???" {
-		return ""
-	}
-	if strings.HasSuffix(band, "m") && !strings.HasSuffix(band, "cm") {
-		band = strings.TrimSuffix(band, "m")
-	}
-	return band
 }
 
 func diagPolicyToken(policy dedupePolicy) string {

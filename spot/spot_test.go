@@ -232,12 +232,14 @@ func TestFormatDXClusterPreservesDXSummitMarkerWhenCallFits(t *testing.T) {
 
 func TestCloneWithCommentResetsFormatting(t *testing.T) {
 	s := &Spot{
-		DXCall:    "KE0UI",
-		DECall:    "W2NAF",
-		Frequency: 7014.0,
-		Mode:      "CW",
-		Comment:   "ORIG",
-		Time:      time.Date(2025, time.November, 22, 4, 54, 0, 0, time.UTC),
+		DXCall:              "KE0UI",
+		DECall:              "W2NAF",
+		Frequency:           7014.0,
+		Mode:                "CW",
+		Comment:             "ORIG",
+		ConfidencePercent:   67,
+		ConfidencePercentOK: true,
+		Time:                time.Date(2025, time.November, 22, 4, 54, 0, 0, time.UTC),
 	}
 
 	orig := s.FormatDXCluster()
@@ -252,6 +254,9 @@ func TestCloneWithCommentResetsFormatting(t *testing.T) {
 	cloneLine := clone.FormatDXCluster()
 	if !strings.Contains(cloneLine, "DIAG") {
 		t.Fatalf("expected clone comment, got %q", cloneLine)
+	}
+	if clone.ConfidencePercent != 67 || !clone.ConfidencePercentOK {
+		t.Fatalf("expected confidence percent metadata to be cloned, got percent=%d ok=%v", clone.ConfidencePercent, clone.ConfidencePercentOK)
 	}
 
 	origAgain := s.FormatDXCluster()

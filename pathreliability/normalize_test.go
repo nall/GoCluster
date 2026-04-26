@@ -66,9 +66,9 @@ func TestGlyphForPowerUsesCustomSymbols(t *testing.T) {
 
 func TestMergeSamplesWeighted(t *testing.T) {
 	cfg := DefaultConfig()
-	receive := Sample{Value: cfg.powerFromDB(-10), Weight: 10}
-	transmit := Sample{Value: cfg.powerFromDB(-5), Weight: 4}
-	mergedPower, mergedWeight, mergedAge, ok := mergeSamples(receive, transmit, cfg, 0)
+	receive := Sample{Value: cfg.powerFromDB(-10), Weight: 10, Count: 3}
+	transmit := Sample{Value: cfg.powerFromDB(-5), Weight: 4, Count: 2}
+	mergedPower, mergedWeight, mergedAge, mergedCount, ok := mergeSamples(receive, transmit, cfg, 0)
 	if !ok {
 		t.Fatalf("expected merge ok")
 	}
@@ -82,18 +82,21 @@ func TestMergeSamplesWeighted(t *testing.T) {
 	if mergedAge != 0 {
 		t.Fatalf("expected merged age 0, got %d", mergedAge)
 	}
+	if mergedCount != 5 {
+		t.Fatalf("expected merged count 5, got %d", mergedCount)
+	}
 }
 
 func TestSelectSampleMinFineWeight(t *testing.T) {
-	fine := Sample{Value: -20, Weight: 2, AgeSec: 12}
-	coarse := Sample{Value: -5, Weight: 10, AgeSec: 30}
+	fine := Sample{Value: -20, Weight: 2, AgeSec: 12, Count: 2}
+	coarse := Sample{Value: -5, Weight: 10, AgeSec: 30, Count: 7}
 	got := SelectSample(fine, coarse, 5, 20)
-	if got.Value != coarse.Value || got.Weight != coarse.Weight {
-		t.Fatalf("expected coarse when fine below min, got value=%v weight=%v", got.Value, got.Weight)
+	if got.Value != coarse.Value || got.Weight != coarse.Weight || got.Count != coarse.Count {
+		t.Fatalf("expected coarse when fine below min, got value=%v weight=%v count=%d", got.Value, got.Weight, got.Count)
 	}
 
-	fine = Sample{Value: -10, Weight: 6, AgeSec: 10}
-	coarse = Sample{Value: -4, Weight: 10, AgeSec: 20}
+	fine = Sample{Value: -10, Weight: 6, AgeSec: 10, Count: 3}
+	coarse = Sample{Value: -4, Weight: 10, AgeSec: 20, Count: 8}
 	got = SelectSample(fine, coarse, 5, 20)
 	wantValue := (fine.Value*fine.Weight + coarse.Value*coarse.Weight) / (fine.Weight + coarse.Weight)
 	if math.Abs(got.Value-wantValue) > 0.0001 {
@@ -105,11 +108,14 @@ func TestSelectSampleMinFineWeight(t *testing.T) {
 	if got.AgeSec != 17 {
 		t.Fatalf("expected blended effective age 17, got %d", got.AgeSec)
 	}
+	if got.Count != 8 {
+		t.Fatalf("expected blended count to use larger selected layer count 8, got %d", got.Count)
+	}
 
-	fine = Sample{Value: -18, Weight: 2, AgeSec: 5}
+	fine = Sample{Value: -18, Weight: 2, AgeSec: 5, Count: 4}
 	got = SelectSample(fine, Sample{}, 5, 20)
-	if got.Value != fine.Value || got.Weight != fine.Weight {
-		t.Fatalf("expected fine sample when coarse missing, got value=%v weight=%v", got.Value, got.Weight)
+	if got.Value != fine.Value || got.Weight != fine.Weight || got.Count != fine.Count {
+		t.Fatalf("expected fine sample when coarse missing, got value=%v weight=%v count=%d", got.Value, got.Weight, got.Count)
 	}
 }
 
@@ -354,5 +360,25 @@ func TestPredictUsesCoarseWhenFineMissing(t *testing.T) {
 	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
 	if res.Glyph == cfg.GlyphSymbols.Insufficient {
 		t.Fatalf("expected coarse fallback glyph when enabled, got insufficient")
+	}
+}
+
+func TestPredictCarriesObservationCount(t *testing.T) {
+	requireH3Mappings(t)
+	cfg := DefaultConfig()
+	cfg.MinEffectiveWeight = 0.1
+	predictor := NewPredictor(cfg, []string{"20m"})
+	userCell := EncodeCell("FN31")
+	dxCell := EncodeCell("FN32")
+	userCoarse := EncodeCoarseCell("FN31")
+	dxCoarse := EncodeCoarseCell("FN32")
+	now := time.Now().UTC()
+
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -5, 1.0, now, false)
+	predictor.Update(BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -5, 1.0, now, false)
+
+	res := predictor.Predict(userCell, dxCell, userCoarse, dxCoarse, "20m", "FT8", 0, now)
+	if res.Count != 2 {
+		t.Fatalf("expected selected count 2 without fine/coarse double count, got %d", res.Count)
 	}
 }

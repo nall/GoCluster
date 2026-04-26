@@ -62,9 +62,12 @@ Each bucket stores:
 
 - accumulated power
 - accumulated weight
+- raw observation count
 - last update time
 
 Updates apply exponential decay using the band's half-life before adding the new sample.
+The observation count is not decayed; it is a bounded diagnostic count of how
+many reports contributed to the selected bucket evidence.
 
 The shipped config currently uses:
 
@@ -89,6 +92,8 @@ For each direction, `SelectSample(...)` chooses between fine and coarse evidence
 When fine and coarse evidence are blended, the selected sample age is also a
 weighted effective age. A small fresh sample therefore cannot hide a large stale
 regional contribution.
+The selected sample count uses the larger fine/coarse layer count instead of
+summing both layers, because one report can update both resolutions.
 
 After sample selection, the predictor applies the freshness gate. If selected
 evidence is older than `ceil(band_half_life * max_prediction_age_half_life_multiplier)`,
