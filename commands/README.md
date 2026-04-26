@@ -6,8 +6,8 @@ This directory is the source of truth for telnet command help. The public `HELP`
 
 - command parsing for `HELP`, `DX`, `SHOW`, `BYE`, and related aliases
 - per-dialect HELP catalogs
-- dedupe and path-glyph HELP notes injected from runtime config snapshots
-- history and DXCC read paths used by `SHOW DX`, `SHOW MYDX`, and `SHOW DXCC`
+- build, dedupe, and path-glyph HELP notes injected from runtime snapshots
+- history, DXCC, and build-info read paths used by `SHOW DX`, `SHOW MYDX`, `SHOW DXCC`, and `SHOW BUILD`
 
 ## HELP Source Of Truth
 
@@ -38,6 +38,7 @@ The operator-facing commands handled here are:
 - `SHOW DX`
 - `SHOW MYDX`
 - `SHOW DXCC`
+- `SHOW BUILD`
 - `SHOW DEDUPE`
 - `SET DEDUPE`
 - `SET DIAG`

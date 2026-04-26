@@ -862,6 +862,13 @@ func (r *clusterRuntime) initializeServices() bool {
 			Configured:    true,
 			WindowMinutes: r.cfg.WhoSpotsMe.WindowMinutes,
 		}),
+		commands.WithBuildInfo(commands.BuildInfo{
+			Version:     r.versionInfo.Version,
+			Commit:      r.versionInfo.Commit,
+			BuildTime:   r.versionInfo.BuildTime,
+			VCSModified: r.versionInfo.VCSModified,
+			GoVersion:   r.versionInfo.GoVersion,
+		}),
 		commands.WithWhoSpotsMe(r.whoSpotsMeStore),
 		commands.WithBadCallReporter(r.reportBadCallDrop),
 	)

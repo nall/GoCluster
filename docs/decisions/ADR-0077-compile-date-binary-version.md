@@ -6,11 +6,11 @@
 
 ## Context
 
-The console header, startup log, and `--version` command expose the binary
-identity operators use during deployment and troubleshooting. Existing build
-paths could show different values: release packages could show a Git tag,
-PGO builds could show `git describe --dirty`, and unflagged builds could fall
-back to Go module pseudo-version metadata such as
+The console header, startup log, telnet `SHOW BUILD`, and `--version` command
+expose the binary identity operators use during deployment and troubleshooting.
+Existing build paths could show different values: release packages could show a
+Git tag, PGO builds could show `git describe --dirty`, and unflagged builds
+could fall back to Go module pseudo-version metadata such as
 `v0.0.0-20260424022627-78b3cd19baac+dirty`.
 
 Operators need a compact version that identifies when the binary was built and
@@ -29,6 +29,9 @@ The release script uses the same generated value for the binary's runtime
 The runtime resolver keeps a no-ldflags fallback for plain `go build .`: when
 linker-stamped compile time is unavailable, it derives the same display shape
 from Go VCS metadata rather than exposing the module pseudo-version directly.
+
+Telnet `SHOW BUILD` reports the startup-resolved build snapshot. It does not
+probe VCS or rebuild metadata at command time.
 
 ## Alternatives considered
 
@@ -57,7 +60,7 @@ from Go VCS metadata rather than exposing the module pseudo-version directly.
 ### Operational impact
 
 - Operators should cite both the console `Version` and `commit`/`built` fields
-  from `--version` when reporting deployment state.
+  from `--version` or telnet `SHOW BUILD` when reporting deployment state.
 - Dirty builds are visibly marked in the version string and still expose the
   separate Go VCS modified flag when available.
 - Normal release packages reject dirty source before build; a `+dirty` release
@@ -66,7 +69,7 @@ from Go VCS metadata rather than exposing the module pseudo-version directly.
 ## Links
 
 - Related issues/PRs/commits:
-- Related tests: `go test .`
-- Related docs: `README.md`, `scripts/create-release.ps1`, `scripts/consolidate-and-build-pgo.ps1`, `docs/decisions/ADR-0078-release-package-clean-source-gate.md`
+- Related tests: `go test .`, `go test ./commands`
+- Related docs: `README.md`, `commands/README.md`, `scripts/create-release.ps1`, `scripts/consolidate-and-build-pgo.ps1`, `docs/decisions/ADR-0078-release-package-clean-source-gate.md`
 - Related TSRs:
 - Supersedes / superseded by:

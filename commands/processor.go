@@ -60,6 +60,15 @@ type WhoSpotsMeHelpConfig struct {
 	WindowMinutes int
 }
 
+// BuildInfo carries the startup-resolved binary identity into SHOW BUILD.
+type BuildInfo struct {
+	Version     string
+	Commit      string
+	BuildTime   string
+	VCSModified string
+	GoVersion   string
+}
+
 // ProcessorOption customizes Processor construction without widening the core
 // command-call surface.
 type ProcessorOption func(*Processor)
@@ -83,6 +92,7 @@ type Processor struct {
 	dedupeHelp     DedupeHelpConfig
 	whoSpotsMe     whoSpotsMeQuerier
 	whoSpotsMeHelp WhoSpotsMeHelpConfig
+	buildInfo      BuildInfo
 }
 
 // NewProcessor constructs a command processor bound to shared spot state.
@@ -147,6 +157,16 @@ func WithWhoSpotsMeHelp(cfg WhoSpotsMeHelpConfig) ProcessorOption {
 			return
 		}
 		p.whoSpotsMeHelp = cfg
+	}
+}
+
+// WithBuildInfo installs the startup-resolved binary identity for SHOW BUILD.
+func WithBuildInfo(info BuildInfo) ProcessorOption {
+	return func(p *Processor) {
+		if p == nil {
+			return
+		}
+		p.buildInfo = normalizeBuildInfo(info)
 	}
 }
 
@@ -363,6 +383,16 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	)
 	add("SHOW DXCC", "SHOW DXCC - Look up DXCC/ADIF and zones.", showDXCCLines)
 
+	showBuildLines := helpEntryLines(
+		"SHOW BUILD - Show binary build metadata.",
+		[]string{"SHOW BUILD"},
+		nil,
+		[]string{
+			"Shows version, commit, build time, dirty flag, and Go version.",
+		},
+	)
+	add("SHOW BUILD", "SHOW BUILD - Show binary build metadata.", showBuildLines)
+
 	whoSpotsMeLines := helpEntryLines(
 		"WHOSPOTSME - Show recent spotter countries for your call.",
 		[]string{"WHOSPOTSME [band]"},
@@ -485,7 +515,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	if dialect == "cc" {
 		showLines := helpEntryLines(
 			"SHOW - See SHOW subcommands.",
-			[]string{"SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>"},
+			[]string{"SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD"},
 			nil,
 			[]string{
 				"Use HELP SHOW/DX for the history alias.",
@@ -629,6 +659,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SH/DX",
 			"SHOW MYDX",
 			"SHOW DXCC",
+			"SHOW BUILD",
 			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
@@ -663,7 +694,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	} else {
 		showLines := helpEntryLines(
 			"SHOW - See SHOW subcommands.",
-			[]string{"SHOW DX [count|selector]", "SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>"},
+			[]string{"SHOW DX [count|selector]", "SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD"},
 			nil,
 			[]string{
 				"Use HELP SHOW DX for the history alias.",
@@ -756,6 +787,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SH DX",
 			"SHOW MYDX",
 			"SHOW DXCC",
+			"SHOW BUILD",
 			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
@@ -786,6 +818,8 @@ func normalizeHelpTopic(dialect string, topic string) string {
 	switch {
 	case strings.HasPrefix(upper, "PASS NEARBY"):
 		return "PASS NEARBY"
+	case strings.HasPrefix(upper, "SHOW BUILD"):
+		return "SHOW BUILD"
 	case strings.HasPrefix(upper, "SHOW DXCC"):
 		return "SHOW DXCC"
 	case strings.HasPrefix(upper, "WHOSPOTSME"):
@@ -1507,9 +1541,48 @@ func (p *Processor) handleShow(args []string, filterFn func(*spot.Spot) bool, di
 		return p.handleShowMYDX(args[1:], filterFn, "SHOW MYDX")
 	case "DXCC":
 		return p.handleShowDXCC(args[1:])
+	case "BUILD":
+		if len(args) != 1 {
+			return "Usage: SHOW BUILD\n"
+		}
+		return p.handleShowBuild()
 	default:
 		return fmt.Sprintf("Unknown SHOW subcommand: %s\n", subCmd)
 	}
+}
+
+func normalizeBuildInfo(info BuildInfo) BuildInfo {
+	info.Version = strings.TrimSpace(info.Version)
+	info.Commit = strings.TrimSpace(info.Commit)
+	info.BuildTime = strings.TrimSpace(info.BuildTime)
+	info.VCSModified = strings.TrimSpace(info.VCSModified)
+	info.GoVersion = strings.TrimSpace(info.GoVersion)
+	if info.Version == "" {
+		info.Version = "dev"
+	}
+	if info.Commit == "" {
+		info.Commit = "unknown"
+	}
+	if info.BuildTime == "" {
+		info.BuildTime = "unknown"
+	}
+	return info
+}
+
+func (p *Processor) handleShowBuild() string {
+	info := normalizeBuildInfo(p.buildInfo)
+	lines := []string{
+		"Build version: " + info.Version,
+		"Commit: " + info.Commit,
+		"Built: " + info.BuildTime,
+	}
+	if info.VCSModified != "" {
+		lines = append(lines, "Dirty: "+info.VCSModified)
+	}
+	if info.GoVersion != "" {
+		lines = append(lines, "Go: "+info.GoVersion)
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // Purpose: Render recent stored spots filtered by client rules and optional DXCC selector.

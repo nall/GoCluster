@@ -688,6 +688,64 @@ func TestShowDXDialectVariants(t *testing.T) {
 	}
 }
 
+func TestShowBuild(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil, WithBuildInfo(BuildInfo{
+		Version:     "v26.24.04-76fa6eac04fb",
+		Commit:      "76fa6eac04fb",
+		BuildTime:   "2026-04-24T12:34:56Z",
+		VCSModified: "true",
+		GoVersion:   "go1.26.2",
+	}))
+
+	resp := p.ProcessCommandForClient("SHOW BUILD", "N2WQ", "", nil, "go")
+	want := []string{
+		"Build version: v26.24.04-76fa6eac04fb",
+		"Commit: 76fa6eac04fb",
+		"Built: 2026-04-24T12:34:56Z",
+		"Dirty: true",
+		"Go: go1.26.2",
+	}
+	for _, line := range want {
+		if !strings.Contains(resp, line) {
+			t.Fatalf("SHOW BUILD missing %q in %q", line, resp)
+		}
+	}
+
+	resp = p.ProcessCommandForClient("SH BUILD", "N2WQ", "", nil, "go")
+	if !strings.Contains(resp, "Build version: v26.24.04-76fa6eac04fb") {
+		t.Fatalf("expected SH BUILD alias to show build info, got %q", resp)
+	}
+
+	resp = p.ProcessCommandForClient("SHOW BUILD EXTRA", "N2WQ", "", nil, "go")
+	if resp != "Usage: SHOW BUILD\n" {
+		t.Fatalf("expected SHOW BUILD usage for extra args, got %q", resp)
+	}
+
+	resp = p.ProcessCommandForClient("SHOW BUILD", "", "", nil, "go")
+	if resp != noLoggedUserMsg {
+		t.Fatalf("expected login gate for SHOW BUILD, got %q", resp)
+	}
+}
+
+func TestShowBuildDefaults(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("SHOW BUILD", "N2WQ", "", nil, "go")
+	want := []string{
+		"Build version: dev",
+		"Commit: unknown",
+		"Built: unknown",
+	}
+	for _, line := range want {
+		if !strings.Contains(resp, line) {
+			t.Fatalf("SHOW BUILD defaults missing %q in %q", line, resp)
+		}
+	}
+	if strings.Contains(resp, "Dirty:") || strings.Contains(resp, "Go:") {
+		t.Fatalf("expected empty optional build fields to be omitted, got %q", resp)
+	}
+}
+
 func TestHelpLineWidth(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
 	pWithPathGlyphs := NewProcessor(nil, nil, nil, nil, nil, nil, WithPathGlyphHelp(PathGlyphHelpConfig{
@@ -717,6 +775,7 @@ func TestHelpLineWidth(t *testing.T) {
 		p.ProcessCommandForClient("HELP", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP DX", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go"),
+		p.ProcessCommandForClient("HELP SHOW BUILD", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP SHOW/DX", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP SET/FILTER", "N2WQ", "", nil, "cc"),
 	}
@@ -755,6 +814,11 @@ func TestHelpTopicGoDialect(t *testing.T) {
 		t.Fatalf("expected SHOW DX aliases, got %q", resp)
 	}
 
+	resp = p.ProcessCommandForClient("HELP SHOW BUILD", "N2WQ", "", nil, "go")
+	if !strings.Contains(resp, "Usage: SHOW BUILD") {
+		t.Fatalf("expected SHOW BUILD usage, got %q", resp)
+	}
+
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "go")
 	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage, got %q", resp)
@@ -789,6 +853,11 @@ func TestHelpTopicCCDialect(t *testing.T) {
 		t.Fatalf("expected HELP SHOW DX to map to SHOW/DX in cc, got %q", resp)
 	}
 
+	resp = p.ProcessCommandForClient("HELP SHOW BUILD", "N2WQ", "", nil, "cc")
+	if !strings.Contains(resp, "Usage: SHOW BUILD") {
+		t.Fatalf("expected SHOW BUILD usage in cc, got %q", resp)
+	}
+
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "cc")
 	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage in cc, got %q", resp)
@@ -807,6 +876,7 @@ func TestHelpEntriesGoDialect(t *testing.T) {
 		{"SHOW DX", []string{"SHOW DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
+		{"SHOW BUILD", []string{"SHOW BUILD - Show binary build metadata", "Usage: SHOW BUILD"}},
 		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
@@ -839,6 +909,7 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		{"SHOW/DX", []string{"SHOW/DX - Alias of SHOW MYDX (stored history)", "Usage: SHOW/DX [count]"}},
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
+		{"SHOW BUILD", []string{"SHOW BUILD - Show binary build metadata", "Usage: SHOW BUILD"}},
 		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
