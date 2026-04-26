@@ -44,6 +44,11 @@ Replay config:
 Replay downloads:
 - `<archive_dir>/<YYYYMMDD>.zip`
 
+RBN history CSV mode fields are intentionally distinct:
+- `mode` is the RBN spot class. Replay ingests only `CQ`, `BEACON`, and `NCDXF B`; it drops `DX`, blank, and unknown classes before resolver evidence.
+- `tx_mode` is the RF/transmission mode and is the only CSV field used for `Spot.Mode`.
+- `BEACON` and `NCDXF B` rows are accepted from the CSV parser but tagged as beacons and excluded from call-correction evidence.
+
 All other dependencies are local snapshots and must already exist when enabled:
 - `cty.file`
 - `fcc_uls.allowlist_path`

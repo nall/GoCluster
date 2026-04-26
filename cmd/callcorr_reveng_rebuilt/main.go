@@ -23,6 +23,7 @@ import (
 	"dxcluster/config"
 	"dxcluster/cty"
 	"dxcluster/internal/correctionflow"
+	rbnfeed "dxcluster/rbn"
 	"dxcluster/spot"
 	"dxcluster/strutil"
 	"dxcluster/uls"
@@ -218,18 +219,28 @@ type rbnHeader struct {
 	dx       int
 	db       int
 	date     int
+	spotMode int
 	txMode   int
 }
 
 type rbnRow struct {
-	Time    time.Time
-	FreqKHz float64
-	Band    string
-	DXCall  string
-	Spotter string
-	Mode    string
-	Report  int
+	Time      time.Time
+	FreqKHz   float64
+	Band      string
+	DXCall    string
+	Spotter   string
+	Mode      string
+	SpotClass rbnfeed.SpotClass
+	Report    int
 }
+
+type rbnRecordStatus uint8
+
+const (
+	rbnRecordInvalid rbnRecordStatus = iota
+	rbnRecordSkipped
+	rbnRecordAccepted
+)
 
 type xorshift64 struct {
 	state uint64
@@ -481,12 +492,12 @@ func replayRBNFile(ctx context.Context, path string, st *runState, evalNeg int) 
 		if err != nil {
 			return rows, badRows, err
 		}
-		row, ok := parseRBNRecord(record, header)
-		if !ok {
+		row, status := parseRBNRecord(record, header)
+		switch status {
+		case rbnRecordInvalid:
 			badRows++
 			continue
-		}
-		if !spot.IsCallCorrectionCandidate(row.Mode) {
+		case rbnRecordSkipped:
 			continue
 		}
 		rows++
@@ -516,6 +527,9 @@ func processRBNRow(st *runState, row rbnRow, evalNeg int) {
 	spotEntry.Band = row.Band
 	spotEntry.EnsureNormalized()
 	spotEntry.RefreshBeaconFlag()
+	if row.SpotClass.IsBeacon() {
+		spotEntry.IsBeacon = true
+	}
 	if spotEntry.IsBeacon {
 		st.driver.Step(now)
 		return
@@ -1095,7 +1109,7 @@ func openRBNReader(path string) (io.Reader, func() error, error) {
 }
 
 func parseRBNHeader(row []string) (rbnHeader, error) {
-	h := rbnHeader{callsign: -1, freq: -1, band: -1, dx: -1, db: -1, date: -1, txMode: -1}
+	h := rbnHeader{callsign: -1, freq: -1, band: -1, dx: -1, db: -1, date: -1, spotMode: -1, txMode: -1}
 	for i, raw := range row {
 		switch strings.ToLower(strings.TrimSpace(raw)) {
 		case "callsign":
@@ -1110,6 +1124,8 @@ func parseRBNHeader(row []string) (rbnHeader, error) {
 			h.db = i
 		case "date":
 			h.date = i
+		case "mode":
+			h.spotMode = i
 		case "tx_mode":
 			h.txMode = i
 		}
@@ -1130,6 +1146,9 @@ func parseRBNHeader(row []string) (rbnHeader, error) {
 	if h.date < 0 {
 		missing = append(missing, "date")
 	}
+	if h.spotMode < 0 {
+		missing = append(missing, "mode")
+	}
 	if h.txMode < 0 {
 		missing = append(missing, "tx_mode")
 	}
@@ -1139,7 +1158,7 @@ func parseRBNHeader(row []string) (rbnHeader, error) {
 	return h, nil
 }
 
-func parseRBNRecord(record []string, h rbnHeader) (rbnRow, bool) {
+func parseRBNRecord(record []string, h rbnHeader) (rbnRow, rbnRecordStatus) {
 	get := func(idx int) string {
 		if idx < 0 || idx >= len(record) {
 			return ""
@@ -1147,21 +1166,25 @@ func parseRBNRecord(record []string, h rbnHeader) (rbnRow, bool) {
 		return strings.TrimSpace(record[idx])
 	}
 	mode := strings.ToUpper(get(h.txMode))
+	spotClass, _ := rbnfeed.NormalizeSpotClass(get(h.spotMode))
+	if !spotClass.Accepted() {
+		return rbnRow{}, rbnRecordSkipped
+	}
 	if !spot.IsCallCorrectionCandidate(mode) {
-		return rbnRow{}, false
+		return rbnRow{}, rbnRecordSkipped
 	}
 	ts, err := time.ParseInLocation("2006-01-02 15:04:05", get(h.date), time.UTC)
 	if err != nil {
-		return rbnRow{}, false
+		return rbnRow{}, rbnRecordInvalid
 	}
 	freqKHz, err := strconv.ParseFloat(get(h.freq), 64)
 	if err != nil || freqKHz <= 0 {
-		return rbnRow{}, false
+		return rbnRow{}, rbnRecordInvalid
 	}
 	dxCall := spot.NormalizeCallsign(get(h.dx))
 	spotter := spot.NormalizeCallsign(get(h.callsign))
 	if dxCall == "" || spotter == "" {
-		return rbnRow{}, false
+		return rbnRow{}, rbnRecordInvalid
 	}
 	var report int
 	dbRaw := get(h.db)
@@ -1170,13 +1193,13 @@ func parseRBNRecord(record []string, h rbnHeader) (rbnRow, bool) {
 	} else if v, err := strconv.ParseFloat(dbRaw, 64); err == nil {
 		report = int(v + 0.5)
 	} else {
-		return rbnRow{}, false
+		return rbnRow{}, rbnRecordInvalid
 	}
 	band := spot.NormalizeBand(get(h.band))
 	if band == "" {
 		band = spot.NormalizeBand(spot.FreqToBand(freqKHz))
 	}
-	return rbnRow{Time: ts.UTC(), FreqKHz: freqKHz, Band: band, DXCall: dxCall, Spotter: spotter, Mode: mode, Report: report}, true
+	return rbnRow{Time: ts.UTC(), FreqKHz: freqKHz, Band: band, DXCall: dxCall, Spotter: spotter, Mode: mode, SpotClass: spotClass, Report: report}, rbnRecordAccepted
 }
 
 func configureULS(cfg *config.Config) error {

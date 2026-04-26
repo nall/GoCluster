@@ -686,21 +686,21 @@ func buildComment(tokens []spotToken, consumed []bool) string {
 }
 
 func stripRBNSpeedCQComment(mode, comment string) string {
-	// Purpose: Remove the exact "<number> WPM CQ" or "<number> BPS CQ" payload for RBN-only spots.
-	// Key aspects: Exact 3-token match, digit-only speed, mode-specific unit gating.
+	// Purpose: Remove speed-only payloads after the RBN spot class is consumed.
+	// Key aspects: Exact 2-token speed match, digit-only speed, mode-specific unit gating.
 	// Upstream: parseSpot (RBN path only).
 	// Downstream: Spot.Comment assignment and fixed-width output formatting.
 	if comment == "" || mode == "" {
 		return comment
 	}
 	fields := strings.Fields(comment)
-	if len(fields) != 3 {
+	if len(fields) != 2 && len(fields) != 3 {
 		return comment
 	}
 	if !strutil.IsAllDigitsASCII(fields[0]) {
 		return comment
 	}
-	if !strings.EqualFold(fields[2], "CQ") {
+	if len(fields) == 3 && !strings.EqualFold(fields[2], "CQ") {
 		return comment
 	}
 	if strings.EqualFold(mode, "CW") && strings.EqualFold(fields[1], "WPM") {
@@ -710,6 +710,44 @@ func stripRBNSpeedCQComment(mode, comment string) string {
 		return ""
 	}
 	return comment
+}
+
+func consumeRBNSpotClass(tokens []spotToken, consumed []bool) (SpotClass, bool) {
+	for idx := 0; idx < len(tokens); idx++ {
+		if consumed[idx] {
+			continue
+		}
+		clean := tokens[idx].clean
+		switch {
+		case equalFoldASCII(clean, "CQ"):
+			consumed[idx] = true
+			return SpotClassCQ, true
+		case equalFoldASCII(clean, "DX"):
+			consumed[idx] = true
+			return SpotClassDX, true
+		case equalFoldASCII(clean, "BEACON"):
+			consumed[idx] = true
+			return SpotClassBeacon, true
+		case equalFoldASCII(clean, "NCDXF"):
+			next := nextUnconsumedCleanToken(tokens, consumed, idx+1)
+			if next >= 0 && equalFoldASCII(tokens[next].clean, "B") {
+				consumed[idx] = true
+				consumed[next] = true
+				return SpotClassNCDXFB, true
+			}
+		}
+	}
+	return SpotClassUnknown, false
+}
+
+func nextUnconsumedCleanToken(tokens []spotToken, consumed []bool, start int) int {
+	for idx := start; idx < len(tokens); idx++ {
+		if consumed[idx] || tokens[idx].clean == "" {
+			continue
+		}
+		return idx
+	}
+	return -1
 }
 
 // Purpose: Parse a DX line into a canonical Spot.
@@ -782,6 +820,15 @@ func (c *Client) parseSpot(line string) {
 		return
 	}
 
+	var spotClass SpotClass
+	if !c.minimalParse {
+		class, hasClass := consumeRBNSpotClass(tokens, consumed)
+		if !hasClass || !class.Accepted() {
+			return
+		}
+		spotClass = class
+	}
+
 	parsed := spot.ParseSpotComment(buildComment(tokens, consumed), freq)
 	mode := parsed.Mode
 	if !spot.IsValidNormalizedCallsign(dxCall) {
@@ -852,6 +899,9 @@ func (c *Client) parseSpot(line string) {
 	}
 
 	s.RefreshBeaconFlag()
+	if spotClass.IsBeacon() {
+		s.IsBeacon = true
+	}
 	s.EnsureNormalized()
 
 	c.lastSpotAt.Store(time.Now().UTC().UnixNano())

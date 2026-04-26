@@ -12,7 +12,7 @@ import (
 func TestACParserExtractsModeSNRAndGrid(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
 	ts := time.Now().UTC().Format("1504Z")
-	line := fmt.Sprintf("DX de DL1YAW: 144360.0 S51AT JO41DX<MS>JN75 MSK144 +5 dB %s", ts)
+	line := fmt.Sprintf("DX de DL1YAW: 144360.0 S51AT JO41DX<MS>JN75 MSK144 +5 dB CQ %s", ts)
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -41,7 +41,7 @@ func TestACParserExtractsModeSNRAndGrid(t *testing.T) {
 
 func TestACParserLeavesModeBlankWithoutExplicitToken(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de K0DG: 28015.1 K7SS WA 1912Z"
+	line := "DX de K0DG: 28015.1 K7SS WA CQ 1912Z"
 	c.parseSpot(line)
 
 	select {
@@ -79,7 +79,7 @@ func TestParserReportsNoValidDXCall(t *testing.T) {
 
 func TestACParserLeavesModeBlankWithoutExplicitTokenVoiceBand(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de KC9IMA: 28319.0 KC9IMA ARRL 10-Meter Contest 1912Z"
+	line := "DX de KC9IMA: 28319.0 KC9IMA ARRL 10-Meter Contest CQ 1912Z"
 	c.parseSpot(line)
 
 	select {
@@ -91,7 +91,7 @@ func TestACParserLeavesModeBlankWithoutExplicitTokenVoiceBand(t *testing.T) {
 
 func TestACParserDigitalReport(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de PE2JMR: 50280.0 I2RNJ MSK144 +9 dB RX 1912Z"
+	line := "DX de PE2JMR: 50280.0 I2RNJ MSK144 +9 dB RX CQ 1912Z"
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -114,7 +114,7 @@ func TestACParserDigitalReport(t *testing.T) {
 
 func TestACParserInlineSNRWithoutSpace(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de EA1AHP: 14074.0 CX3VB FT8 -13dB from GF27 2062Hz 1943Z"
+	line := "DX de EA1AHP: 14074.0 CX3VB FT8 -13dB from GF27 2062Hz CQ 1943Z"
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -137,7 +137,7 @@ func TestACParserInlineSNRWithoutSpace(t *testing.T) {
 
 func TestACParserPositiveSNRNoComment(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de UA3RF: 144360.0 R1BPV MSK144 +2 dB 1943Z"
+	line := "DX de UA3RF: 144360.0 R1BPV MSK144 +2 dB CQ 1943Z"
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -218,7 +218,7 @@ func TestACParserKeepsSpeedCQCommentForMinimalParse(t *testing.T) {
 
 func TestACParserDropsZeroSNRForRBN(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de UA3RF: 144360.0 R1BPV MSK144 0 dB 1943Z"
+	line := "DX de UA3RF: 144360.0 R1BPV MSK144 0 dB CQ 1943Z"
 	c.parseSpot(line)
 
 	select {
@@ -230,7 +230,7 @@ func TestACParserDropsZeroSNRForRBN(t *testing.T) {
 
 func TestACParserParsesMSKSNRWithTrailingComment(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de IK8PV: 144360.0 DL1OBF MSK144 +7 dB HRD"
+	line := "DX de IK8PV: 144360.0 DL1OBF MSK144 +7 dB HRD CQ"
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -253,7 +253,7 @@ func TestACParserParsesMSKSNRWithTrailingComment(t *testing.T) {
 
 func TestACParserParsesMSKSNRWithSignificantComment(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de I3EPV: 144360.0 DJ9MG MSK144 +15 dB"
+	line := "DX de I3EPV: 144360.0 DJ9MG MSK144 +15 dB CQ"
 	c.parseSpot(line)
 
 	var s *spot.Spot
@@ -276,7 +276,7 @@ func TestACParserParsesMSKSNRWithSignificantComment(t *testing.T) {
 
 func TestACParserDropsMissingSNRForRBN(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
-	line := "DX de PB0MD: 144360.0 S50TA MSK144 HRD"
+	line := "DX de PB0MD: 144360.0 S50TA MSK144 HRD CQ"
 	c.parseSpot(line)
 
 	select {
@@ -320,4 +320,113 @@ func TestACParserMinimalParseAllowsModeLessSpotWithReport(t *testing.T) {
 	if !s.HasReport || s.Report != 5 {
 		t.Fatalf("expected report +5 dB, got HasReport=%v Report=%d", s.HasReport, s.Report)
 	}
+}
+
+func TestACParserUsesCQSpotClassAndTXModeForMode(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 3547.0 OZ4ADX CW 5 dB CQ 0318Z")
+
+	s := mustReadSpot(t, c)
+	if s.Mode != "CW" {
+		t.Fatalf("expected RF mode CW from tx mode token, got %q", s.Mode)
+	}
+	if strings.TrimSpace(s.Comment) != "" {
+		t.Fatalf("expected CQ spot class to be consumed, got comment %q", s.Comment)
+	}
+	if s.IsBeacon {
+		t.Fatalf("expected CQ class spot not to be beacon-tagged")
+	}
+}
+
+func TestACParserDropsDXSpotClass(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 3547.0 OZ4ADX CW 5 dB DX 0318Z")
+
+	select {
+	case s := <-c.spotChan:
+		t.Fatalf("expected DX spot class to be dropped, got %+v", s)
+	default:
+	}
+}
+
+func TestACParserDropsMissingSpotClass(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 3547.0 OZ4ADX CW 5 dB 0318Z")
+
+	select {
+	case s := <-c.spotChan:
+		t.Fatalf("expected missing spot class to be dropped, got %+v", s)
+	default:
+	}
+}
+
+func TestACParserAcceptsBeaconSpotClass(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 14100.0 4U1UN CW 5 dB BEACON 0318Z")
+
+	s := mustReadSpot(t, c)
+	if !s.IsBeacon {
+		t.Fatalf("expected BEACON spot class to set IsBeacon")
+	}
+	if s.Mode != "CW" {
+		t.Fatalf("expected RF mode CW, got %q", s.Mode)
+	}
+}
+
+func TestACParserAcceptsNCDXFBSpotClass(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 14100.0 4U1UN CW 5 dB NCDXF B 0318Z")
+
+	s := mustReadSpot(t, c)
+	if !s.IsBeacon {
+		t.Fatalf("expected NCDXF B spot class to set IsBeacon")
+	}
+	if s.Mode != "CW" {
+		t.Fatalf("expected RF mode CW, got %q", s.Mode)
+	}
+}
+
+func BenchmarkParseSpotCQ(b *testing.B) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 1)
+	line := "DX de K1ABC: 3547.0 OZ4ADX CW 5 dB CQ 0318Z"
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		c.parseSpot(line)
+		<-c.spotChan
+	}
+}
+
+func FuzzParseRBNSpot(f *testing.F) {
+	for _, seed := range []string{
+		"DX de K1ABC: 3547.0 OZ4ADX CW 5 dB CQ 0318Z",
+		"DX de K1ABC: 14100.0 4U1UN CW 5 dB BEACON 0318Z",
+		"DX de K1ABC: 14100.0 4U1UN CW 5 dB NCDXF B 0318Z",
+		"DX de K1ABC: 3547.0 OZ4ADX CW 5 dB DX 0318Z",
+		"DX de K1ABC: 3547.0 OZ4ADX CW 5 dB 0318Z",
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, line string) {
+		if len(line) > 512 {
+			t.Skip()
+		}
+		c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 1)
+		c.parseSpot(line)
+		select {
+		case <-c.spotChan:
+		default:
+		}
+	})
+}
+
+func mustReadSpot(t *testing.T, c *Client) *spot.Spot {
+	t.Helper()
+	select {
+	case s := <-c.spotChan:
+		return s
+	default:
+		t.Fatalf("expected a parsed spot")
+	}
+	return nil
 }

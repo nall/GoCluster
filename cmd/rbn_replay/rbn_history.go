@@ -11,18 +11,20 @@ import (
 	"strings"
 	"time"
 
+	rbnfeed "dxcluster/rbn"
 	"dxcluster/spot"
 	"dxcluster/strutil"
 )
 
 type rbnHistoryRow struct {
-	Time     time.Time
-	FreqKHz  float64
-	Band     string
-	DXCall   string
-	Spotter  string
-	Mode     string
-	ReportDB int
+	Time      time.Time
+	FreqKHz   float64
+	Band      string
+	DXCall    string
+	Spotter   string
+	Mode      string
+	SpotClass rbnfeed.SpotClass
+	ReportDB  int
 }
 
 type rbnHistoryCSV struct {
@@ -38,6 +40,7 @@ type rbnHistoryCSV struct {
 		dx       int
 		db       int
 		date     int
+		spotMode int
 		txMode   int
 	}
 }
@@ -111,6 +114,7 @@ func (c *rbnHistoryCSV) initColumns() {
 	c.col.dx = -1
 	c.col.db = -1
 	c.col.date = -1
+	c.col.spotMode = -1
 	c.col.txMode = -1
 
 	for i, name := range c.header {
@@ -127,6 +131,8 @@ func (c *rbnHistoryCSV) initColumns() {
 			c.col.db = i
 		case "date":
 			c.col.date = i
+		case "mode":
+			c.col.spotMode = i
 		case "tx_mode":
 			c.col.txMode = i
 		}
@@ -178,6 +184,9 @@ func (c *rbnHistoryCSV) requiredColumnsPresent() error {
 	if c.col.date < 0 {
 		missing = append(missing, "date")
 	}
+	if c.col.spotMode < 0 {
+		missing = append(missing, "mode")
+	}
 	if c.col.txMode < 0 {
 		missing = append(missing, "tx_mode")
 	}
@@ -216,6 +225,7 @@ func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 	dxCall := spot.NormalizeCallsign(get(c.col.dx))
 	spotter := spot.NormalizeCallsign(get(c.col.callsign))
 	mode := strutil.NormalizeUpper(get(c.col.txMode))
+	spotClass, _ := rbnfeed.NormalizeSpotClass(get(c.col.spotMode))
 	if dxCall == "" || spotter == "" || mode == "" {
 		return rbnHistoryRow{}, false, nil
 	}
@@ -236,13 +246,14 @@ func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 	}
 
 	return rbnHistoryRow{
-		Time:     ts.UTC(),
-		FreqKHz:  freqKHz,
-		Band:     band,
-		DXCall:   dxCall,
-		Spotter:  spotter,
-		Mode:     mode,
-		ReportDB: report,
+		Time:      ts.UTC(),
+		FreqKHz:   freqKHz,
+		Band:      band,
+		DXCall:    dxCall,
+		Spotter:   spotter,
+		Mode:      mode,
+		SpotClass: spotClass,
+		ReportDB:  report,
 	}, true, nil
 }
 

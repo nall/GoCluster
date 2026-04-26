@@ -440,6 +440,10 @@ func (r *replayRunner) processCSVRow(row rbnHistoryRow, ok bool) error {
 		r.nextSampleAt = r.nextSampleAt.Add(sampleInterval)
 	}
 
+	if !row.SpotClass.Accepted() {
+		r.recordsSkippedMode++
+		return nil
+	}
 	if !spot.IsCallCorrectionCandidate(row.Mode) {
 		r.recordsSkippedMode++
 		return nil
@@ -810,5 +814,8 @@ func newReplaySpot(row rbnHistoryRow) *spot.Spot {
 	spotEntry.SourceNode = "RBN-HISTORY"
 	spotEntry.EnsureNormalized()
 	spotEntry.RefreshBeaconFlag()
+	if row.SpotClass.IsBeacon() {
+		spotEntry.IsBeacon = true
+	}
 	return spotEntry
 }
