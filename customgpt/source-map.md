@@ -39,6 +39,7 @@ linking or citing these docs over duplicating their content here.
 | ADR and TSR handling | `docs/decision-memory.md` | `docs/decision-log.md`, `docs/troubleshooting-log.md` |
 | Accepted design decisions | `docs/decision-log.md` | `docs/decisions/` |
 | Troubleshooting records | `docs/troubleshooting-log.md` | `docs/troubleshooting/` |
+| Symptom-based troubleshooting | `customgpt/troubleshooting-index.md` | `docs/troubleshooting-log.md`, package READMEs |
 
 ## Routing Rules
 
@@ -48,4 +49,6 @@ linking or citing these docs over duplicating their content here.
   implementation advice.
 - For config-sensitive answers, route to `data/config/README.md` and tell the
   user to check their effective YAML.
+- For symptom reports, route to `customgpt/troubleshooting-index.md` before
+  using broad docs or historical TSRs.
 - For decision history, route to the ADR/TSR indexes before summarizing.

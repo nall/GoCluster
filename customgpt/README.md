@@ -20,6 +20,8 @@ Use this folder to find the right source, not as a replacement for that source.
 - Use [operator-guide-index.md](operator-guide-index.md) for operator support.
 - Use [developer-guide-index.md](developer-guide-index.md) for contributor
   support.
+- Use [troubleshooting-index.md](troubleshooting-index.md) when a user reports a
+  symptom, failure, or surprising cluster output.
 - Use [external-authorities.md](external-authorities.md) for current official
   Go, GitHub, Linux/systemd, and PowerShell references.
 - Use [gpt-instructions.md](gpt-instructions.md) as the custom GPT instruction

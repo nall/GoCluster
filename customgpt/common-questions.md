@@ -12,10 +12,12 @@ docs listed here instead of restating the full behavior.
 | Why should I not use GitHub's source archive? | `README.md`, `download/README.md` |
 | How do I configure a real node? | `data/config/README.md`, `docs/OPERATOR_GUIDE.md` |
 | What is `DXC_CONFIG_PATH`? | `data/config/README.md` |
-| Why does config load fail? | `data/config/README.md` |
+| Why does config load fail? | `customgpt/troubleshooting-index.md`, `data/config/README.md` |
 | How do I run on Windows? | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | How do I run under Linux `systemd`? | `docs/OPERATOR_GUIDE.md`, `README.md` |
+| Why will the Linux service not start? | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md` |
 | How do I connect by telnet? | `docs/OPERATOR_GUIDE.md`, `telnet/README.md` |
+| Why can I not connect by telnet? | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, `telnet/README.md` |
 | What commands should I try first? | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | What does `HELP <command>` show? | `commands/README.md`, `README.md` |
 | What is the difference between `go` and `cc` dialects? | `commands/README.md` |
@@ -23,14 +25,16 @@ docs listed here instead of restating the full behavior.
 | How do I view recent spots? | `commands/README.md`, `docs/OPERATOR_GUIDE.md` |
 | What does `WHOSPOTSME` show? | `README.md`, `commands/README.md` |
 | How do `PASS` and `REJECT` work? | `telnet/README.md`, `README.md` |
+| Why am I not seeing spots? | `customgpt/troubleshooting-index.md`, `telnet/README.md`, `data/config/README.md` |
 | Why are no-event spots still visible after `REJECT EVENT ALL`? | `README.md`, `telnet/README.md` |
 | What does `UNKNOWN` mean for mode filters? | `telnet/README.md`, `README.md` |
+| Why does the displayed mode look wrong? | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, `data/config/README.md` |
 | What does `PASS NEARBY ON` do? | `README.md`, `telnet/README.md` |
 | Why do I need `SET GRID`? | `README.md`, `telnet/README.md`, `pathreliability/README.md` |
 | What do `FAST`, `MED`, and `SLOW` dedupe mean? | `README.md`, `telnet/README.md` |
 | What do `?`, `S`, `P`, `V`, `C`, and `B` mean? | `README.md`, `spot/README.md` |
 | What do path glyphs mean? | `README.md`, `pathreliability/README.md` |
-| Why are path glyphs blank? | `README.md`, `pathreliability/README.md` |
+| Why are path glyphs blank? | `customgpt/troubleshooting-index.md`, `README.md`, `pathreliability/README.md` |
 | What sources feed spots into the cluster? | `README.md`, `rbn/README.md`, `pskreporter/README.md`, `dxsummit/README.md`, `peer/README.md` |
 
 ## Developer Questions
@@ -53,6 +57,7 @@ docs listed here instead of restating the full behavior.
 | When do I need an ADR or TSR? | `docs/decision-memory.md` |
 | Where do I find prior decisions? | `docs/decision-log.md`, `docs/decisions/` |
 | Where do I find incident/troubleshooting history? | `docs/troubleshooting-log.md`, `docs/troubleshooting/` |
+| How should I investigate a bug report? | `customgpt/troubleshooting-index.md`, `docs/troubleshooting-log.md`, `docs/change-workflow.md` |
 | Where should I start before changing telnet filters? | `telnet/README.md`, `commands/README.md`, `filter/`, `docs/change-workflow.md` |
 | Where should I start before changing confidence or correction? | `spot/README.md`, `docs/decision-log.md`, `docs/troubleshooting-log.md` |
 | Where should I start before changing path reliability? | `pathreliability/README.md`, `data/config/path_reliability.yaml`, `docs/decision-log.md` |

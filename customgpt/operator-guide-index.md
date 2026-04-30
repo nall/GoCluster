@@ -62,6 +62,13 @@ existing operator-facing docs.
 
 ## Troubleshooting
 
-For startup failures, start with `data/config/README.md`. For missing output,
-start with `SHOW FILTER`, dedupe policy docs, `NEARBY` state, source-specific
-docs, and the effective YAML config.
+Start with `customgpt/troubleshooting-index.md` for symptom-based routing.
+
+| Symptom | Start here |
+| --- | --- |
+| Startup or config load failure | `customgpt/troubleshooting-index.md`, `data/config/README.md` |
+| Linux service failure | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md` |
+| Telnet cannot connect | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, `telnet/README.md` |
+| Missing spots after login | `customgpt/troubleshooting-index.md`, `telnet/README.md`, `data/config/README.md` |
+| Surprising mode, confidence, or path glyph | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, package README |
+| Source-specific missing spots | `customgpt/troubleshooting-index.md`, `rbn/README.md`, `pskreporter/README.md`, `dxsummit/README.md`, `peer/README.md` |

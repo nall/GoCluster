@@ -511,11 +511,13 @@ At a high level, the cluster:
 
 What the classes mean to an operator:
 
-- `HIGH`: recent evidence suggests a favorable path
-- `MEDIUM`: workable path
-- `LOW`: weak or marginal path
-- `UNLIKELY`: poor path
-- `INSUFFICIENT`: not enough recent evidence to rate it
+| Display | PATH filter value | Operator meaning | If it looks wrong |
+| --- | --- | --- | --- |
+| `>` | `HIGH` | Recent evidence suggests a favorable path. | Use `SET DIAG PATH` to see sample count, weight, and age. |
+| `=` | `MEDIUM` | Recent evidence suggests a workable path. | Use `SET DIAG PATH`; low effective weight can still map to a usable class. |
+| `<` | `LOW` | Recent evidence suggests a weak or marginal path. | Check `SET NOISE` and remember low-band noise penalties are stronger than 10m/6m. |
+| `-` | `UNLIKELY` | Recent evidence suggests a poor path. | Check whether your grid and the DX grid are correct before treating this as a hard no. |
+| blank | `INSUFFICIENT` | The cluster did not have enough usable recent evidence to rate the path. | Run `SET DIAG PATH`; common reasons are `none`, `lown`, `loww`, and `stale`. |
 
 Important operational notes:
 
@@ -530,6 +532,7 @@ Important operational notes:
   path through weaker glyph tiers.
 - If grids are missing, evidence is stale, too sparse, too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.
 - `PATH` filters work on the class names, not on the glyph characters.
+- `R` and `G` are solar-weather display overrides, not normal path classes.
 
 If solar-weather support is enabled, a normal path glyph can be replaced by:
 
