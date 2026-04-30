@@ -48,6 +48,9 @@ The stub should record:
 - `No durable decision change`
 - links to relevant code/tests/docs when applicable
 
+Keep lightweight no-durable-change stubs short. They preserve traceability; they
+are not a substitute for a full ADR when a durable decision changed.
+
 ## When a TSR is required
 Create or update a TSR when:
 - the task originates from debugging, production triage, or failure analysis

@@ -2,7 +2,10 @@
 
 Use this scorecard after any Non-trivial Codex task to verify that Codex
 actually followed `AGENTS.md` and did not merely produce plausible output.
-It is a scoring rubric, not a narrative response template.
+It is a scoring rubric, not a narrative response template. Evidence may be
+reported through the compact markers in
+`docs/templates/non-trivial-change-template.md`; do not require duplicate prose
+when those markers already contain the evidence.
 
 ## How to use
 - Score each of the 6 items as `0` or `1`.

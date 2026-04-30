@@ -1,6 +1,7 @@
 # docs/change-workflow.md
 
-This document is written for Codex. When `AGENTS.md` sends you here, read the applicable sections before code.
+This document is written for Codex. When `AGENTS.md` sends you here, read the
+applicable sections before code.
 
 It defines the full workflow for Non-trivial tasks and the deeper rules behind `AGENTS.md`.
 
@@ -13,11 +14,22 @@ For Non-trivial work, do not go directly from idea to code. Move through:
 5. review the diff
 6. close out with traceability and validation
 
+Token efficiency changes reporting shape only. It does not reduce required
+discovery, approval, implementation discipline, validation, review, ADR
+handling, or traceability.
+
 Keep the workflow additive, not repetitive:
 - later sections may reference earlier evidence instead of restating it
 - only restate facts when the later section adds a new conclusion, delta, or
   final disposition
-- keep required artifacts, but compress duplicate narration
+- keep required evidence markers, but compress duplicate narration
+- use one-line `N/A - reason` entries for non-triggered areas
+- report each validation result in one place, then reference it by marker name
+- Full rigor means full work, not full prose
+
+Missing required evidence is a workflow failure, not a style issue. If Codex
+cannot complete a required evidence marker from inspected workspace evidence,
+stop and report what is missing.
 
 ## IDE context discipline
 When using the Codex VS Code extension:
@@ -92,6 +104,8 @@ Before code, explicitly identify:
 - user-visible behavior changes, or `No user-visible behavior changes`
 - README impact: `Required` or `Not required`
 - checker set and validation command order
+
+In the compact template, these are reported under the `DESIGN` marker.
 
 ## Workflow-drift audit
 Required when editing any workflow contract, validation rule, runbook, review
@@ -185,7 +199,7 @@ constants, algorithm constants, compatibility boundaries, and test fixtures.
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.
 
-Use the template's plan section. Keep it production-safe and minimal.
+Use the template's `DESIGN` marker. Keep the plan production-safe and minimal.
 
 Rules:
 - milestone 1 must be the smallest production-safe slice
@@ -195,13 +209,13 @@ Rules:
 ## Architecture Note
 Mandatory for every Non-trivial change before code.
 
-Use the template's architecture section and cover only the fields material to
-the change.
+Use the template's `DESIGN` marker and cover only the fields material to the
+change.
 
 ## User Impact and Determinism Note
 Required for every Non-trivial change.
 
-Use the template's design/impact frame and closeout summary. If there is no
+Use the template's `DESIGN` and `CLOSEOUT` markers. If there is no
 user-visible change, say so explicitly.
 
 ## Implementation slicing rules
@@ -258,10 +272,10 @@ For every Non-trivial task, explicitly say:
 with one sentence of reasoning
 
 ## Reporting shape
-Use `docs/templates/non-trivial-change-template.md` for the compact reporting
-shape:
-- approval packet before `Approved vN`
-- execution closeout after approval
+Use `docs/templates/non-trivial-change-template.md` for the strict compact
+reporting shape:
+- Phase A approval packet before `Approved vN`
+- Phase B execution ledger after approval
 
 Required rigor does not imply a long narrative. Reuse earlier evidence by
 reference where possible.

@@ -10,9 +10,10 @@ Use two layers:
 - Use planning conversation to settle intent, scope, risks, and edge cases.
 - Use `AGENTS.md` as the compact execution contract once you want implementation to start.
 
-`AGENTS.md` intentionally stays short so it can be kept in context. Its
+`AGENTS.md` intentionally stays compact so it can be kept in context. Its
 Document Map points to the detailed workflow, code-quality, validation, review,
-decision-memory, and command rules.
+decision-memory, and command rules. Compact does not mean optional: Codex must
+treat the workflow markers as execution gates.
 
 ## Start in planning by default
 
@@ -70,6 +71,7 @@ it does not approve scope or waive validation.
 2. Review the risks, edge cases, and proposed approach.
 3. Ask for `Proposed Scope Ledger vN` for the agreed change.
 4. Reply `Approved vN`.
-5. Let Codex execute under `AGENTS.md`, including validation and documentation duties.
+5. Let Codex execute under `AGENTS.md`, including validation, review,
+   traceability, and documentation duties.
 
 If you only want explanation or review of existing code, say that explicitly and keep the request non-mutating.

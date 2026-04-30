@@ -1,6 +1,8 @@
 # docs/review-checklist.md
 
-This document defines the mandatory review posture for Non-trivial tasks.
+This document defines the mandatory review posture for Non-trivial Codex tasks.
+The compact output shape is owned by
+`docs/templates/non-trivial-change-template.md`.
 
 ## Review Pass
 The Review Pass happens after implementation and before final closeout.
@@ -53,25 +55,10 @@ After the Review Pass, produce a Self-Audit with pass/fail for each category bel
 - Use one short note per grouped category. Reference earlier review evidence when
   that already establishes the point.
 
-## PR-style summary
-Every Non-trivial task must end with a PR-style summary.
-
-Required sections:
-- Summary
-- Tradeoffs
-- Risks and mitigations
-- Contracts and compatibility
-- User impact and determinism
-- README impact
-- Verification commands and results
-- ADR handling outcome
-- Decision refs
-- Scope-to-Code Traceability
-- Validation block
-
-Later summary sections may reference earlier artifacts instead of repeating the
-same evidence verbatim. When doing so, state only the final disposition or
-delta relevant to closeout.
+## Closeout evidence
+Every Non-trivial task must end with the template's `CLOSEOUT`,
+`TRACEABILITY`, and `VALIDATION` markers. Keep the closeout concise and refer
+to earlier markers instead of repeating evidence.
 
 ## Scope-to-Code Traceability
 Map every Scope Ledger item with status `Agreed` or `Pending` as of the start of the implementation cycle to:
@@ -95,7 +82,7 @@ Example shape:
 - `go test ./internal/cluster -run TestSlowClientDropPolicy` - targeted regression - pass
 
 ## Final validation block
-The final three lines must be exactly:
+The `VALIDATION` marker must end with these exact three lines:
 
 Validation Score: X/6
 Failed items: none | <comma-separated failed item numbers/names>
