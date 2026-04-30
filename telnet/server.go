@@ -60,6 +60,7 @@ import (
 	"dxcluster/solarweather"
 	"dxcluster/spot"
 	"dxcluster/strutil"
+	"dxcluster/uls"
 
 	ztelnet "github.com/ziutek/telnet"
 	"golang.org/x/time/rate"
@@ -242,6 +243,8 @@ type Server struct {
 	solarWeather          *solarweather.Manager                      // Optional solar/geomagnetic override evaluator
 	noiseModel            pathreliability.NoiseModel                 // Noise class and band lookup
 	gridLookup            func(string) (string, bool, bool)          // Optional grid lookup from store
+	ctyLookup             func() *cty.CTYDatabase                    // Optional CTY lookup for login validation and filter display
+	usLicenseCheck        func(string) bool                          // Optional US FCC ULS license checker for login validation
 	nowFn                 func() time.Time                           // Optional clock injection for deterministic tests
 	admissionGeoLookupFn  func(string, time.Time) (string, string)   // Optional prelogin geo-key lookup override for tests
 	dedupeFastEnabled     bool                                       // Fast secondary dedupe policy enabled
@@ -252,6 +255,7 @@ type Server struct {
 	workerDropLog         ratelimit.Counter                          // Rate-limited log counter for worker queue drops
 	clientDropLog         ratelimit.Counter                          // Rate-limited log counter for per-client drops
 	rejectDropLog         ratelimit.Counter                          // Rate-limited log counter for rejected-conn queue drops
+	loginValidationLog    ratelimit.Counter                          // Rate-limited log counter for login validation decisions
 	pathPredTotal         atomic.Uint64                              // Path predictions computed (glyphs)
 	pathPredDerived       atomic.Uint64                              // Predictions using derived user/DX grids
 	pathPredCombined      atomic.Uint64                              // Predictions with sufficient combined data
@@ -1868,6 +1872,7 @@ type ServerOptions struct {
 	NoiseModel                pathreliability.NoiseModel
 	GridLookup                func(string) (string, bool, bool)
 	CTYLookup                 func() *cty.CTYDatabase
+	USLicenseCheck            func(string) bool
 	DedupeFastEnabled         bool
 	DedupeMedEnabled          bool
 	DedupeSlowEnabled         bool
@@ -1952,6 +1957,8 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		solarWeather:          opts.SolarWeather,
 		noiseModel:            config.NoiseModel,
 		gridLookup:            opts.GridLookup,
+		ctyLookup:             config.CTYLookup,
+		usLicenseCheck:        config.USLicenseCheck,
 		dedupeFastEnabled:     config.DedupeFastEnabled,
 		dedupeMedEnabled:      config.DedupeMedEnabled,
 		dedupeSlowEnabled:     config.DedupeSlowEnabled,
@@ -1963,6 +1970,7 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		workerDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
 		clientDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
 		rejectDropLog:         ratelimit.NewCounter(defaultDropLogInterval),
+		loginValidationLog:    ratelimit.NewCounter(defaultDropLogInterval),
 	}
 	server.wrapConnFn = server.defaultWrapConn
 	return server
@@ -2109,6 +2117,9 @@ func normalizeServerOptions(opts ServerOptions) ServerOptions {
 	}
 	if config.PathPredictor == nil {
 		config.PathDisplayEnabled = false
+	}
+	if config.USLicenseCheck == nil {
+		config.USLicenseCheck = uls.IsLicensedUS
 	}
 	if strings.TrimSpace(config.NearbyLoginWarning) == "" {
 		config.NearbyLoginWarning = nearbyLoginWarningMsg
@@ -3056,7 +3067,12 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 			continue
 		}
 		normalized := spot.NormalizeCallsign(line)
-		if !spot.IsValidNormalizedCallsign(normalized) {
+		loginValidation := s.validateLoginCallsign(normalized)
+		if loginValidation.failOpen {
+			s.logLoginValidation("skipped", loginValidation.reason, normalized, address)
+		}
+		if !loginValidation.valid {
+			s.logLoginValidation("rejected", loginValidation.reason, normalized, address)
 			s.sendPreLoginMessage(client, s.loginInvalidMsg, loginTime)
 			s.sendPreLoginMessage(client, s.loginPrompt, loginTime)
 			continue

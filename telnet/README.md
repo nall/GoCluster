@@ -5,6 +5,14 @@ This directory owns the telnet session layer: login flow, prompt handling, filte
 ## Login And Session Behavior
 
 - Clients log in with a callsign before commands are accepted.
+- Login rejects non-callsign tokens such as numeric-only port strings or
+  all-letter words before any per-user state is loaded.
+- When CTY data is loaded, login calls must resolve to a known CTY prefix.
+- US calls (ADIF 291) must pass FCC ULS validation when ULS is available.
+- Local TEST calls with CTY-valid US prefixes, such as `W6TEST` or `W6TEST-1`,
+  bypass FCC ULS validation but still require CTY validity.
+- CTY or FCC data outages fail open so operators are not locked out by a
+  reference-data refresh or missing local database.
 - The greeting can include dialect, grid, noise, and dedupe status from config.
 - Dialect choice and filter state are persisted per callsign.
 - If `NEARBY` is active, the login greeting warns the user.
