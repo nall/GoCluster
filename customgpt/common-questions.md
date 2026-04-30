@@ -24,6 +24,7 @@ docs listed here instead of restating the full behavior.
 | How do I post a spot? | `commands/README.md`, `docs/OPERATOR_GUIDE.md` |
 | How do I view recent spots? | `commands/README.md`, `docs/OPERATOR_GUIDE.md` |
 | What does `WHOSPOTSME` show? | `README.md`, `commands/README.md` |
+| How do I opt into solar summaries? | `README.md`, `docs/OPERATOR_GUIDE.md`, `commands/README.md` |
 | How do `PASS` and `REJECT` work? | `telnet/README.md`, `README.md` |
 | Why am I not seeing spots? | `customgpt/troubleshooting-index.md`, `telnet/README.md`, `data/config/README.md` |
 | Why are no-event spots still visible after `REJECT EVENT ALL`? | `README.md`, `telnet/README.md` |

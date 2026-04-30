@@ -36,6 +36,7 @@ existing operator-facing docs.
 | Show recent filtered history | `commands/README.md` |
 | Look up DXCC/ADIF/zones | `commands/README.md` |
 | Show recent spotter countries | `README.md`, `commands/README.md` |
+| Opt into solar summaries | `README.md`, `docs/OPERATOR_GUIDE.md`, `commands/README.md` |
 
 ## Filtering And Output
 

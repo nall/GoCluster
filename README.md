@@ -198,6 +198,7 @@ WHOSPOTSME - Show recent spotter countries.
 SHOW DEDUPE - Show dedupe policy.
 SET DEDUPE - Select dedupe policy.
 SET DIAG - Select diagnostic comments.
+SET SOLAR - Solar summary cadence.
 SET GRID - Set your grid (4-6 chars).
 SET NOISE - Set noise class.
 SET PATHSAMPLES - Set path sample floor.

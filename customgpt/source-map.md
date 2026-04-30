@@ -17,6 +17,7 @@ linking or citing these docs over duplicating their content here.
 | Command dialects | `commands/README.md` | `telnet/README.md` |
 | `DX`, `SHOW`, `SHOW MYDX`, `SHOW DXCC` | `commands/README.md` | `commands/processor.go` |
 | `WHOSPOTSME` | `README.md` | `commands/README.md`, `spot/who_spots_me.go` |
+| Solar summaries | `README.md` | `docs/OPERATOR_GUIDE.md`, `commands/README.md` |
 | Filters | `telnet/README.md` | `commands/README.md`, `filter/` |
 | EVENT filtering | `README.md` | `telnet/README.md`, `data/config/README.md` |
 | MODE taxonomy | `data/config/README.md` | `README.md`, `spot/README.md` |

@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0089 | SET SOLAR Help Routing | Accepted | 2026-04-30 | commands, docs, customgpt | - | - | `docs/decisions/ADR-0089-set-solar-help-routing.md` |
 | ADR-0088 | FT2 Ingest-Rate Dashboard Counter | Accepted | 2026-04-26 | stats, ui, dashboard | - | - | `docs/decisions/ADR-0088-ft2-ingest-rate-dashboard-counter.md` |
 | ADR-0087 | RBN Spot-Class Admission | Accepted | 2026-04-26 | rbn, parser, replay, call correction | - | - | `docs/decisions/ADR-0087-rbn-spot-class-admission.md` |
 | ADR-0086 | User Path Sample Floor | Accepted | 2026-04-26 | telnet, pathreliability, user records | - | - | `docs/decisions/ADR-0086-user-path-sample-floor.md` |
