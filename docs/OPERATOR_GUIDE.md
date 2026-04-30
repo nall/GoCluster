@@ -241,7 +241,10 @@ Example readings:
 
 ## Logs And Health
 
-System logs and optional dropped-call logs are configured in `app.yaml`.
+System logs, optional dropped-call logs, and file-only event logs are configured
+in `app.yaml`. The file-only event logs are separate daily files for login
+attempt failures, reputation-gated spot drops, telnet client lifecycle, ingest
+source lifecycle, and peer lifecycle. They do not add local UI or console panes.
 Under `systemd`, stdout/stderr also go to journald and can be tailed with:
 
 ```sh

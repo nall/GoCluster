@@ -39,6 +39,13 @@ Loader behavior:
 - `reputation.yaml` in the public example disables IPinfo download/API usage and uses a placeholder download token so the strict loader still sees the required key. Put real IPinfo tokens only in a private config directory.
 - Use `prop_report -config-dir <dir>` to point report generation at an alternate config directory. The older `-path-config` flag accepts either a directory or `path_reliability.yaml` path for compatibility.
 
+File-only event logs:
+- `logging.login_attempts`, `logging.reputation_drops`, `logging.telnet_connections`, `logging.ingest_connections`, and `logging.peer_connections` write separate daily files and do not add UI/console output.
+- Each block supports `enabled`, `dir`, `retention_days`, and `dedupe_window_seconds`.
+- `retention_days: 0` inherits `logging.retention_days`; omitted `dedupe_window_seconds` inherits `logging.drop_dedupe_window_seconds`; explicit `dedupe_window_seconds: 0` disables de-dupe for that event log.
+- Login attempt logs record failed or blocked login attempts only, not successful login audits. Telnet connection logs record successful login lifecycle separately.
+- Event log values are sanitized and truncated; peer passwords, raw commands, raw peer frames, and payload bodies are not logged.
+
 Spot taxonomy:
 - `spot_taxonomy.yaml` is the only YAML surface for supported MODE tokens, EVENT families, EVENT reference prefixes, and PSKReporter mode routing.
 - `ingest.yaml` owns PSKReporter transport/runtime settings only. Legacy `pskreporter.modes` and `pskreporter.path_only_modes` are rejected; use `pskreporter_route: normal`, `path_only`, or `ignore` on taxonomy modes instead.

@@ -13,6 +13,7 @@ existing operator-facing docs.
 | Build or run on Linux | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | Run under `systemd` | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | View logs and health | `docs/OPERATOR_GUIDE.md`, `README.md` |
+| Find file-only event logs | `data/config/README.md`, `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
 
 ## Config
 
@@ -73,3 +74,4 @@ Start with `customgpt/troubleshooting-index.md` for symptom-based routing.
 | Missing spots after login | `customgpt/troubleshooting-index.md`, `telnet/README.md`, `data/config/README.md` |
 | Surprising mode, confidence, or path glyph | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, package README |
 | Source-specific missing spots | `customgpt/troubleshooting-index.md`, `rbn/README.md`, `pskreporter/README.md`, `dxsummit/README.md`, `peer/README.md` |
+| Login, reputation, telnet, ingest, or peer events are missing from console/UI | `customgpt/troubleshooting-index.md`, `data/config/README.md`, `docs/OPERATOR_GUIDE.md` |

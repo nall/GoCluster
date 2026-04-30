@@ -1052,6 +1052,13 @@ func (c *Client) displayName() string {
 	return "RBN"
 }
 
+func (c *Client) Endpoint() string {
+	if c == nil {
+		return ""
+	}
+	return net.JoinHostPort(c.host, fmt.Sprintf("%d", c.port))
+}
+
 // Purpose: Send periodic CRLF keepalives to upstream telnet feed.
 // Key aspects: Stops on shutdown or connection teardown.
 // Upstream: establishConnection goroutine when keepalive enabled.

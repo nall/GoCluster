@@ -51,3 +51,28 @@ logging:
     bad_de_dx: true
     no_license: true
     harmonics: true
+  login_attempts:
+    enabled: true
+    dir: "data/logs/login_attempts"
+    retention_days: 7
+    dedupe_window_seconds: 120
+  reputation_drops:
+    enabled: true
+    dir: "data/logs/reputation_drops"
+    retention_days: 7
+    dedupe_window_seconds: 120
+  telnet_connections:
+    enabled: true
+    dir: "data/logs/telnet_connections"
+    retention_days: 7
+    dedupe_window_seconds: 120
+  ingest_connections:
+    enabled: true
+    dir: "data/logs/ingest_connections"
+    retention_days: 7
+    dedupe_window_seconds: 120
+  peer_connections:
+    enabled: true
+    dir: "data/logs/peer_connections"
+    retention_days: 7
+    dedupe_window_seconds: 120

@@ -103,6 +103,7 @@ Before code, explicitly identify:
 - impacted contracts, or `No contract changes`
 - user-visible behavior changes, or `No user-visible behavior changes`
 - README impact: `Required` or `Not required`
+- Support-agent docs impact: `Required` or `Not required`
 - checker set and validation command order
 
 In the compact template, these are reported under the `DESIGN` marker.
@@ -261,6 +262,7 @@ Do not make optimization claims without measurements.
 Review and update when applicable:
 - README
 - operator docs
+- support-agent routing docs under `customgpt/`
 - protocol docs
 - comments on invariants/ownership/concurrency/drop policy
 - ADR/TSR records
@@ -270,6 +272,31 @@ For every Non-trivial task, explicitly say:
 - `README impact: Required`
 - or `README impact: Not required`
 with one sentence of reasoning
+
+Also explicitly say:
+- `Support-agent docs impact: Required`
+- or `Support-agent docs impact: Not required`
+with one sentence of reasoning
+
+### Support-agent documentation sync
+Support-agent docs impact is `Required` when a change adds, removes, renames,
+or materially changes any operator-support topic, including:
+- operator-visible behavior or output
+- user-facing commands, HELP, filters, modes, EVENT families, glyphs, or diagnostics
+- YAML/config surfaces, defaults, sentinel values, or startup validation
+- logging, observability, troubleshooting, startup, service, or deployment behavior
+- source, ingest, peer, or connection behavior that support may be asked to explain
+
+When required, inspect and update the relevant routing/support files:
+- `customgpt/source-map.md`
+- `customgpt/common-questions.md`
+- `customgpt/operator-guide-index.md`
+- `customgpt/troubleshooting-index.md`
+- `customgpt/gpt-instructions.md`
+
+Keep `customgpt/` as a routing layer. Do not duplicate full operator docs
+there; point support answers to the authoritative repo docs and note effective
+YAML/current-code caveats when needed.
 
 ## Reporting shape
 Use `docs/templates/non-trivial-change-template.md` for the strict compact

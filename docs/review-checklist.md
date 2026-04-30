@@ -32,6 +32,7 @@ Review focus:
 - maintainability and readability
 - missing tests
 - documentation gaps
+- support-agent routing drift when operator docs or operator-visible behavior changed
 
 If there are no material findings, say:
 - `Review Pass findings: none material`
@@ -65,6 +66,7 @@ Map every Scope Ledger item with status `Agreed` or `Pending` as of the start of
 - code locations
 - tests
 - docs/comments updated
+- support-agent docs updated or explicitly not impacted
 - decision refs if applicable
 
 No omissions allowed.

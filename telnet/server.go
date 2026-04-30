@@ -251,6 +251,8 @@ type Server struct {
 	dedupeMedEnabled      bool                                       // Med secondary dedupe policy enabled
 	dedupeSlowEnabled     bool                                       // Slow secondary dedupe policy enabled
 	nearbyLoginWarning    string                                     // Warning appended when NEARBY is active
+	loginAttemptReporter  func(LoginAttemptEvent)                    // Optional file-only login-attempt reporter
+	connectionReporter    func(ConnectionEvent)                      // Optional file-only connection lifecycle reporter
 	queueDropLog          ratelimit.Counter                          // Rate-limited log counter for broadcast queue drops
 	workerDropLog         ratelimit.Counter                          // Rate-limited log counter for worker queue drops
 	clientDropLog         ratelimit.Counter                          // Rate-limited log counter for per-client drops
@@ -1877,6 +1879,8 @@ type ServerOptions struct {
 	DedupeMedEnabled          bool
 	DedupeSlowEnabled         bool
 	NearbyLoginWarning        string
+	LoginAttemptReporter      func(LoginAttemptEvent)
+	ConnectionReporter        func(ConnectionEvent)
 }
 
 // NewServer creates a new telnet server
@@ -1963,6 +1967,8 @@ func NewServer(opts ServerOptions, processor *commands.Processor) *Server {
 		dedupeMedEnabled:      config.DedupeMedEnabled,
 		dedupeSlowEnabled:     config.DedupeSlowEnabled,
 		nearbyLoginWarning:    normalizeWarningLine(config.NearbyLoginWarning),
+		loginAttemptReporter:  config.LoginAttemptReporter,
+		connectionReporter:    config.ConnectionReporter,
 		dropExtremeRate:       config.DropExtremeRate,
 		dropExtremeWindow:     config.DropExtremeWindow,
 		dropExtremeMinAtt:     config.DropExtremeMinAttempts,
@@ -2926,6 +2932,7 @@ func (s *Server) acceptConnections() {
 			addr := conn.RemoteAddr().String()
 			total := s.recordPreloginReject(rejectReason)
 			s.logAdmissionReject(rejectReason, addr)
+			s.reportLoginAttempt("blocked", string(rejectReason), "", addr, "")
 			reason := fmt.Sprintf("prelogin %s (total=%d active=%d/%d)", rejectReason, total, atomic.LoadInt64(&s.metrics.preloginActive), s.maxPreloginSessions)
 			s.enqueueReject(conn, addr, "Server busy. Try again later.\r\n", reason)
 			continue
@@ -2949,6 +2956,7 @@ func (s *Server) acceptConnections() {
 func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 	address := conn.RemoteAddr().String()
 	log.Printf("New connection from %s", address)
+	s.reportConnection("connect", "accepted", "", address)
 	preloginTicket := ticket
 	defer func() {
 		if preloginTicket != nil {
@@ -3043,11 +3051,13 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 		if err != nil {
 			if isTimeoutErr(err) {
 				s.recordPreloginTimeout()
+				s.reportLoginAttempt("timeout", "login_timeout", "", address, "")
 				log.Printf("Login timeout for %s", address)
 				return
 			}
 			var inputErr *InputValidationError
 			if errors.As(err, &inputErr) {
+				s.reportLoginAttempt("invalid_input", string(inputErr.kind), "", address, fmt.Sprintf("context=%s_limit=%d", inputErr.context, inputErr.maxLen))
 				if msg := s.formatInputValidationMessage(inputErr); strings.TrimSpace(msg) != "" {
 					if !s.sendClientMessage(client, msg, "login validation") {
 						return
@@ -3062,6 +3072,7 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 
 		line = strutil.NormalizeUpper(line)
 		if line == "" {
+			s.reportLoginAttempt("empty", "empty", "", address, "")
 			s.sendPreLoginMessage(client, s.loginEmptyMessage, loginTime)
 			s.sendPreLoginMessage(client, s.loginPrompt, loginTime)
 			continue
@@ -3083,6 +3094,7 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 
 	client.callsign = callsign
 	log.Printf("Client %s logged in as %s", address, client.callsign)
+	s.reportConnection("login", "success", client.callsign, address)
 	if preloginTicket != nil {
 		preloginTicket.Release()
 		preloginTicket = nil
@@ -4479,6 +4491,9 @@ func (c *Client) close(reason string) {
 		return
 	}
 	c.closeOnce.Do(func() {
+		if c.server != nil {
+			c.server.reportConnection("disconnect", reason, c.callsign, c.address)
+		}
 		if c.done != nil {
 			close(c.done)
 		}
@@ -4582,6 +4597,7 @@ func (s *Server) registerClient(client *Client) {
 	s.notifyClientListChange()
 
 	if evicted != nil {
+		s.reportConnection("evict", "duplicate_login", evicted.callsign, evicted.address)
 		msg := strings.TrimSpace(s.duplicateLoginMsg)
 		if msg != "" {
 			if !strings.HasSuffix(msg, "\n") {

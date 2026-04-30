@@ -49,6 +49,7 @@ type clusterRuntime struct {
 
 	logMux            *logFanout
 	droppedCallLogger *droppedCallLogger
+	eventFileLogger   *eventFileLogger
 	surface           ui.Surface
 
 	ctx    context.Context
@@ -191,6 +192,11 @@ func (r *clusterRuntime) setupLoggingAndUI() bool {
 	r.droppedCallLogger = droppedCallLogger
 	if droppedCallErr != nil {
 		log.Printf("Logging: %v", droppedCallErr)
+	}
+	eventLogger, eventLogErr := newEventFileLogger(r.cfg.Logging)
+	r.eventFileLogger = eventLogger
+	if eventLogErr != nil {
+		log.Printf("Logging: %v", eventLogErr)
 	}
 	log.Printf("Loaded configuration from %s", r.configSource)
 	if err := spot.SetDXClusterLineLength(r.cfg.Telnet.OutputLineLength); err != nil {
@@ -529,7 +535,13 @@ func (r *clusterRuntime) initializeObservabilityState() {
 		} else {
 			r.repGate = gate
 			r.repGate.Start(r.ctx)
-			r.repDropReporter = makeReputationDropReporter(r.surface, r.dropReporter, r.statsTracker, r.cfg.Reputation)
+			consoleReporter := makeReputationDropReporter(r.surface, r.dropReporter, r.statsTracker, r.cfg.Reputation)
+			r.repDropReporter = func(ev reputation.DropEvent) {
+				if consoleReporter != nil {
+					consoleReporter(ev)
+				}
+				r.logReputationDropEvent(ev)
+			}
 		}
 	}
 
@@ -889,6 +901,9 @@ func (r *clusterRuntime) initializePeerManager() bool {
 		return false
 	}
 	pm.SetBadCallReporter(r.reportBadCallDrop)
+	pm.SetConnectionReporter(func(ev peer.ConnectionEvent) {
+		r.logPeerConnectionEvent(ev.Direction, ev.Action, ev.Peer, ev.Endpoint, ev.Reason)
+	})
 	if err := pm.Start(r.ctx); err != nil {
 		log.Printf("Failed to start peering manager: %v", err)
 		return false
@@ -1012,6 +1027,8 @@ func (r *clusterRuntime) buildTelnetServerOptions() telnet.ServerOptions {
 		DedupeMedEnabled:          r.secondaryMed != nil,
 		DedupeSlowEnabled:         r.secondarySlow != nil,
 		NearbyLoginWarning:        r.cfg.Telnet.NearbyLoginWarning,
+		LoginAttemptReporter:      r.logLoginAttemptEvent,
+		ConnectionReporter:        r.logTelnetConnectionEvent,
 		SolarWeather:              r.solarMgr,
 	}
 }
@@ -1084,6 +1101,7 @@ func (r *clusterRuntime) connectRBNFeed() {
 	}
 	if err := r.rbnClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to connect to RBN CW/RTTY: %v", err)
+		r.logIngestConnectionEvent(ingestSourceName(r.cfg.RBN.Name, "RBN"), "failed", eventLogEndpoint(r.cfg.RBN.Host, r.cfg.RBN.Port), err.Error(), "disconnected")
 		return
 	}
 	go forwardSpots(r.rbnClient.GetSpotChannel(), r.ingestInput, "RBN-CW", r.cfg.SpotPolicy, nil)
@@ -1102,6 +1120,7 @@ func (r *clusterRuntime) connectRBNDigitalFeed() {
 	}
 	if err := r.rbnDigitalClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to connect to RBN Digital: %v", err)
+		r.logIngestConnectionEvent(ingestSourceName(r.cfg.RBNDigital.Name, "RBN Digital"), "failed", eventLogEndpoint(r.cfg.RBNDigital.Host, r.cfg.RBNDigital.Port), err.Error(), "disconnected")
 		return
 	}
 	go forwardSpots(r.rbnDigitalClient.GetSpotChannel(), r.ingestInput, "RBN-FT", r.cfg.SpotPolicy, nil)
@@ -1126,6 +1145,7 @@ func (r *clusterRuntime) connectHumanTelnetFeed() {
 	}
 	if err := r.humanTelnetClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to connect to human/relay telnet feed: %v", err)
+		r.logIngestConnectionEvent(ingestSourceName(r.cfg.HumanTelnet.Name, "Human Telnet"), "failed", eventLogEndpoint(r.cfg.HumanTelnet.Host, r.cfg.HumanTelnet.Port), err.Error(), "disconnected")
 		return
 	}
 	go forwardSpots(r.humanTelnetClient.GetSpotChannel(), r.ingestInput, "HUMAN-TELNET", r.cfg.SpotPolicy, func(sp *spot.Spot) {
@@ -1165,6 +1185,7 @@ func (r *clusterRuntime) connectDXSummitFeed() {
 	r.dxsummitClient.SetBadCallReporter(r.reportBadCallDrop)
 	if err := r.dxsummitClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to start DXSummit: %v", err)
+		r.logIngestConnectionEvent(ingestSourceName(r.cfg.DXSummit.Name, dxsummit.SourceNode), "failed", r.dxsummitClient.Endpoint(), err.Error(), "disconnected")
 		r.dxsummitClient = nil
 		return
 	}
@@ -1197,6 +1218,7 @@ func (r *clusterRuntime) connectPSKReporterFeed() {
 	r.pskrClient.SetBadCallReporter(r.reportBadCallDrop)
 	if err := r.pskrClient.Connect(); err != nil {
 		log.Printf("Warning: Failed to connect to PSKReporter: %v", err)
+		r.logIngestConnectionEvent(ingestSourceName(r.cfg.PSKReporter.Name, "PSKReporter"), "failed", r.pskrClient.Endpoint(), err.Error(), "disconnected")
 		return
 	}
 	go forwardSpots(r.pskrClient.GetSpotChannel(), r.ingestInput, "PSKReporter", r.cfg.SpotPolicy, nil)
@@ -1221,7 +1243,7 @@ func (r *clusterRuntime) startMonitors() {
 	if r.pskrClient != nil {
 		ingestSources = append(ingestSources, pskReporterHealthSource(ingestSourceName(r.cfg.PSKReporter.Name, "PSKReporter"), r.pskrClient))
 	}
-	startIngestHealthMonitor(r.ctx, ingestSources)
+	startIngestHealthMonitorWithReporter(r.ctx, ingestSources, r.logIngestConnectionEvent)
 
 	statsInterval := time.Duration(r.cfg.Stats.DisplayIntervalSeconds) * time.Second
 	go displayStatsWithFCC(
@@ -1398,6 +1420,9 @@ func (r *clusterRuntime) close() {
 	}
 	if r.droppedCallLogger != nil {
 		_ = r.droppedCallLogger.Close()
+	}
+	if r.eventFileLogger != nil {
+		_ = r.eventFileLogger.Close()
 	}
 	if r.logMux != nil {
 		r.logMux.Close()

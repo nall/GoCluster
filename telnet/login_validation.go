@@ -105,6 +105,9 @@ func (s *Server) logLoginValidation(action string, reason loginValidationReason,
 	if s == nil || reason == "" {
 		return
 	}
+	if action != "skipped" {
+		s.reportLoginAttempt(action, string(reason), call, address, "")
+	}
 	total, ok := s.loginValidationLog.Inc()
 	if !ok {
 		return
@@ -114,4 +117,29 @@ func (s *Server) logLoginValidation(action string, reason loginValidationReason,
 		call = "(empty)"
 	}
 	log.Printf("Login callsign validation %s: reason=%s call=%s addr=%s total=%d", action, reason, call, address, total)
+}
+
+func (s *Server) reportLoginAttempt(action, reason, call, address, detail string) {
+	if s == nil || s.loginAttemptReporter == nil {
+		return
+	}
+	s.loginAttemptReporter(LoginAttemptEvent{
+		Action:  action,
+		Reason:  reason,
+		Call:    call,
+		Address: address,
+		Detail:  detail,
+	})
+}
+
+func (s *Server) reportConnection(action, reason, call, address string) {
+	if s == nil || s.connectionReporter == nil {
+		return
+	}
+	s.connectionReporter(ConnectionEvent{
+		Action:  action,
+		Reason:  reason,
+		Call:    call,
+		Address: address,
+	})
 }

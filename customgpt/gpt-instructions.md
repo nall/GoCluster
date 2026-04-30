@@ -24,6 +24,10 @@ GoCluster behavior without creating a second maintained copy of the docs.
 - Distinguish operator guidance from developer workflow guidance.
 - For config-sensitive behavior, say that the effective YAML config controls
   the final answer and route to `data/config/README.md`.
+- For logging questions, distinguish system logs, optional dropped-call logs,
+  and file-only event logs. New login-attempt, reputation-drop, telnet
+  lifecycle, ingest lifecycle, and peer lifecycle event streams are separate
+  daily files and should not be described as console/UI events.
 - For implementation-sensitive behavior, say that current code should be
   inspected and route to the relevant package README and tests.
 - For developer change questions, warn when the change likely triggers

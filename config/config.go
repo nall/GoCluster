@@ -423,6 +423,11 @@ type LoggingConfig struct {
 	Dir                     string                   `yaml:"dir"`
 	RetentionDays           int                      `yaml:"retention_days"`
 	DroppedCalls            DroppedCallLoggingConfig `yaml:"dropped_calls"`
+	LoginAttempts           EventFileLoggingConfig   `yaml:"login_attempts"`
+	ReputationDrops         EventFileLoggingConfig   `yaml:"reputation_drops"`
+	TelnetConnections       EventFileLoggingConfig   `yaml:"telnet_connections"`
+	IngestConnections       EventFileLoggingConfig   `yaml:"ingest_connections"`
+	PeerConnections         EventFileLoggingConfig   `yaml:"peer_connections"`
 }
 
 // DroppedCallLoggingConfig controls optional per-category dropped-call files.
@@ -434,6 +439,14 @@ type DroppedCallLoggingConfig struct {
 	BadDEDX             bool   `yaml:"bad_de_dx"`
 	NoLicense           bool   `yaml:"no_license"`
 	Harmonics           bool   `yaml:"harmonics"`
+}
+
+// EventFileLoggingConfig controls optional file-only event logs.
+type EventFileLoggingConfig struct {
+	Enabled             bool   `yaml:"enabled"`
+	Dir                 string `yaml:"dir"`
+	RetentionDays       int    `yaml:"retention_days"`
+	DedupeWindowSeconds int    `yaml:"dedupe_window_seconds"`
 }
 
 // PropReportConfig controls automatic propagation report generation on log rotation.
@@ -1383,6 +1396,11 @@ type loadRawPresence struct {
 	hasTelnetBulletinDedupeMaxEntries               bool
 	hasLoggingDropDedupeWindow                      bool
 	hasDroppedCallsDedupeWindow                     bool
+	hasLoginAttemptsDedupeWindow                    bool
+	hasReputationDropsDedupeWindow                  bool
+	hasTelnetConnectionsDedupeWindow                bool
+	hasIngestConnectionsDedupeWindow                bool
+	hasPeerConnectionsDedupeWindow                  bool
 	hasDroppedCallsBadDEDX                          bool
 	hasDroppedCallsNoLicense                        bool
 	hasDroppedCallsHarmonics                        bool
@@ -1446,6 +1464,11 @@ func captureLoadRawPresence(raw map[string]any) loadRawPresence {
 		hasTelnetBulletinDedupeMaxEntries:               yamlKeyPresent(raw, "telnet", "bulletin_dedupe_max_entries"),
 		hasLoggingDropDedupeWindow:                      yamlKeyPresent(raw, "logging", "drop_dedupe_window_seconds"),
 		hasDroppedCallsDedupeWindow:                     yamlKeyPresent(raw, "logging", "dropped_calls", "dedupe_window_seconds"),
+		hasLoginAttemptsDedupeWindow:                    yamlKeyPresent(raw, "logging", "login_attempts", "dedupe_window_seconds"),
+		hasReputationDropsDedupeWindow:                  yamlKeyPresent(raw, "logging", "reputation_drops", "dedupe_window_seconds"),
+		hasTelnetConnectionsDedupeWindow:                yamlKeyPresent(raw, "logging", "telnet_connections", "dedupe_window_seconds"),
+		hasIngestConnectionsDedupeWindow:                yamlKeyPresent(raw, "logging", "ingest_connections", "dedupe_window_seconds"),
+		hasPeerConnectionsDedupeWindow:                  yamlKeyPresent(raw, "logging", "peer_connections", "dedupe_window_seconds"),
 		hasDroppedCallsBadDEDX:                          yamlKeyPresent(raw, "logging", "dropped_calls", "bad_de_dx"),
 		hasDroppedCallsNoLicense:                        yamlKeyPresent(raw, "logging", "dropped_calls", "no_license"),
 		hasDroppedCallsHarmonics:                        yamlKeyPresent(raw, "logging", "dropped_calls", "harmonics"),
@@ -1639,7 +1662,10 @@ func normalizeLoggingAndPropReportConfig(cfg *Config, presence loadRawPresence) 
 	if _, err := time.Parse("15:04", cfg.PropReport.RefreshUTC); err != nil {
 		return fmt.Errorf("invalid prop report refresh time %q: %w", cfg.PropReport.RefreshUTC, err)
 	}
-	return normalizeDroppedCallLoggingConfig(cfg, presence)
+	if err := normalizeDroppedCallLoggingConfig(cfg, presence); err != nil {
+		return err
+	}
+	return normalizeEventFileLoggingConfigs(cfg, presence)
 }
 
 func normalizeDroppedCallLoggingConfig(cfg *Config, presence loadRawPresence) error {
@@ -1675,6 +1701,47 @@ func normalizeDroppedCallLoggingConfig(cfg *Config, presence loadRawPresence) er
 			baseDir = "data/logs"
 		}
 		dropped.Dir = filepath.Join(baseDir, "dropped_calls")
+	}
+	return nil
+}
+
+func normalizeEventFileLoggingConfigs(cfg *Config, presence loadRawPresence) error {
+	baseDir := cfg.Logging.Dir
+	if baseDir == "" {
+		baseDir = "data/logs"
+	}
+	configs := []struct {
+		name      string
+		subdir    string
+		cfg       *EventFileLoggingConfig
+		hasDedupe bool
+	}{
+		{name: "login_attempts", subdir: "login_attempts", cfg: &cfg.Logging.LoginAttempts, hasDedupe: presence.hasLoginAttemptsDedupeWindow},
+		{name: "reputation_drops", subdir: "reputation_drops", cfg: &cfg.Logging.ReputationDrops, hasDedupe: presence.hasReputationDropsDedupeWindow},
+		{name: "telnet_connections", subdir: "telnet_connections", cfg: &cfg.Logging.TelnetConnections, hasDedupe: presence.hasTelnetConnectionsDedupeWindow},
+		{name: "ingest_connections", subdir: "ingest_connections", cfg: &cfg.Logging.IngestConnections, hasDedupe: presence.hasIngestConnectionsDedupeWindow},
+		{name: "peer_connections", subdir: "peer_connections", cfg: &cfg.Logging.PeerConnections, hasDedupe: presence.hasPeerConnectionsDedupeWindow},
+	}
+	for _, item := range configs {
+		item.cfg.Dir = strings.TrimSpace(item.cfg.Dir)
+		if !item.hasDedupe {
+			item.cfg.DedupeWindowSeconds = cfg.Logging.DropDedupeWindowSeconds
+		}
+		if item.cfg.DedupeWindowSeconds < 0 {
+			return fmt.Errorf("invalid logging.%s.dedupe_window_seconds %d (must be >= 0)", item.name, item.cfg.DedupeWindowSeconds)
+		}
+		if item.cfg.RetentionDays < 0 {
+			return fmt.Errorf("invalid logging.%s.retention_days %d (must be >= 0)", item.name, item.cfg.RetentionDays)
+		}
+		if item.cfg.RetentionDays == 0 {
+			item.cfg.RetentionDays = cfg.Logging.RetentionDays
+			if item.cfg.RetentionDays <= 0 {
+				item.cfg.RetentionDays = 7
+			}
+		}
+		if item.cfg.Dir == "" {
+			item.cfg.Dir = filepath.Join(baseDir, item.subdir)
+		}
 	}
 	return nil
 }
@@ -3397,6 +3464,12 @@ func (c *Config) Print() {
 		c.Logging.DroppedCalls.BadDEDX,
 		c.Logging.DroppedCalls.NoLicense,
 		c.Logging.DroppedCalls.Harmonics)
+	fmt.Printf("File-only event logs: login=%t reputation=%t telnet=%t ingest=%t peer=%t\n",
+		c.Logging.LoginAttempts.Enabled,
+		c.Logging.ReputationDrops.Enabled,
+		c.Logging.TelnetConnections.Enabled,
+		c.Logging.IngestConnections.Enabled,
+		c.Logging.PeerConnections.Enabled)
 	if c.PropReport.Enabled {
 		fmt.Printf("Prop report: enabled (refresh=%s UTC)\n", c.PropReport.RefreshUTC)
 	} else {

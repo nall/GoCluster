@@ -16,6 +16,8 @@ docs listed here instead of restating the full behavior.
 | How do I run on Windows? | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | How do I run under Linux `systemd`? | `docs/OPERATOR_GUIDE.md`, `README.md` |
 | Why will the Linux service not start? | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md` |
+| Where are login, reputation, connection, ingest, and peer events logged? | `data/config/README.md`, `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
+| Why do new logging events not appear in the console or UI? | `data/config/README.md`, `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
 | How do I connect by telnet? | `docs/OPERATOR_GUIDE.md`, `telnet/README.md` |
 | Why can I not connect by telnet? | `customgpt/troubleshooting-index.md`, `docs/OPERATOR_GUIDE.md`, `telnet/README.md` |
 | What commands should I try first? | `docs/OPERATOR_GUIDE.md`, `README.md` |

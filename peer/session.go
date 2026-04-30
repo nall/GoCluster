@@ -143,6 +143,13 @@ func (s *session) Run(ctx context.Context) error {
 		err = s.runOutboundHandshake()
 	}
 	if err != nil {
+		s.manager.reportConnection(ConnectionEvent{
+			Direction: directionLabel(s.dir),
+			Action:    "rejected",
+			Peer:      s.remoteCall,
+			Endpoint:  s.peer.host,
+			Reason:    err.Error(),
+		})
 		s.close()
 		return err
 	}
@@ -151,7 +158,21 @@ func (s *session) Run(ctx context.Context) error {
 		s.close()
 		return err
 	}
+	s.manager.reportConnection(ConnectionEvent{
+		Direction: directionLabel(s.dir),
+		Action:    "established",
+		Peer:      s.remoteCall,
+		Endpoint:  s.peer.host,
+		Reason:    "none",
+	})
 	defer s.manager.unregisterSession(s)
+	defer s.manager.reportConnection(ConnectionEvent{
+		Direction: directionLabel(s.dir),
+		Action:    "disconnected",
+		Peer:      s.remoteCall,
+		Endpoint:  s.peer.host,
+		Reason:    "session_end",
+	})
 
 	if s.keepalive > 0 {
 		go s.keepaliveLoop()
@@ -201,6 +222,17 @@ func (s *session) Run(ctx context.Context) error {
 			continue
 		}
 		s.manager.HandleFrame(frame, s)
+	}
+}
+
+func directionLabel(dir direction) string {
+	switch dir {
+	case dirInbound:
+		return "inbound"
+	case dirOutbound:
+		return "outbound"
+	default:
+		return "unknown"
 	}
 }
 

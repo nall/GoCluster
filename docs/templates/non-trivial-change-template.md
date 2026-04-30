@@ -68,6 +68,7 @@ that approval.
 - dependency scan evidence: <required for Full rigor>
 - triggered audits: Config Contract Audit | Retained-State Audit | Performance evidence | none
 - README impact: Required | Not required - <one sentence>
+- Support-agent docs impact: Required | Not required - <one sentence>
 - ADR/TSR pre-read: <relevant refs | No relevant ADR found; No relevant TSR found>
 - checker plan:
 
@@ -102,6 +103,7 @@ If no material findings:
 - contracts and compatibility:
 - user impact and determinism:
 - README impact:
+- Support-agent docs impact:
 - verification commands and results:
 - ADR handling outcome:
 - Decision refs:
@@ -112,6 +114,7 @@ For every Scope Ledger item that was `Agreed` or `Pending` at the start of imple
 - locations:
 - tests/checks:
 - docs/comments:
+- support-agent docs:
 - decision refs:
 
 ### VALIDATION

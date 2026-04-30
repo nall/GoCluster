@@ -870,6 +870,13 @@ func (c *Client) IsConnected() bool {
 	return c.client != nil && c.client.IsConnected()
 }
 
+func (c *Client) Endpoint() string {
+	if c == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", c.broker, c.port)
+}
+
 func (c *Client) mqttInboundStats() mqtt.InboundPublishStats {
 	if c == nil || c.client == nil {
 		return mqtt.InboundPublishStats{}

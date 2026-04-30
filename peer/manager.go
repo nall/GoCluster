@@ -23,32 +23,41 @@ import (
 // short because it runs on peer session reader goroutines.
 type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
 
+type ConnectionEvent struct {
+	Direction string
+	Action    string
+	Peer      string
+	Endpoint  string
+	Reason    string
+}
+
 type Manager struct {
-	cfg               config.PeeringConfig
-	localCall         string
-	ingest            chan<- *spot.Spot
-	maxAgeSeconds     int
-	topology          *topologyStore
-	sessions          map[string]*session
-	outboundPeers     []PeerEndpoint
-	inboundPeers      map[string]PeerEndpoint
-	mu                sync.RWMutex
-	allowIPs          []*net.IPNet
-	allowCalls        map[string]struct{}
-	dedupe            *dedupeCache
-	ctx               context.Context
-	cancel            context.CancelFunc
-	listener          net.Listener
-	pc92Ch            chan pc92Work
-	legacyCh          chan legacyWork
-	rawBroadcast      func(string) // optional hook to emit raw lines (e.g., PC26) to telnet clients
-	wwvBroadcast      func(kind, line string)
-	announceBroadcast func(line string)
-	directMessage     func(to, line string)
-	reconnects        atomic.Uint64
-	userCountFn       func() int
-	dropReporter      func(line string)
-	badCallReporter   BadCallReporter
+	cfg                config.PeeringConfig
+	localCall          string
+	ingest             chan<- *spot.Spot
+	maxAgeSeconds      int
+	topology           *topologyStore
+	sessions           map[string]*session
+	outboundPeers      []PeerEndpoint
+	inboundPeers       map[string]PeerEndpoint
+	mu                 sync.RWMutex
+	allowIPs           []*net.IPNet
+	allowCalls         map[string]struct{}
+	dedupe             *dedupeCache
+	ctx                context.Context
+	cancel             context.CancelFunc
+	listener           net.Listener
+	pc92Ch             chan pc92Work
+	legacyCh           chan legacyWork
+	rawBroadcast       func(string) // optional hook to emit raw lines (e.g., PC26) to telnet clients
+	wwvBroadcast       func(kind, line string)
+	announceBroadcast  func(line string)
+	directMessage      func(to, line string)
+	reconnects         atomic.Uint64
+	userCountFn        func() int
+	dropReporter       func(line string)
+	badCallReporter    BadCallReporter
+	connectionReporter func(ConnectionEvent)
 }
 
 // pc92Work wraps an inbound PC92 frame with the time it was observed so topology
@@ -538,6 +547,27 @@ func (m *Manager) SetBadCallReporter(fn BadCallReporter) {
 	m.badCallReporter = fn
 }
 
+func (m *Manager) SetConnectionReporter(fn func(ConnectionEvent)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.connectionReporter = fn
+}
+
+func (m *Manager) reportConnection(ev ConnectionEvent) {
+	if m == nil {
+		return
+	}
+	m.mu.RLock()
+	reporter := m.connectionReporter
+	m.mu.RUnlock()
+	if reporter != nil {
+		reporter(ev)
+	}
+}
+
 // SetWWVBroadcast installs a callback used to forward WWV/WCY bulletins to telnet clients.
 // When unset, PC23/PC73 frames are parsed but not delivered.
 func (m *Manager) SetWWVBroadcast(fn func(kind, line string)) {
@@ -741,6 +771,7 @@ func (m *Manager) acceptLoop() {
 			}
 		}
 		peer := PeerEndpoint{host: conn.RemoteAddr().String(), port: 0}
+		m.reportConnection(ConnectionEvent{Direction: "inbound", Action: "accepted", Endpoint: conn.RemoteAddr().String(), Reason: "none"})
 		settings := m.sessionSettings(peer)
 		sess := newSession(conn, dirInbound, m, peer, settings)
 		sess.id = conn.RemoteAddr().String()
@@ -775,11 +806,13 @@ func (m *Manager) runOutbound(peer PeerEndpoint) {
 		conn, err := dialer.Dial("tcp", addr)
 		if err != nil {
 			delay := backoff.Next()
+			m.reportConnection(ConnectionEvent{Direction: "outbound", Action: "dial_failed", Peer: peer.remoteCall, Endpoint: addr, Reason: err.Error()})
 			log.Printf("Peering: dial %s failed: %v (retry in %s)", addr, err, delay)
 			time.Sleep(delay)
 			continue
 		}
 		log.Printf("Peering: connected to %s", addr)
+		m.reportConnection(ConnectionEvent{Direction: "outbound", Action: "connected", Peer: peer.remoteCall, Endpoint: addr, Reason: "none"})
 		backoff.Reset()
 		settings := m.sessionSettings(peer)
 		sess := newSession(conn, dirOutbound, m, peer, settings)

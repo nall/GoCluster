@@ -44,6 +44,7 @@ type ingestHealthSnapshot struct {
 
 type ingestHealthSource struct {
 	name     string
+	endpoint string
 	snapshot func() ingestHealthSnapshot
 }
 
@@ -54,10 +55,10 @@ type ingestHealthState struct {
 }
 
 // Purpose: Periodically log ingest health transitions with low noise.
-// Key aspects: Reports only on connected/idle state changes.
+// Key aspects: Reports only on connected/idle state changes and optionally mirrors transitions to file-only event logs.
 // Upstream: main startup after ingest clients are created.
-// Downstream: log.Printf.
-func startIngestHealthMonitor(ctx context.Context, sources []ingestHealthSource) {
+// Downstream: log.Printf and optional event reporter.
+func startIngestHealthMonitorWithReporter(ctx context.Context, sources []ingestHealthSource, reporter func(source, action, endpoint, reason, state string)) {
 	if len(sources) == 0 {
 		return
 	}
@@ -80,6 +81,15 @@ func startIngestHealthMonitor(ctx context.Context, sources []ingestHealthSource)
 					state := states[source.name]
 					if !state.initialized || state.connected != snap.Connected || state.idle != idle {
 						log.Printf("%s%s", ingestHealthLogPrefix, formatIngestHealthLine(source.name, snap, idle, now))
+						if reporter != nil {
+							action := "connected"
+							reason := "none"
+							if !snap.Connected {
+								action = "disconnected"
+								reason = "not_connected"
+							}
+							reporter(source.name, action, source.endpoint, reason, ingestStateLabel(idle))
+						}
 						states[source.name] = ingestHealthState{
 							connected:   snap.Connected,
 							idle:        idle,
@@ -90,6 +100,13 @@ func startIngestHealthMonitor(ctx context.Context, sources []ingestHealthSource)
 			}
 		}
 	}()
+}
+
+func ingestStateLabel(idle bool) string {
+	if idle {
+		return "idle"
+	}
+	return "active"
 }
 
 func ingestIsIdle(snap ingestHealthSnapshot, now time.Time) bool {
@@ -180,7 +197,8 @@ func formatIngestHealthLine(name string, snap ingestHealthSnapshot, idle bool, n
 
 func rbnHealthSource(name string, client *rbn.Client) ingestHealthSource {
 	return ingestHealthSource{
-		name: name,
+		name:     name,
+		endpoint: client.Endpoint(),
 		snapshot: func() ingestHealthSnapshot {
 			if client == nil {
 				return ingestHealthSnapshot{}
@@ -200,7 +218,8 @@ func rbnHealthSource(name string, client *rbn.Client) ingestHealthSource {
 
 func pskReporterHealthSource(name string, client *pskreporter.Client) ingestHealthSource {
 	return ingestHealthSource{
-		name: name,
+		name:     name,
+		endpoint: client.Endpoint(),
 		snapshot: func() ingestHealthSnapshot {
 			if client == nil {
 				return ingestHealthSnapshot{}
@@ -234,7 +253,8 @@ func pskReporterHealthSource(name string, client *pskreporter.Client) ingestHeal
 
 func dxsummitHealthSource(name string, client *dxsummit.Client) ingestHealthSource {
 	return ingestHealthSource{
-		name: name,
+		name:     name,
+		endpoint: client.Endpoint(),
 		snapshot: func() ingestHealthSnapshot {
 			if client == nil {
 				return ingestHealthSnapshot{}

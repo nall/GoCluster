@@ -148,3 +148,102 @@ func TestDroppedCallLoggingRejectsNegativeBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestFileOnlyEventLogsUseShippedYAMLDefaults(t *testing.T) {
+	dir := testConfigDir(t)
+	writeRequiredFloodControlFile(t, dir)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	cases := []struct {
+		name string
+		got  EventFileLoggingConfig
+		dir  string
+	}{
+		{name: "login_attempts", got: cfg.Logging.LoginAttempts, dir: filepath.Join("data", "logs", "login_attempts")},
+		{name: "reputation_drops", got: cfg.Logging.ReputationDrops, dir: filepath.Join("data", "logs", "reputation_drops")},
+		{name: "telnet_connections", got: cfg.Logging.TelnetConnections, dir: filepath.Join("data", "logs", "telnet_connections")},
+		{name: "ingest_connections", got: cfg.Logging.IngestConnections, dir: filepath.Join("data", "logs", "ingest_connections")},
+		{name: "peer_connections", got: cfg.Logging.PeerConnections, dir: filepath.Join("data", "logs", "peer_connections")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !tc.got.Enabled {
+				t.Fatalf("expected %s enabled", tc.name)
+			}
+			if filepath.Clean(tc.got.Dir) != tc.dir {
+				t.Fatalf("unexpected dir %q", tc.got.Dir)
+			}
+			if tc.got.RetentionDays != 7 {
+				t.Fatalf("expected retention_days=7, got %d", tc.got.RetentionDays)
+			}
+			if tc.got.DedupeWindowSeconds != 120 {
+				t.Fatalf("expected dedupe_window_seconds=120, got %d", tc.got.DedupeWindowSeconds)
+			}
+		})
+	}
+}
+
+func TestFileOnlyEventLogsHonorExplicitZeroDedupe(t *testing.T) {
+	dir := testConfigDir(t)
+	writeRequiredFloodControlFile(t, dir)
+	cfgText := `logging:
+  login_attempts:
+    enabled: true
+    dir: "custom/login"
+    retention_days: 3
+    dedupe_window_seconds: 0
+`
+	writeTestConfigOverlay(t, dir, "app.yaml", cfgText)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.Logging.LoginAttempts.Enabled {
+		t.Fatalf("expected login attempt logging enabled")
+	}
+	if cfg.Logging.LoginAttempts.Dir != "custom/login" {
+		t.Fatalf("unexpected dir %q", cfg.Logging.LoginAttempts.Dir)
+	}
+	if cfg.Logging.LoginAttempts.RetentionDays != 3 {
+		t.Fatalf("expected retention_days=3, got %d", cfg.Logging.LoginAttempts.RetentionDays)
+	}
+	if cfg.Logging.LoginAttempts.DedupeWindowSeconds != 0 {
+		t.Fatalf("expected dedupe_window_seconds=0, got %d", cfg.Logging.LoginAttempts.DedupeWindowSeconds)
+	}
+}
+
+func TestFileOnlyEventLogsRejectNegativeBounds(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "retention",
+			body: `logging:
+  peer_connections:
+    retention_days: -1
+`,
+		},
+		{
+			name: "dedupe",
+			body: `logging:
+  ingest_connections:
+    dedupe_window_seconds: -1
+`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := testConfigDir(t)
+			writeRequiredFloodControlFile(t, dir)
+			writeTestConfigOverlay(t, dir, "app.yaml", tc.body)
+			if _, err := Load(dir); err == nil {
+				t.Fatalf("expected Load() to reject %s", tc.name)
+			}
+		})
+	}
+}

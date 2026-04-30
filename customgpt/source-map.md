@@ -12,6 +12,7 @@ linking or citing these docs over duplicating their content here.
 | Real-node configuration | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
 | Config loader behavior | `data/config/README.md` | `config/` tests |
 | Secrets and private config safety | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
+| System, dropped-call, and file-only event logs | `data/config/README.md` | `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
 | Telnet login and session behavior | `telnet/README.md` | `docs/OPERATOR_GUIDE.md` |
 | Command HELP source | `commands/README.md` | `commands/processor.go`, `README.md` |
 | Command dialects | `commands/README.md` | `telnet/README.md` |
@@ -50,6 +51,10 @@ linking or citing these docs over duplicating their content here.
   implementation advice.
 - For config-sensitive answers, route to `data/config/README.md` and tell the
   user to check their effective YAML.
+- For logging questions, distinguish system logs, optional dropped-call logs,
+  and file-only event logs. The event logs for login attempts, reputation
+  drops, telnet lifecycle, ingest lifecycle, and peer lifecycle do not add
+  console or UI output.
 - For symptom reports, route to `customgpt/troubleshooting-index.md` before
   using broad docs or historical TSRs.
 - For decision history, route to the ADR/TSR indexes before summarizing.

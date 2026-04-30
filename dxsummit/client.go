@@ -175,6 +175,13 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+func (c *Client) Endpoint() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.cfg.BaseURL)
+}
+
 // Stop cancels polling and waits for the output channel to close.
 func (c *Client) Stop() {
 	if c == nil {
