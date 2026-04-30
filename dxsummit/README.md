@@ -35,7 +35,7 @@ Accepted rows become normal upstream human spots:
 - `SourceNode=DXSUMMIT`
 - `IsHuman=true`
 
-DXSummit spotter calls ending in `-@` preserve that marker for display and archive provenance. Embedded `@` forms are rejected. Metadata lookups, ULS checks, and grid-cache lookups strip the final marker before lookup.
+DXSummit spotter calls ending in `-@` preserve that marker for display and archive provenance. Embedded `@` forms are rejected. If DXSummit relays a spotter call ending in the skimmer marker `-#`, only that terminal marker is stripped; numeric SSIDs are preserved. Metadata lookups, ULS checks, and grid-cache lookups strip source markers before lookup.
 
 DXSummit coordinates are intentionally not used to populate `DXMetadata.Grid` or `DEMetadata.Grid`. Existing CTY and grid-cache enrichment may still fill those fields later from callsign-derived data.
 

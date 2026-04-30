@@ -484,6 +484,7 @@ func parseAPITime(value string) (time.Time, error) {
 // normalizeSpotterCall returns both the display callsign and the base lookup
 // callsign. A final "-@" marker is DXSummit source provenance and is preserved
 // for display/archive output, but embedded or malformed "@" forms are rejected.
+// A final "-#" skimmer marker is stripped when DXSummit relays one.
 func normalizeSpotterCall(raw string) (display string, base string, ok bool) {
 	trimmed := strings.ToUpper(strings.TrimSpace(raw))
 	if trimmed == "" {
@@ -499,11 +500,16 @@ func normalizeSpotterCall(raw string) (display string, base string, ok bool) {
 		}
 		return base + "-@", base, true
 	}
+	trimmed = stripTerminalSkimmerMarker(trimmed)
 	base = spot.NormalizeCallsign(trimmed)
 	if !spot.IsValidNormalizedCallsign(base) {
 		return "", "", false
 	}
 	return base, base, true
+}
+
+func stripTerminalSkimmerMarker(call string) string {
+	return strings.TrimSuffix(call, "-#")
 }
 
 // emit never blocks the polling goroutine. When the bounded output channel is

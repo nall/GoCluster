@@ -70,6 +70,6 @@ DXSummit ingest:
 - `dxsummit.include_bands` is limited to `HF`, `VHF`, and `UHF`.
 - `dxsummit.startup_backfill_seconds: 0` means seed-only startup: the initial page sets the high-water cursor and emits no historical rows.
 - `dxsummit.spot_channel_size` and `dxsummit.max_response_bytes` bound retained queue and response memory.
-- DXSummit spotter calls ending in `-@` preserve that marker for display/archive provenance, while metadata and license lookups use the base callsign without the marker.
+- DXSummit spotter calls ending in `-@` preserve that marker for display/archive provenance. Relayed spotter calls ending in the skimmer marker `-#` strip only that terminal marker; numeric SSIDs are preserved.
 - DXSummit latitude/longitude fields are not used to populate grids. Existing CTY and grid-cache enrichment may fill grids later from callsign-derived data.
 - The console dashboard counts DXSummit in `Ingest Sources` only when `dxsummit.enabled` is true. It shows `DXSUMMIT` connected after a recent successful poll, including seed-only startup polls that emit no spots.

@@ -60,6 +60,10 @@ Preserve a final `-@` marker on DXSummit spotter calls for display and archive
 provenance. Reject embedded `@` or malformed marker forms. Strip the marker for
 metadata, ULS/license, and grid-cache lookups.
 
+ADR-0091 later added one narrower normalization rule: if DXSummit relays a
+spotter call with a terminal `-#` skimmer marker, strip only that marker before
+admission while preserving numeric SSIDs and the existing `-@` behavior.
+
 Do not derive Maidenhead grids from DXSummit latitude/longitude fields in this
 version. CTY and existing grid-cache enrichment remain the only grid sources.
 
@@ -89,7 +93,8 @@ Refactor band matching so a band can have multiple disjoint segments, and add
 - Operators can enable DXSummit with explicit poll cadence and max-record knobs.
 - Polling and memory are bounded by timeout, response cap, channel cap, and
   O(1) cursor state.
-- DXSummit provenance remains visible through the `-@` marker.
+- DXSummit provenance remains visible through the `-@` marker; relayed `-#`
+  skimmer markers are not preserved on accepted spotter identities.
 - Existing stale admission, CTY/ULS validation, flood control, dedupe,
   correction, archive, filters, and fan-out remain the downstream enforcement
   points.

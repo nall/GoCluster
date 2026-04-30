@@ -26,6 +26,50 @@ func TestParsePC11IgnoresCommentTimeToken(t *testing.T) {
 	}
 }
 
+func TestParseSpotterStripsOnlyTerminalSkimmerMarker(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "pc11 plain skimmer marker",
+			line: "PC11^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ-#^ORIGIN",
+			want: "W1XYZ",
+		},
+		{
+			name: "pc61 numeric ssid preserved before marker",
+			line: "PC61^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ-1-#^ORIGIN^203.0.113.7^H3^",
+			want: "W1XYZ-1",
+		},
+		{
+			name: "pc26 delegates marker stripping through pc11 parser",
+			line: "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SPOT1-#^ORIGIN^ ^H5^",
+			want: "SPOT1",
+		},
+		{
+			name: "numeric ssid without marker preserved",
+			line: "PC11^14074.0^K1ABC^23-Dec-2025^2001Z^CQ TEST^W1XYZ-1^ORIGIN",
+			want: "W1XYZ-1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frame, err := ParseFrame(tt.line)
+			if err != nil {
+				t.Fatalf("ParseFrame error: %v", err)
+			}
+			spotEntry, err := parseSpotFromFrame(frame, "FALLBACK")
+			if err != nil {
+				t.Fatalf("parseSpotFromFrame error: %v", err)
+			}
+			if spotEntry.DECall != tt.want || spotEntry.DECallNorm != tt.want {
+				t.Fatalf("expected DECall=%q DECallNorm=%q, got DECall=%q DECallNorm=%q", tt.want, tt.want, spotEntry.DECall, spotEntry.DECallNorm)
+			}
+		})
+	}
+}
+
 func TestParsePC26UsesCorrectFieldsAndIgnoresPlaceholder(t *testing.T) {
 	line := "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SPOT1^ORIGIN^ ^H5^"
 	frame, err := ParseFrame(line)

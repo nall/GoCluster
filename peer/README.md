@@ -31,6 +31,7 @@ Inbound admission is explicit:
 In receive-only mode:
 
 - inbound peer spots still ingest locally
+- inbound peer spotter calls ending in the skimmer marker `-#` strip only that terminal marker before local ingest; numeric SSIDs are preserved
 - maintenance traffic still runs
 - only local `DX` command spots are peer-published
 

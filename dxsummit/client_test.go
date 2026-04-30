@@ -67,6 +67,36 @@ func TestParseRecordPreservesDXSummitMarkerAndCommentFields(t *testing.T) {
 	}
 }
 
+func TestParseRecordStripsOnlyTerminalSkimmerMarker(t *testing.T) {
+	tests := []struct {
+		name string
+		de   string
+		want string
+	}{
+		{name: "plain skimmer marker", de: "N2WQ-#", want: "N2WQ"},
+		{name: "numeric ssid preserved before marker", de: "N2WQ-1-#", want: "N2WQ-1"},
+		{name: "numeric ssid without marker preserved", de: "N2WQ-1", want: "N2WQ-1"},
+		{name: "dxsummit marker preserved", de: "EA5JLX-@", want: "EA5JLX-@"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sp, err := parseRecord(rawSpot{
+				ID:        100,
+				DECall:    tt.de,
+				DXCall:    "K2GOD",
+				Frequency: 21074.4,
+				Time:      "2026-04-21T19:59:09",
+			})
+			if err != nil {
+				t.Fatalf("parseRecord error: %v", err)
+			}
+			if sp.DECall != tt.want || sp.DECallNorm != tt.want {
+				t.Fatalf("expected DECall=%q DECallNorm=%q, got DECall=%q DECallNorm=%q", tt.want, tt.want, sp.DECall, sp.DECallNorm)
+			}
+		})
+	}
+}
+
 func TestParseRecordAcceptsHFVHFUHFAndNilInfo(t *testing.T) {
 	tests := []struct {
 		name string

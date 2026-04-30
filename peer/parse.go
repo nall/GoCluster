@@ -48,7 +48,7 @@ func parsePC11(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	timeStr := strings.TrimSpace(fields[3])
 	comment := fields[4]
 	spotterRaw := strings.TrimSpace(fields[5])
-	spotter := spot.NormalizeCallsign(spotterRaw)
+	spotter := spot.NormalizeCallsign(stripTerminalSkimmerMarker(spotterRaw))
 	origin := strings.TrimSpace(fields[6])
 	if origin == "" {
 		origin = fallbackOrigin
@@ -99,7 +99,7 @@ func parsePC61(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 	timeStr := strings.TrimSpace(fields[3])
 	comment := fields[4]
 	spotterRaw := strings.TrimSpace(fields[5])
-	spotter := spot.NormalizeCallsign(spotterRaw)
+	spotter := spot.NormalizeCallsign(stripTerminalSkimmerMarker(spotterRaw))
 	origin := strings.TrimSpace(fields[6])
 	if origin == "" {
 		origin = fallbackOrigin
@@ -148,6 +148,10 @@ func parsePC26(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 		fields = append([]string{}, fields[:7]...)
 	}
 	return parsePC11(fields, hop, fallbackOrigin)
+}
+
+func stripTerminalSkimmerMarker(call string) string {
+	return strings.TrimSuffix(call, "-#")
 }
 
 // Purpose: Parse PC date/time tokens into a UTC timestamp.
