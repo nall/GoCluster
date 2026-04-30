@@ -27,6 +27,19 @@ This is a long-lived, line-oriented TCP service with high fan-out broadcast and 
 - Close on repeated abusive input.
 - Do not retain subslices of shared read buffers when data must outlive the read cycle.
 
+## Source identity normalization
+- Peer PC11, PC61, and PC26 DE/spotter calls strip only a terminal `-#`
+  skimmer marker before local ingest.
+- DXSummit DE/spotter calls strip only a terminal `-#` skimmer marker before
+  local ingest.
+- Numeric SSIDs before the marker are preserved, so `N2WQ-1-#` becomes
+  `N2WQ-1`.
+- DXSummit `-@` provenance remains a separate accepted display/archive marker
+  and must not be stripped by the `-#` rule.
+- This normalization does not change DX call normalization, RBN/local skimmer
+  ingest, peer hop suffix handling, source stats, queues, forwarding policy, or
+  YAML/config behavior.
+
 ## Output buffering
 - Use bounded per-connection queues.
 - Default shape:
