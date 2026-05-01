@@ -38,6 +38,9 @@ docs listed here instead of restating the full behavior.
 | What do `?`, `S`, `P`, `V`, `C`, and `B` mean? | `README.md`, `spot/README.md` |
 | What do path glyphs mean? | `README.md`, `pathreliability/README.md` |
 | Why are path glyphs blank? | `customgpt/troubleshooting-index.md`, `README.md`, `pathreliability/README.md` |
+| What does `n<capped>/r<raw>` mean in `SET DIAG PATH`? | `docs/OPERATOR_GUIDE.md`, `README.md`, `pathreliability/README.md` |
+| What do `low_count` and `low_weight` mean in path prediction logs? | `docs/OPERATOR_GUIDE.md`, `README.md`, `pathreliability/README.md` |
+| How do receiver contribution caps affect path reliability? | `pathreliability/README.md`, `data/config/path_reliability.yaml`, `README.md` |
 | What sources feed spots into the cluster? | `README.md`, `rbn/README.md`, `pskreporter/README.md`, `dxsummit/README.md`, `peer/README.md` |
 
 ## Developer Questions

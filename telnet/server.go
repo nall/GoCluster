@@ -263,8 +263,11 @@ type Server struct {
 	pathPredCombined      atomic.Uint64                              // Predictions with sufficient combined data
 	pathPredInsufficient  atomic.Uint64                              // Predictions with insufficient data
 	pathPredNoSample      atomic.Uint64                              // Insufficient predictions with no samples
+	pathPredLowCount      atomic.Uint64                              // Insufficient predictions below min observation count
 	pathPredLowWeight     atomic.Uint64                              // Insufficient predictions below min weight
 	pathPredStale         atomic.Uint64                              // Insufficient predictions with stale selected evidence
+	pathPredCapLimited    atomic.Uint64                              // Predictions where receiver caps reduced diagnostic evidence
+	pathPredCapWouldBlock atomic.Uint64                              // Shadow predictions that receiver caps would block
 	pathPredOverrideR     atomic.Uint64                              // R overrides applied
 	pathPredOverrideG     atomic.Uint64                              // G overrides applied
 }
@@ -2809,15 +2812,18 @@ func (s *Server) PreloginAdmissionMetricSnapshot() preloginAdmissionSnapshot {
 }
 
 type pathPredictionStats struct {
-	Total        uint64
-	Derived      uint64
-	Combined     uint64
-	Insufficient uint64
-	NoSample     uint64
-	LowWeight    uint64
-	Stale        uint64
-	OverrideR    uint64
-	OverrideG    uint64
+	Total         uint64
+	Derived       uint64
+	Combined      uint64
+	Insufficient  uint64
+	NoSample      uint64
+	LowCount      uint64
+	LowWeight     uint64
+	Stale         uint64
+	CapLimited    uint64
+	CapWouldBlock uint64
+	OverrideR     uint64
+	OverrideG     uint64
 }
 
 func (s *Server) recordPathPrediction(res pathreliability.Result, userDerived, dxDerived bool) {
@@ -2828,6 +2834,12 @@ func (s *Server) recordPathPrediction(res pathreliability.Result, userDerived, d
 	if userDerived || dxDerived {
 		s.pathPredDerived.Add(1)
 	}
+	if res.CapLimited {
+		s.pathPredCapLimited.Add(1)
+	}
+	if res.CapWouldBlock {
+		s.pathPredCapWouldBlock.Add(1)
+	}
 	switch res.Source {
 	case pathreliability.SourceCombined:
 		s.pathPredCombined.Add(1)
@@ -2836,6 +2848,8 @@ func (s *Server) recordPathPrediction(res pathreliability.Result, userDerived, d
 		switch res.InsufficientReason {
 		case pathreliability.InsufficientStale:
 			s.pathPredStale.Add(1)
+		case pathreliability.InsufficientLowCount:
+			s.pathPredLowCount.Add(1)
 		case pathreliability.InsufficientLowWeight:
 			s.pathPredLowWeight.Add(1)
 		case pathreliability.InsufficientNoSample:
@@ -2855,15 +2869,18 @@ func (s *Server) PathPredictionStatsSnapshot() pathPredictionStats {
 		return pathPredictionStats{}
 	}
 	return pathPredictionStats{
-		Total:        s.pathPredTotal.Swap(0),
-		Derived:      s.pathPredDerived.Swap(0),
-		Combined:     s.pathPredCombined.Swap(0),
-		Insufficient: s.pathPredInsufficient.Swap(0),
-		NoSample:     s.pathPredNoSample.Swap(0),
-		LowWeight:    s.pathPredLowWeight.Swap(0),
-		Stale:        s.pathPredStale.Swap(0),
-		OverrideR:    s.pathPredOverrideR.Swap(0),
-		OverrideG:    s.pathPredOverrideG.Swap(0),
+		Total:         s.pathPredTotal.Swap(0),
+		Derived:       s.pathPredDerived.Swap(0),
+		Combined:      s.pathPredCombined.Swap(0),
+		Insufficient:  s.pathPredInsufficient.Swap(0),
+		NoSample:      s.pathPredNoSample.Swap(0),
+		LowCount:      s.pathPredLowCount.Swap(0),
+		LowWeight:     s.pathPredLowWeight.Swap(0),
+		Stale:         s.pathPredStale.Swap(0),
+		CapLimited:    s.pathPredCapLimited.Swap(0),
+		CapWouldBlock: s.pathPredCapWouldBlock.Swap(0),
+		OverrideR:     s.pathPredOverrideR.Swap(0),
+		OverrideG:     s.pathPredOverrideG.Swap(0),
 	}
 }
 
@@ -3772,13 +3789,24 @@ func diagPathTag(prediction pathPrediction, havePrediction bool) string {
 		return "n0|none"
 	}
 	res := prediction.result
-	count := strconv.FormatUint(uint64(res.Count), 10)
+	count := diagPathCountToken(res)
 	if res.Source == pathreliability.SourceInsufficient {
 		reason := diagPathInsufficientReason(res.InsufficientReason)
-		return "n" + count + "|" + reason
+		return count + "|" + reason
 	}
-	weight := strconv.FormatInt(int64(math.Round(res.Weight)), 10)
-	return "n" + count + "|w" + weight + "|a" + diagAgeToken(res.AgeSec)
+	weightValue := res.Weight
+	if res.CapLimited {
+		weightValue = res.CappedWeight
+	}
+	weight := strconv.FormatInt(int64(math.Round(weightValue)), 10)
+	return count + "|w" + weight + "|a" + diagAgeToken(res.AgeSec)
+}
+
+func diagPathCountToken(res pathreliability.Result) string {
+	if res.CapLimited {
+		return "n" + strconv.FormatUint(uint64(res.CappedCount), 10) + "/r" + strconv.FormatUint(uint64(res.RawCount), 10)
+	}
+	return "n" + strconv.FormatUint(uint64(res.Count), 10)
 }
 
 func diagModeTag(sp *spot.Spot) string {

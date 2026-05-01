@@ -12,12 +12,12 @@ import (
 )
 
 func TestParsePredictionTotalsWithAndWithoutStale(t *testing.T) {
-	withStale := "2026/04/20 12:00:00 Path predictions (5m): total=1,200 derived=5 combined=700 insufficient=500 no_sample=300 low_weight=150 stale=50 override_r=0 override_g=0"
+	withStale := "2026/04/20 12:00:00 Path predictions (5m): total=1,200 derived=5 combined=700 insufficient=500 no_sample=300 low_count=75 low_weight=75 stale=50 cap_limited=25 cap_would_block=10 override_r=0 override_g=0"
 	got, ok := parsePredictionTotals(withStale)
 	if !ok {
 		t.Fatalf("expected prediction totals to parse")
 	}
-	if got.Total != 1200 || got.Combined != 700 || got.Insufficient != 500 || got.NoSample != 300 || got.LowWeight != 150 || got.Stale != 50 {
+	if got.Total != 1200 || got.Combined != 700 || got.Insufficient != 500 || got.NoSample != 300 || got.LowCount != 75 || got.LowWeight != 75 || got.Stale != 50 || got.CapLimited != 25 || got.CapWouldBlock != 10 {
 		t.Fatalf("unexpected parsed totals with stale: %+v", got)
 	}
 
@@ -29,6 +29,22 @@ func TestParsePredictionTotalsWithAndWithoutStale(t *testing.T) {
 	if got.Total != 100 || got.Combined != 60 || got.Insufficient != 40 || got.NoSample != 30 || got.LowWeight != 10 || got.Stale != 0 {
 		t.Fatalf("unexpected parsed legacy totals: %+v", got)
 	}
+	if got.LowCount != 0 {
+		t.Fatalf("expected legacy low_count=0, got %d", got.LowCount)
+	}
+}
+
+func TestPredictionActivitySummarySeparatesCountAndWeightLimits(t *testing.T) {
+	got := predictionActivitySummary([]predictionHour{
+		{Hour: "01:00", AvgTotal: 100, AvgCombined: 20, AvgInsufficient: 80, AvgLowCount: 60, AvgLowWeight: 10},
+		{Hour: "02:00", AvgTotal: 200, AvgCombined: 150, AvgInsufficient: 50, AvgLowCount: 5, AvgLowWeight: 40},
+	})
+	if !strings.Contains(got, "Hours mostly count-limited: 01:00") {
+		t.Fatalf("expected count-limited summary, got %q", got)
+	}
+	if !strings.Contains(got, "Hours mostly weight-limited: 02:00") {
+		t.Fatalf("expected weight-limited summary, got %q", got)
+	}
 }
 
 func TestBuildModelContextIncludesPredictionAgeGate(t *testing.T) {
@@ -36,6 +52,7 @@ func TestBuildModelContextIncludesPredictionAgeGate(t *testing.T) {
 	cfg.DefaultHalfLifeSec = 240
 	cfg.BandHalfLifeSec = map[string]int{"20m": 360, "10m": 240}
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 1.25
+	cfg.ReceiverContributionMode = pathreliability.ReceiverContributionShadow
 
 	ctx := buildModelContext(cfg, []string{"20m", "10m"})
 	if ctx.MaxPredictionAgeHalfLifeMultiplier != 1.25 {
@@ -46,6 +63,9 @@ func TestBuildModelContextIncludesPredictionAgeGate(t *testing.T) {
 	}
 	if got := ctx.MaxPredictionAgeByBand["10m"]; got != 300 {
 		t.Fatalf("expected 10m max age 300, got %d", got)
+	}
+	if ctx.MinObservationCount != cfg.MinObservationCount || ctx.ReceiverContributionMode != pathreliability.ReceiverContributionShadow {
+		t.Fatalf("expected receiver contribution context, got %+v", ctx)
 	}
 
 	cfg.MaxPredictionAgeHalfLifeMultiplier = 0

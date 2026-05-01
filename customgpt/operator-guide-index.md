@@ -49,7 +49,7 @@ existing operator-facing docs.
 | `NEARBY` filtering | `README.md`, `telnet/README.md` |
 | Dedupe policies | `README.md`, `telnet/README.md` |
 | Confidence tags | `README.md`, `spot/README.md` |
-| Path reliability tags | `README.md`, `pathreliability/README.md` |
+| Path reliability tags, insufficient reasons, and receiver contribution caps | `README.md`, `docs/OPERATOR_GUIDE.md`, `pathreliability/README.md`, `data/config/path_reliability.yaml` |
 | Spot line format | `telnet/README.md`, `spot/spot.go` |
 
 ## Sources

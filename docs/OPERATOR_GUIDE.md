@@ -204,6 +204,13 @@ column already shows it when path display is enabled:
 n<count>|w<weight>|a<age>
 ```
 
+When receiver contribution caps reduce the diagnostic evidence, capped count is
+shown first and raw selected count is shown after `/r`:
+
+```text
+n<capped>/r<raw>|w<weight>|a<age>
+```
+
 Insufficient evidence is shown as:
 
 ```text
@@ -212,6 +219,9 @@ n<count>|<reason>
 
 - `n<count>` is the raw number of selected observations behind the displayed
   path decision. It is a sample-size clue, not a confidence percent.
+- `n<capped>/r<raw>` means receiver contribution caps reduced the diagnostic
+  evidence. In the shipped `shadow` mode this is informational; in `enforce`
+  mode the capped count and capped weight gate the path class.
 - `w<weight>` is the rounded effective weight after decay and path selection.
   It is not SNR or dB. Weight is an evidence-strength gate, not the displayed
   path class itself.
@@ -225,6 +235,10 @@ n<count>|<reason>
 - `stale` means selected samples existed, but the selected evidence was too old
   for the band's freshness gate.
 
+The five-minute `Path predictions (5m)` system log uses the same reason split:
+`no_sample`, `low_count`, `low_weight`, and `stale`. `low_count` is the
+observation-count gate; `low_weight` is the decayed effective-weight gate.
+
 The fixed-width cluster format may clip the right edge of a long diagnostic
 comment to keep the grid, confidence, and time columns aligned. The leftmost
 fields remain the important ones: count and effective weight or reason.
@@ -235,6 +249,10 @@ Example readings:
 - `n0|none`: no usable selected sample.
 - `n3|lown`: three selected observations existed, but not enough to emit a
   path class.
+- `n5/r19|lown`: nineteen raw observations existed, but capped receiver
+  evidence would not meet the minimum sample floor.
+- `n5/r19|w3`: capped receiver evidence is shown because one or more receivers
+  hit a contribution cap.
 - `n1|loww`: one selected observation existed, but the effective weight was
   below the minimum.
 - `n32|w1`: large raw sample count but low rounded effective weight.

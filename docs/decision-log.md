@@ -11,6 +11,8 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0096 | Path Prediction Low Count Logging | Accepted | 2026-04-30 | pathreliability, telnet diagnostics, reports | - | - | `docs/decisions/ADR-0096-path-prediction-low-count-logging.md` |
+| ADR-0095 | Path Reliability Receiver Contribution Caps | Accepted | 2026-04-30 | pathreliability, config, telnet diagnostics, reports | - | - | `docs/decisions/ADR-0095-path-reliability-receiver-contribution-caps.md` |
 | ADR-0094 | Support-Agent Documentation Impact Gate | Accepted | 2026-04-30 | workflow, docs, customgpt | ADR-0092 (extends compact strict workflow) | - | `docs/decisions/ADR-0094-support-agent-doc-impact-gate.md` |
 | ADR-0093 | File-Only Connection and Gate Event Logs | Accepted | 2026-04-30 | logging, telnet, ingest, peer, reputation | - | - | `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
 | ADR-0092 | Codex Token-Efficient Strict Workflow | Accepted | 2026-04-30 | workflow, Codex | - | - | `docs/decisions/ADR-0092-codex-token-efficient-strict-workflow.md` |

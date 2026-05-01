@@ -430,13 +430,24 @@ func (p *outputPipeline) prepareFanoutSpot(ctx *outputSpotContext) bool {
 						if p.pathReport != nil {
 							p.pathReport.Observe(s, spotTime)
 						}
-						p.pathPredictor.Update(bucket, deCell, dxCell, deCoarse, dxCoarse, band, ft8, 1.0, spotTime, s.IsBeacon)
+						p.pathPredictor.UpdateWithReceiverHash(bucket, deCell, dxCell, deCoarse, dxCoarse, band, ft8, 1.0, spotTime, s.IsBeacon, pathReceiverHash(s))
 					}
 				}
 			}
 		}
 	}
 	return true
+}
+
+func pathReceiverHash(s *spot.Spot) uint64 {
+	if s == nil {
+		return 0
+	}
+	receiver := s.DECallNorm
+	if strings.TrimSpace(receiver) == "" {
+		receiver = s.DECall
+	}
+	return pathreliability.ReceiverIdentityHash(receiver)
 }
 
 func (p *outputPipeline) releaseDueTemporal(now time.Time, force bool) {

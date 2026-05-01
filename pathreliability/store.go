@@ -9,7 +9,19 @@ import (
 const (
 	defaultShards = 64
 	ln2           = 0.6931471805599453
+
+	inlineReceiverSlots = 4
 )
+
+// receiverSlot is bucket-owned retained state. Slots are deliberately fixed and
+// small so capped receiver trust is bounded by the bucket maps, not by total
+// historical receiver cardinality.
+type receiverSlot struct {
+	hash       uint64
+	weight     float64
+	lastUpdate int64
+	count      uint32
+}
 
 // bucket holds decaying power stats for a directional path.
 type bucket struct {
@@ -18,6 +30,13 @@ type bucket struct {
 	count    uint32
 	// lastUpdate stores Unix seconds.
 	lastUpdate int64
+
+	cappedSumPower float64
+	cappedWeight   float64
+	cappedCount    uint32
+	slots          [inlineReceiverSlots]receiverSlot
+	// extraSlots is allocated only for coarse buckets that use slots 5-8.
+	extraSlots *[maxCoarseReceiverSlots - inlineReceiverSlots]receiverSlot
 }
 
 type shard struct {
@@ -70,6 +89,13 @@ func NewStore(cfg Config, bands []string) *Store {
 // Update applies a new FT8-equiv reading to the directional path.
 // weight should normally be 1.0; beacons may be clamped by caller.
 func (s *Store) Update(receiverCell, senderCell CellID, receiverCoarse, senderCoarse CellID, band string, power float64, weight float64, now time.Time) {
+	s.UpdateWithReceiverHash(receiverCell, senderCell, receiverCoarse, senderCoarse, band, power, weight, now, 0)
+}
+
+// UpdateWithReceiverHash applies a new reading and attributes capped
+// contribution trust to the normalized receiving station identity hash.
+// A zero hash is intentionally unattributed and does not add capped trust.
+func (s *Store) UpdateWithReceiverHash(receiverCell, senderCell CellID, receiverCoarse, senderCoarse CellID, band string, power float64, weight float64, now time.Time, receiverHash uint64) {
 	if s == nil || !s.cfg.Enabled {
 		return
 	}
@@ -81,14 +107,14 @@ func (s *Store) Update(receiverCell, senderCell CellID, receiverCoarse, senderCo
 	if receiverCell == InvalidCell || senderCell == InvalidCell {
 		// Still allow coarse update when fine cells are missing.
 	} else {
-		s.updateBucket(packKey(receiverCell, senderCell, idx), power, weight, now, halfLife)
+		s.updateBucket(packKey(receiverCell, senderCell, idx), power, weight, now, halfLife, receiverHash, s.cfg.ReceiverFineSlots)
 	}
 	if receiverCoarse != InvalidCell && senderCoarse != InvalidCell {
-		s.updateBucket(packCoarseKey(receiverCoarse, senderCoarse, idx), power, weight, now, halfLife)
+		s.updateBucket(packCoarseKey(receiverCoarse, senderCoarse, idx), power, weight, now, halfLife, receiverHash, s.cfg.ReceiverCoarseSlots)
 	}
 }
 
-func (s *Store) updateBucket(key uint64, power float64, weight float64, now time.Time, halfLifeSec int) {
+func (s *Store) updateBucket(key uint64, power float64, weight float64, now time.Time, halfLifeSec int, receiverHash uint64, receiverSlots int) {
 	if key == 0 {
 		return
 	}
@@ -98,16 +124,11 @@ func (s *Store) updateBucket(key uint64, power float64, weight float64, now time
 	nowSec := now.Unix()
 	b, ok := sh.buckets[key]
 	if !ok {
-		sh.buckets[key] = &bucket{
-			sumPower:   power * weight,
-			weight:     weight,
-			count:      1,
-			lastUpdate: nowSec,
-		}
+		b = &bucket{lastUpdate: nowSec}
+		sh.buckets[key] = b
 		if len(sh.buckets) > sh.peak {
 			sh.peak = len(sh.buckets)
 		}
-		return
 	}
 	elapsed := nowSec - b.lastUpdate
 	decay := decayFactor(elapsed, halfLifeSec)
@@ -117,6 +138,7 @@ func (s *Store) updateBucket(key uint64, power float64, weight float64, now time
 	if newWeight <= 0 {
 		b.weight = 0
 		b.sumPower = 0
+		b.updateCapped(power, weight, nowSec, decay, receiverHash, receiverSlots, s.cfg)
 		b.lastUpdate = nowSec
 		return
 	}
@@ -126,15 +148,139 @@ func (s *Store) updateBucket(key uint64, power float64, weight float64, now time
 	if b.count < maxBucketObservationCount {
 		b.count++
 	}
+	b.updateCapped(power, weight, nowSec, decay, receiverHash, receiverSlots, s.cfg)
 	b.lastUpdate = nowSec
+}
+
+func (b *bucket) updateCapped(power float64, weight float64, nowSec int64, decay float64, receiverHash uint64, receiverSlots int, cfg Config) {
+	if b == nil {
+		return
+	}
+	if cfg.ReceiverContributionMode == ReceiverContributionOff {
+		return
+	}
+	b.cappedWeight *= decay
+	b.cappedSumPower *= decay
+	if b.cappedWeight <= 0 || b.cappedSumPower <= 0 {
+		b.cappedWeight = 0
+		b.cappedSumPower = 0
+	}
+	b.decayReceiverSlots(decay, receiverSlots)
+	if receiverHash == 0 || receiverSlots <= 0 || weight <= 0 || cfg.ReceiverMaxEffectiveWeight <= 0 || cfg.ReceiverMaxEffectiveCount == 0 {
+		return
+	}
+	slot := b.selectReceiverSlot(receiverHash, receiverSlots)
+	if slot == nil {
+		return
+	}
+	if slot.hash != receiverHash {
+		*slot = receiverSlot{hash: receiverHash}
+	}
+	if slot.count >= cfg.ReceiverMaxEffectiveCount {
+		return
+	}
+	remainingWeight := cfg.ReceiverMaxEffectiveWeight - slot.weight
+	if remainingWeight <= 0 {
+		return
+	}
+	acceptedWeight := weight
+	if acceptedWeight > remainingWeight {
+		acceptedWeight = remainingWeight
+	}
+	if acceptedWeight <= 0 {
+		return
+	}
+	slot.weight += acceptedWeight
+	slot.count++
+	slot.lastUpdate = nowSec
+	b.cappedWeight += acceptedWeight
+	b.cappedSumPower += power * acceptedWeight
+	if b.cappedCount < maxBucketObservationCount {
+		b.cappedCount++
+	}
+}
+
+func (b *bucket) decayReceiverSlots(decay float64, receiverSlots int) {
+	if b == nil || receiverSlots <= 0 {
+		return
+	}
+	for i := 0; i < receiverSlots; i++ {
+		slot := b.receiverSlotAt(i, false)
+		if slot == nil || slot.hash == 0 {
+			continue
+		}
+		slot.weight *= decay
+		if slot.weight < 0 {
+			slot.weight = 0
+		}
+	}
+}
+
+func (b *bucket) selectReceiverSlot(hash uint64, receiverSlots int) *receiverSlot {
+	if b == nil || hash == 0 || receiverSlots <= 0 {
+		return nil
+	}
+	if receiverSlots > maxCoarseReceiverSlots {
+		receiverSlots = maxCoarseReceiverSlots
+	}
+	empty := -1
+	replace := -1
+	var replaceWeight float64
+	var replaceUpdate int64
+	for i := 0; i < receiverSlots; i++ {
+		slot := b.receiverSlotAt(i, false)
+		if slot == nil || slot.hash == 0 {
+			if empty < 0 {
+				empty = i
+			}
+			continue
+		}
+		if slot.hash == hash {
+			return slot
+		}
+		if replace < 0 || slot.weight < replaceWeight || (slot.weight == replaceWeight && slot.lastUpdate < replaceUpdate) {
+			replace = i
+			replaceWeight = slot.weight
+			replaceUpdate = slot.lastUpdate
+		}
+	}
+	if empty >= 0 {
+		return b.receiverSlotAt(empty, true)
+	}
+	return b.receiverSlotAt(replace, true)
+}
+
+func (b *bucket) receiverSlotAt(index int, allocate bool) *receiverSlot {
+	if b == nil || index < 0 {
+		return nil
+	}
+	if index < inlineReceiverSlots {
+		return &b.slots[index]
+	}
+	extraIndex := index - inlineReceiverSlots
+	if extraIndex < 0 || extraIndex >= maxCoarseReceiverSlots-inlineReceiverSlots {
+		return nil
+	}
+	if b.extraSlots == nil {
+		if !allocate {
+			return nil
+		}
+		b.extraSlots = &[maxCoarseReceiverSlots - inlineReceiverSlots]receiverSlot{}
+	}
+	return &b.extraSlots[extraIndex]
 }
 
 // Sample represents a decayed power reading with weight.
 type Sample struct {
-	Value  float64
-	Weight float64
-	AgeSec int64
-	Count  uint32
+	Value        float64
+	Weight       float64
+	AgeSec       int64
+	Count        uint32
+	RawCount     uint32
+	RawWeight    float64
+	CappedCount  uint32
+	CappedWeight float64
+	CapLimited   bool
 }
 
 type bandCounts struct {
@@ -173,12 +319,22 @@ func (s *Store) sample(key uint64, halfLife int, now time.Time) Sample {
 	sh := &s.shards[key%uint64(len(s.shards))]
 	sh.mu.RLock()
 	b := sh.buckets[key]
-	sh.mu.RUnlock()
 	if b == nil {
+		sh.mu.RUnlock()
 		return Sample{}
 	}
+	snap := bucket{
+		sumPower:       b.sumPower,
+		weight:         b.weight,
+		count:          b.count,
+		lastUpdate:     b.lastUpdate,
+		cappedSumPower: b.cappedSumPower,
+		cappedWeight:   b.cappedWeight,
+		cappedCount:    b.cappedCount,
+	}
+	sh.mu.RUnlock()
 	nowSec := now.Unix()
-	age := nowSec - b.lastUpdate
+	age := nowSec - snap.lastUpdate
 	if age < 0 {
 		age = 0
 	}
@@ -187,20 +343,63 @@ func (s *Store) sample(key uint64, halfLife int, now time.Time) Sample {
 		return Sample{}
 	}
 	decay := decayFactor(age, halfLife)
-	decayedWeight := b.weight * decay
-	if decayedWeight <= 0 {
+	rawWeight := snap.weight * decay
+	if rawWeight <= 0 {
 		return Sample{}
 	}
-	decayedSumPower := b.sumPower * decay
-	if decayedSumPower <= 0 {
+	rawSumPower := snap.sumPower * decay
+	if rawSumPower <= 0 {
 		return Sample{}
+	}
+	cappedWeight := rawWeight
+	cappedSumPower := rawSumPower
+	cappedCount := snap.count
+	capLimited := false
+	if s.cfg.ReceiverContributionMode != ReceiverContributionOff {
+		cappedWeight = snap.cappedWeight * decay
+		cappedSumPower = snap.cappedSumPower * decay
+		if cappedWeight <= 0 || cappedSumPower <= 0 {
+			cappedWeight = 0
+			cappedSumPower = 0
+		}
+		cappedCount = snap.cappedCount
+		capLimited = receiverCapLimited(snap.count, cappedCount, rawWeight, cappedWeight)
+	}
+	activeWeight := rawWeight
+	activeSumPower := rawSumPower
+	activeCount := snap.count
+	if s.cfg.ReceiverContributionMode == ReceiverContributionEnforce {
+		activeWeight = cappedWeight
+		activeSumPower = cappedSumPower
+		activeCount = cappedCount
+	}
+	if activeWeight <= 0 || activeSumPower <= 0 {
+		return Sample{
+			AgeSec:       age,
+			Count:        activeCount,
+			RawCount:     snap.count,
+			RawWeight:    rawWeight,
+			CappedCount:  cappedCount,
+			CappedWeight: cappedWeight,
+			CapLimited:   capLimited,
+		}
 	}
 	return Sample{
-		Value:  decayedSumPower / decayedWeight,
-		Weight: decayedWeight,
-		AgeSec: age,
-		Count:  b.count,
+		Value:        activeSumPower / activeWeight,
+		Weight:       activeWeight,
+		AgeSec:       age,
+		Count:        activeCount,
+		RawCount:     snap.count,
+		RawWeight:    rawWeight,
+		CappedCount:  cappedCount,
+		CappedWeight: cappedWeight,
+		CapLimited:   capLimited,
 	}
+}
+
+func receiverCapLimited(rawCount uint32, cappedCount uint32, rawWeight float64, cappedWeight float64) bool {
+	const epsilon = 1e-9
+	return rawCount > cappedCount || rawWeight > cappedWeight+epsilon
 }
 
 // PurgeStale removes buckets older than stale-after.

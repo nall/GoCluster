@@ -63,11 +63,32 @@ Each bucket stores:
 - accumulated power
 - accumulated weight
 - raw observation count
+- capped receiver-attributed power, weight, and observation count
+- fixed receiver contribution slots
 - last update time
 
 Updates apply exponential decay using the band's half-life before adding the new sample.
 The observation count is not decayed; it is a bounded diagnostic count of how
 many reports contributed to the selected bucket evidence.
+
+Receiver contribution caps are bucket-owned and bounded by the bucket itself:
+fine buckets track up to `receiver_fine_slots` identities and coarse buckets
+track up to `receiver_coarse_slots` identities. The shipped values are `4` and
+`8`. One receiver can add at most `receiver_max_effective_count: 5` accepted
+reports and `receiver_max_effective_weight: 5.0` accepted weight to a bucket's
+capped trust evidence. When the slot set is full, the weakest/oldest slot is
+reused; this is an approximation, not an unbounded exact unique-receiver set.
+
+`receiver_contribution_mode` controls how capped evidence is used:
+
+- `shadow`: keep existing raw-count glyph/filter behavior, but expose whether
+  capped evidence would have blocked the prediction.
+- `enforce`: use capped count and capped weight for the count/weight gates.
+- `off`: disable capped tracking and use raw evidence only.
+
+Five-minute path prediction logs split insufficient outcomes into `no_sample`,
+`low_count`, `low_weight`, and `stale`. `low_count` maps to
+`InsufficientLowCount`; `low_weight` maps to `InsufficientLowWeight`.
 
 The shipped config currently uses:
 
@@ -75,6 +96,11 @@ The shipped config currently uses:
 - `stale_after_half_life_multiplier: 3`
 - `stale_after_seconds: 1800` as the fallback purge window
 - `max_prediction_age_half_life_multiplier: 1.25` as a display/filter freshness gate
+- `receiver_contribution_mode: shadow`
+- `receiver_fine_slots: 4`
+- `receiver_coarse_slots: 8`
+- `receiver_max_effective_count: 5`
+- `receiver_max_effective_weight: 5.0`
 
 ## Sample Selection And Merge
 
@@ -116,6 +142,8 @@ If only one direction exists, the predictor still uses it, but discounts the eff
 Telnet users can set a stricter personal observation floor with
 `SET PATHSAMPLES <count>`. That setting is applied as
 `max(min_observation_count, user setting)` and cannot lower the cluster default.
+In `shadow` mode this floor still uses the raw selected observation count; in
+`enforce` mode it uses the capped selected observation count.
 
 Noise is applied only to the DX-to-user side in the power domain. The shipped
 table uses P.372-17-informed operational receive penalties: low bands retain

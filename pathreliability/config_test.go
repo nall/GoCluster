@@ -153,6 +153,22 @@ func TestDefaultMinObservationCount(t *testing.T) {
 	}
 }
 
+func TestDefaultReceiverContributionCaps(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.ReceiverContributionMode != ReceiverContributionShadow {
+		t.Fatalf("default receiver contribution mode = %q, want %q", cfg.ReceiverContributionMode, ReceiverContributionShadow)
+	}
+	if cfg.ReceiverFineSlots != 4 || cfg.ReceiverCoarseSlots != 8 {
+		t.Fatalf("default receiver slots fine=%d coarse=%d, want fine=4 coarse=8", cfg.ReceiverFineSlots, cfg.ReceiverCoarseSlots)
+	}
+	if cfg.ReceiverMaxEffectiveCount != 5 {
+		t.Fatalf("default receiver max effective count = %d, want 5", cfg.ReceiverMaxEffectiveCount)
+	}
+	if cfg.ReceiverMaxEffectiveWeight != 5 {
+		t.Fatalf("default receiver max effective weight = %v, want 5", cfg.ReceiverMaxEffectiveWeight)
+	}
+}
+
 func TestLoadFileRejectsNegativeMaxPredictionAgeMultiplier(t *testing.T) {
 	path := writeTempConfigOverlay(t, `
 max_prediction_age_half_life_multiplier: -1
@@ -176,6 +192,45 @@ min_observation_count: 0
 	}
 	if !strings.Contains(err.Error(), "min_observation_count") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileRejectsInvalidReceiverContributionMode(t *testing.T) {
+	path := writeTempConfigOverlay(t, `
+receiver_contribution_mode: maybe
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("expected invalid receiver contribution mode to fail")
+	}
+	if !strings.Contains(err.Error(), "receiver_contribution_mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadFileRejectsInvalidReceiverContributionCaps(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "fine slots zero", body: "receiver_fine_slots: 0\n", want: "receiver_fine_slots"},
+		{name: "fine slots too large", body: "receiver_fine_slots: 5\n", want: "receiver_fine_slots"},
+		{name: "coarse slots zero", body: "receiver_coarse_slots: 0\n", want: "receiver_coarse_slots"},
+		{name: "coarse slots too large", body: "receiver_coarse_slots: 9\n", want: "receiver_coarse_slots"},
+		{name: "max count zero", body: "receiver_max_effective_count: 0\n", want: "receiver_max_effective_count"},
+		{name: "max weight zero", body: "receiver_max_effective_weight: 0\n", want: "receiver_max_effective_weight"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadFile(writeTempConfigOverlay(t, tc.body))
+			if err == nil {
+				t.Fatalf("expected invalid %s to fail", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error to mention %s, got %v", tc.want, err)
+			}
+		})
 	}
 }
 
@@ -213,6 +268,11 @@ func TestLoadFileRejectsMissingRequiredYAMLSettings(t *testing.T) {
 		{name: "enabled", path: []string{"enabled"}, want: "enabled"},
 		{name: "display enabled", path: []string{"display_enabled"}, want: "display_enabled"},
 		{name: "min observation count", path: []string{"min_observation_count"}, want: "min_observation_count"},
+		{name: "receiver contribution mode", path: []string{"receiver_contribution_mode"}, want: "receiver_contribution_mode"},
+		{name: "receiver fine slots", path: []string{"receiver_fine_slots"}, want: "receiver_fine_slots"},
+		{name: "receiver coarse slots", path: []string{"receiver_coarse_slots"}, want: "receiver_coarse_slots"},
+		{name: "receiver max effective count", path: []string{"receiver_max_effective_count"}, want: "receiver_max_effective_count"},
+		{name: "receiver max effective weight", path: []string{"receiver_max_effective_weight"}, want: "receiver_max_effective_weight"},
 		{name: "ft4 offset", path: []string{"mode_offsets", "ft4"}, want: "mode_offsets.ft4"},
 	}
 	for _, tc := range cases {

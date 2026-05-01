@@ -102,8 +102,8 @@ func thresholdsForModePower(mode string, cfg Config) GlyphThresholdsPower {
 // fine wins outright to preserve local detail.
 func SelectSample(fine Sample, coarse Sample, minFineWeight float64, fineOnlyWeight float64) Sample {
 	coarseCandidate := coarse
-	hasFine := fine.Weight > 0
-	hasCoarse := coarseCandidate.Weight > 0
+	hasFine := sampleHasEvidence(fine)
+	hasCoarse := sampleHasEvidence(coarseCandidate)
 	switch {
 	case hasFine && !hasCoarse:
 		return fine
@@ -123,10 +123,15 @@ func SelectSample(fine Sample, coarse Sample, minFineWeight float64, fineOnlyWei
 		return Sample{}
 	}
 	return Sample{
-		Value:  (fine.Value*fine.Weight + coarseCandidate.Value*coarseCandidate.Weight) / sum,
-		Weight: sum,
-		AgeSec: weightedSampleAge(fine, coarseCandidate),
-		Count:  maxCount(fine.Count, coarseCandidate.Count),
+		Value:        (fine.Value*fine.Weight + coarseCandidate.Value*coarseCandidate.Weight) / sum,
+		Weight:       sum,
+		AgeSec:       weightedSampleAge(fine, coarseCandidate),
+		Count:        maxCount(fine.Count, coarseCandidate.Count),
+		RawCount:     maxCount(fine.RawCount, coarseCandidate.RawCount),
+		RawWeight:    fine.RawWeight + coarseCandidate.RawWeight,
+		CappedCount:  maxCount(fine.CappedCount, coarseCandidate.CappedCount),
+		CappedWeight: fine.CappedWeight + coarseCandidate.CappedWeight,
+		CapLimited:   fine.CapLimited || coarseCandidate.CapLimited,
 	}
 }
 

@@ -149,8 +149,9 @@ func TestFormatSpotForClientPathDiagCommentIncludesCount(t *testing.T) {
 	dxCell := pathreliability.EncodeCell("FN32")
 	userCoarse := pathreliability.EncodeCoarseCell("FN31")
 	dxCoarse := pathreliability.EncodeCoarseCell("FN32")
-	predictor.Update(pathreliability.BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -12, 1, now.Add(-10*time.Second), false)
-	predictor.Update(pathreliability.BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -12, 1, now.Add(-5*time.Second), false)
+	receiver := pathreliability.ReceiverIdentityHash("W1AW")
+	predictor.UpdateWithReceiverHash(pathreliability.BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -12, 1, now.Add(-10*time.Second), false, receiver)
+	predictor.UpdateWithReceiverHash(pathreliability.BucketCombined, userCell, dxCell, userCoarse, dxCoarse, "20m", -12, 1, now.Add(-5*time.Second), false, receiver)
 
 	sp := spot.NewSpot("K1ABC", "W1AW", 14074.0, "FT8")
 	sp.Time = now
@@ -173,6 +174,26 @@ func TestFormatSpotForClientPathDiagCommentIncludesCount(t *testing.T) {
 func TestDiagPathInsufficientLowCountReason(t *testing.T) {
 	if got := diagPathInsufficientReason(pathreliability.InsufficientLowCount); got != "lown" {
 		t.Fatalf("expected low-count path diagnostic reason lown, got %q", got)
+	}
+}
+
+func TestDiagPathTagShowsCappedAndRawCountsWhenLimited(t *testing.T) {
+	prediction := pathPrediction{
+		result: pathreliability.Result{
+			Source:        pathreliability.SourceCombined,
+			Weight:        19,
+			Count:         19,
+			RawCount:      19,
+			CappedCount:   5,
+			CappedWeight:  5,
+			AgeSec:        12,
+			CapLimited:    true,
+			CapWouldBlock: true,
+		},
+	}
+	got := diagPathTag(prediction, true)
+	if got != "n5/r19|w5|a12" {
+		t.Fatalf("unexpected capped path diagnostic: %q", got)
 	}
 }
 

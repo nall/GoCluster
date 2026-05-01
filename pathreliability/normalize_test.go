@@ -68,22 +68,22 @@ func TestMergeSamplesWeighted(t *testing.T) {
 	cfg := DefaultConfig()
 	receive := Sample{Value: cfg.powerFromDB(-10), Weight: 10, Count: 3}
 	transmit := Sample{Value: cfg.powerFromDB(-5), Weight: 4, Count: 2}
-	mergedPower, mergedWeight, mergedAge, mergedCount, ok := mergeSamples(receive, transmit, cfg, 0)
+	merged, ok := mergeSamples(receive, transmit, cfg, 0)
 	if !ok {
 		t.Fatalf("expected merge ok")
 	}
-	if mergedWeight <= 0 {
+	if merged.Weight <= 0 {
 		t.Fatalf("expected positive merged weight")
 	}
-	mergedDB := powerToDB(mergedPower)
+	mergedDB := powerToDB(merged.Value)
 	if mergedDB >= -7 || mergedDB <= -11 {
 		t.Fatalf("unexpected merged dB: %v", mergedDB)
 	}
-	if mergedAge != 0 {
-		t.Fatalf("expected merged age 0, got %d", mergedAge)
+	if merged.AgeSec != 0 {
+		t.Fatalf("expected merged age 0, got %d", merged.AgeSec)
 	}
-	if mergedCount != 5 {
-		t.Fatalf("expected merged count 5, got %d", mergedCount)
+	if merged.Count != 5 {
+		t.Fatalf("expected merged count 5, got %d", merged.Count)
 	}
 }
 

@@ -100,14 +100,17 @@ type classificationThreshold struct {
 }
 
 type predictionHour struct {
-	Hour            string  `json:"hour"`
-	Samples         int     `json:"samples"`
-	AvgTotal        float64 `json:"avg_total"`
-	AvgCombined     float64 `json:"avg_combined"`
-	AvgInsufficient float64 `json:"avg_insufficient"`
-	AvgNoSample     float64 `json:"avg_no_sample"`
-	AvgLowWeight    float64 `json:"avg_low_weight"`
-	AvgStale        float64 `json:"avg_stale"`
+	Hour             string  `json:"hour"`
+	Samples          int     `json:"samples"`
+	AvgTotal         float64 `json:"avg_total"`
+	AvgCombined      float64 `json:"avg_combined"`
+	AvgInsufficient  float64 `json:"avg_insufficient"`
+	AvgNoSample      float64 `json:"avg_no_sample"`
+	AvgLowCount      float64 `json:"avg_low_count"`
+	AvgLowWeight     float64 `json:"avg_low_weight"`
+	AvgStale         float64 `json:"avg_stale"`
+	AvgCapLimited    float64 `json:"avg_cap_limited"`
+	AvgCapWouldBlock float64 `json:"avg_cap_would_block"`
 }
 
 type sourceMixHour struct {
@@ -146,6 +149,12 @@ type modelContext struct {
 	MaxPredictionAgeHalfLifeMultiplier float64                       `json:"max_prediction_age_half_life_multiplier"`
 	MaxPredictionAgeByBand             map[string]int                `json:"max_prediction_age_by_band_seconds"`
 	MinEffectiveWeight                 float64                       `json:"min_effective_weight"`
+	MinObservationCount                int                           `json:"min_observation_count"`
+	ReceiverContributionMode           string                        `json:"receiver_contribution_mode"`
+	ReceiverFineSlots                  int                           `json:"receiver_fine_slots"`
+	ReceiverCoarseSlots                int                           `json:"receiver_coarse_slots"`
+	ReceiverMaxEffectiveCount          uint32                        `json:"receiver_max_effective_count"`
+	ReceiverMaxEffectiveWeight         float64                       `json:"receiver_max_effective_weight"`
 	MinFineWeight                      float64                       `json:"min_fine_weight"`
 	ReverseHintDiscount                float64                       `json:"reverse_hint_discount"`
 	MergeReceiveWeight                 float64                       `json:"merge_receive_weight"`
@@ -178,12 +187,15 @@ type weightBins struct {
 }
 
 type predTotals struct {
-	Total        int
-	Combined     int
-	Insufficient int
-	NoSample     int
-	LowWeight    int
-	Stale        int
+	Total         int
+	Combined      int
+	Insufficient  int
+	NoSample      int
+	LowCount      int
+	LowWeight     int
+	Stale         int
+	CapLimited    int
+	CapWouldBlock int
 }
 
 var (
@@ -198,7 +210,7 @@ var (
 	ansiRe        = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	bandBuckets   = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)\s+f=([\d,]+)\s+c=([\d,]+)`)
 	bandWeights   = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)\s+t=([\d,]+)\s+<1=([\d,]+)\s+1-2=([\d,]+)\s+2-3=([\d,]+)\s+3-5=([\d,]+)\s+5-10=([\d,]+)\s+>=10=([\d,]+)`)
-	predsFields   = regexp.MustCompile(`\b(total|derived|combined|insufficient|no_sample|low_weight|stale)=([\d,]+)`)
+	predsFields   = regexp.MustCompile(`\b(total|derived|combined|insufficient|no_sample|low_count|low_weight|stale|cap_limited|cap_would_block)=([\d,]+)`)
 	sourceFields  = regexp.MustCompile(`([A-Za-z\-]+)=([\d,]+)`)
 	hourField     = regexp.MustCompile(`hour=(\d{2})`)
 	bandCounts    = regexp.MustCompile(`(\d+\.?\d*cm|\d+m)=([\d,]+)`)
@@ -278,12 +290,15 @@ func parsePredictionTotals(line string) (predTotals, bool) {
 		}
 	}
 	return predTotals{
-		Total:        values["total"],
-		Combined:     values["combined"],
-		Insufficient: values["insufficient"],
-		NoSample:     values["no_sample"],
-		LowWeight:    values["low_weight"],
-		Stale:        values["stale"],
+		Total:         values["total"],
+		Combined:      values["combined"],
+		Insufficient:  values["insufficient"],
+		NoSample:      values["no_sample"],
+		LowCount:      values["low_count"],
+		LowWeight:     values["low_weight"],
+		Stale:         values["stale"],
+		CapLimited:    values["cap_limited"],
+		CapWouldBlock: values["cap_would_block"],
 	}, true
 }
 
@@ -519,6 +534,12 @@ func buildModelContext(cfg pathreliability.Config, bands []string) modelContext 
 		MaxPredictionAgeHalfLifeMultiplier: cfg.MaxPredictionAgeHalfLifeMultiplier,
 		MaxPredictionAgeByBand:             maxAgeByBand,
 		MinEffectiveWeight:                 cfg.MinEffectiveWeight,
+		MinObservationCount:                cfg.MinObservationCount,
+		ReceiverContributionMode:           cfg.ReceiverContributionMode,
+		ReceiverFineSlots:                  cfg.ReceiverFineSlots,
+		ReceiverCoarseSlots:                cfg.ReceiverCoarseSlots,
+		ReceiverMaxEffectiveCount:          cfg.ReceiverMaxEffectiveCount,
+		ReceiverMaxEffectiveWeight:         cfg.ReceiverMaxEffectiveWeight,
 		MinFineWeight:                      cfg.MinFineWeight,
 		ReverseHintDiscount:                cfg.ReverseHintDiscount,
 		MergeReceiveWeight:                 cfg.MergeReceiveWeight,
@@ -906,25 +927,31 @@ func Generate(ctx context.Context, opts Options) (Result, error) {
 		if len(rows) == 0 {
 			continue
 		}
-		var total, combined, insufficient, noSample, lowWeight, stale int
+		var total, combined, insufficient, noSample, lowCount, lowWeight, stale, capLimited, capWouldBlock int
 		for _, r := range rows {
 			total += r.Total
 			combined += r.Combined
 			insufficient += r.Insufficient
 			noSample += r.NoSample
+			lowCount += r.LowCount
 			lowWeight += r.LowWeight
 			stale += r.Stale
+			capLimited += r.CapLimited
+			capWouldBlock += r.CapWouldBlock
 		}
 		count := len(rows)
 		predSummary = append(predSummary, predictionHour{
-			Hour:            fmt.Sprintf("%02d:00", h),
-			Samples:         count,
-			AvgTotal:        float64(total) / float64(count),
-			AvgCombined:     float64(combined) / float64(count),
-			AvgInsufficient: float64(insufficient) / float64(count),
-			AvgNoSample:     float64(noSample) / float64(count),
-			AvgLowWeight:    float64(lowWeight) / float64(count),
-			AvgStale:        float64(stale) / float64(count),
+			Hour:             fmt.Sprintf("%02d:00", h),
+			Samples:          count,
+			AvgTotal:         float64(total) / float64(count),
+			AvgCombined:      float64(combined) / float64(count),
+			AvgInsufficient:  float64(insufficient) / float64(count),
+			AvgNoSample:      float64(noSample) / float64(count),
+			AvgLowCount:      float64(lowCount) / float64(count),
+			AvgLowWeight:     float64(lowWeight) / float64(count),
+			AvgStale:         float64(stale) / float64(count),
+			AvgCapLimited:    float64(capLimited) / float64(count),
+			AvgCapWouldBlock: float64(capWouldBlock) / float64(count),
 		})
 	}
 
@@ -1098,8 +1125,10 @@ func writeModelContext(b *strings.Builder, ctx modelContext, bands []bandSummary
 	}
 	fmt.Fprintf(b, "Clamp: %.1f to %.1f dB. Default half-life: %ds. Stale after: %ds or %.2fx half-life per band.\n",
 		ctx.ClampMin, ctx.ClampMax, ctx.DefaultHalfLifeSec, ctx.StaleAfterSeconds, ctx.StaleAfterHalfLifeMultiplier)
-	fmt.Fprintf(b, "Min effective weight: %.2f. Min fine weight: %.2f. Reverse hint discount: %.2f.\n",
-		ctx.MinEffectiveWeight, ctx.MinFineWeight, ctx.ReverseHintDiscount)
+	fmt.Fprintf(b, "Min effective weight: %.2f. Min observations: %d. Min fine weight: %.2f. Reverse hint discount: %.2f.\n",
+		ctx.MinEffectiveWeight, ctx.MinObservationCount, ctx.MinFineWeight, ctx.ReverseHintDiscount)
+	fmt.Fprintf(b, "Receiver contribution caps: mode=%s fine_slots=%d coarse_slots=%d max_count=%d max_weight=%.2f.\n",
+		ctx.ReceiverContributionMode, ctx.ReceiverFineSlots, ctx.ReceiverCoarseSlots, ctx.ReceiverMaxEffectiveCount, ctx.ReceiverMaxEffectiveWeight)
 	fmt.Fprintf(b, "Merge weights: receive %.2f / transmit %.2f.\n", ctx.MergeReceiveWeight, ctx.MergeTransmitWeight)
 	if ctx.MaxPredictionAgeHalfLifeMultiplier > 0 {
 		fmt.Fprintf(b, "Prediction freshness gate: %.2fx half-life; older selected evidence is treated as insufficient.\n", ctx.MaxPredictionAgeHalfLifeMultiplier)
@@ -1345,7 +1374,10 @@ func predictionActivitySummary(hours []predictionHour) string {
 	minTotal := hours[0].AvgTotal
 	var maxHour, minHour string
 	var lowSample []string
+	var lowCountSample []string
+	var lowWeightSample []string
 	var staleSample []string
+	var capWouldBlockSample []string
 	for _, h := range hours {
 		if h.AvgTotal > maxTotal {
 			maxTotal = h.AvgTotal
@@ -1358,8 +1390,17 @@ func predictionActivitySummary(hours []predictionHour) string {
 		if h.AvgInsufficient >= h.AvgCombined {
 			lowSample = append(lowSample, h.Hour)
 		}
+		if h.AvgLowCount > h.AvgLowWeight && h.AvgLowCount > 0 {
+			lowCountSample = append(lowCountSample, h.Hour)
+		}
+		if h.AvgLowWeight > h.AvgLowCount && h.AvgLowWeight > 0 {
+			lowWeightSample = append(lowWeightSample, h.Hour)
+		}
 		if h.AvgStale > 0 {
 			staleSample = append(staleSample, h.Hour)
+		}
+		if h.AvgCapWouldBlock > 0 {
+			capWouldBlockSample = append(capWouldBlockSample, h.Hour)
 		}
 	}
 	s := fmt.Sprintf("Peak prediction volume occurs around %s (avg_total %.1f), with the lowest activity around %s (avg_total %.1f).",
@@ -1367,8 +1408,17 @@ func predictionActivitySummary(hours []predictionHour) string {
 	if len(lowSample) > 0 {
 		s += fmt.Sprintf(" Hours dominated by insufficient samples: %s.", strings.Join(lowSample, ", "))
 	}
+	if len(lowCountSample) > 0 {
+		s += fmt.Sprintf(" Hours mostly count-limited: %s.", strings.Join(lowCountSample, ", "))
+	}
+	if len(lowWeightSample) > 0 {
+		s += fmt.Sprintf(" Hours mostly weight-limited: %s.", strings.Join(lowWeightSample, ", "))
+	}
 	if len(staleSample) > 0 {
 		s += fmt.Sprintf(" Hours with stale selected evidence: %s.", strings.Join(staleSample, ", "))
+	}
+	if len(capWouldBlockSample) > 0 {
+		s += fmt.Sprintf(" Hours where receiver caps would block shadow predictions: %s.", strings.Join(capWouldBlockSample, ", "))
 	}
 	return s
 }

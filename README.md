@@ -493,6 +493,10 @@ Example readings:
 - `n0|none`: no usable selected path sample.
 - `n3|lown`: three selected observations existed, but the configured minimum
   sample size was not met.
+- `n5/r19|lown`: capped receiver evidence had five accepted observations from
+  nineteen raw observations, and the capped count would not meet the floor.
+- `n5/r19|w3`: capped receiver evidence is shown first, with raw count after
+  `/r`, when receiver caps reduced the diagnostic evidence.
 - `n1|loww`: one selected observation existed, but the effective weight was
   below the minimum.
 - `n32|w1`: large raw sample count but low rounded effective weight. Treat this
@@ -533,6 +537,14 @@ Important operational notes:
   DEFAULT` clears that personal override.
 - Stale evidence becomes `INSUFFICIENT`; age alone does not demote a strong
   path through weaker glyph tiers.
+- Receiver contribution caps are shipped in `shadow` mode. Normal glyphs still
+  use raw selected evidence, while `SET DIAG PATH` and five-minute logs expose
+  where capped receiver evidence would be stricter. Operators can switch to
+  enforcement in `path_reliability.yaml`.
+- Five-minute `Path predictions (5m)` logs split insufficient evidence into
+  `no_sample`, `low_count`, `low_weight`, and `stale`; `low_count` means the
+  selected sample count missed the observation floor, while `low_weight` means
+  decayed effective weight missed the weight floor.
 - If grids are missing, evidence is stale, too sparse, too weak, or the H3 tables are unavailable, the result stays `INSUFFICIENT`.
 - `PATH` filters work on the class names, not on the glyph characters.
 - `R` and `G` are solar-weather display overrides, not normal path classes.

@@ -1122,7 +1122,7 @@ func processPSKRPathOnlySpots(client *pskreporter.Client, predictor *pathreliabi
 			pathReport.Observe(s, spotTime)
 		}
 		// Spot SNR reflects DX -> DE (spotter is the receiver).
-		predictor.Update(bucket, deCell, dxCell, deCoarse, dxCoarse, band, ft8, 1.0, spotTime, s.IsBeacon)
+		predictor.UpdateWithReceiverHash(bucket, deCell, dxCell, deCoarse, dxCoarse, band, ft8, 1.0, spotTime, s.IsBeacon, pathReceiverHash(s))
 		if stats != nil {
 			stats.updates.Add(1)
 		}
@@ -1494,14 +1494,17 @@ func startPathPredictionLogger(ctx context.Context, logMux *logFanout, srv *teln
 				stats := srv.PathPredictionStatsSnapshot()
 				if stats.Total > 0 {
 					fileOnly(fmt.Sprintf(
-						"Path predictions (5m): total=%s derived=%s combined=%s insufficient=%s no_sample=%s low_weight=%s stale=%s override_r=%s override_g=%s",
+						"Path predictions (5m): total=%s derived=%s combined=%s insufficient=%s no_sample=%s low_count=%s low_weight=%s stale=%s cap_limited=%s cap_would_block=%s override_r=%s override_g=%s",
 						humanize.Comma(int64(stats.Total)),
 						humanize.Comma(int64(stats.Derived)),
 						humanize.Comma(int64(stats.Combined)),
 						humanize.Comma(int64(stats.Insufficient)),
 						humanize.Comma(int64(stats.NoSample)),
+						humanize.Comma(int64(stats.LowCount)),
 						humanize.Comma(int64(stats.LowWeight)),
 						humanize.Comma(int64(stats.Stale)),
+						humanize.Comma(int64(stats.CapLimited)),
+						humanize.Comma(int64(stats.CapWouldBlock)),
 						humanize.Comma(int64(stats.OverrideR)),
 						humanize.Comma(int64(stats.OverrideG)),
 					))
