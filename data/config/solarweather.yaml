@@ -1,3 +1,8 @@
+# Ownership: mixed operator policy and algorithm calibration.
+# Enablement, fetch cadence, feed URLs, and override glyphs are operator policy.
+# Daylight, high-latitude, R/G level, hysteresis, cache, and numerical tolerance
+# values are algorithm calibration and should not be changed casually.
+
 # Solar/geomagnetic override configuration
 #
 # Purpose: allow a single path glyph to be overridden by an R (radio blackout) or

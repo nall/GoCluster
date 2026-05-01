@@ -1,5 +1,8 @@
 # Seeded digital frequency hints for mode inference.
 #
+# Ownership: reference table / algorithm calibration; frequency-only inference
+# is a fallback hint, not proof of a spot's mode.
+#
 # These seeds are used only after explicit mode tokens and recent trusted
 # DX+frequency evidence fail to identify a mode. They help classify common
 # FT4/FT8/JS8 dial frequencies before enough live evidence is learned.

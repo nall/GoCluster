@@ -88,6 +88,14 @@ With the current shipped defaults:
 
 The runtime can corroborate across PSKReporter and RBN-digital if the burst key matches and the spotter calls differ.
 
+## Config Boundary
+
+The FT `p_min_unique_spotters`, `v_min_unique_spotters`, quiet-gap seconds, and
+hard-cap seconds are explicit operator policy knobs. Resolver mutation gates,
+distance models, Bayesian rails, family policy, stabilizer/temporal policy, and
+custom SCP admission are algorithm calibration; change them only with
+replay/validation and decision-memory handling.
+
 ### Special operator path
 
 Local non-test `DX` self-spots are treated as operator-authoritative in the live runtime pipeline:

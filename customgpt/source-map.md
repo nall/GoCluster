@@ -10,6 +10,7 @@ linking or citing these docs over duplicating their content here.
 | Windows run steps | `docs/OPERATOR_GUIDE.md` | `README.md` |
 | Linux build and service steps | `docs/OPERATOR_GUIDE.md` | `README.md` |
 | Real-node configuration | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
+| YAML ownership boundaries | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md`, package READMEs |
 | Config loader behavior | `data/config/README.md` | `config/` tests |
 | Secrets and private config safety | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
 | System, dropped-call, and file-only event logs | `data/config/README.md` | `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
@@ -51,6 +52,8 @@ linking or citing these docs over duplicating their content here.
   implementation advice.
 - For config-sensitive answers, route to `data/config/README.md` and tell the
   user to check their effective YAML.
+- For YAML tuning questions, check the ownership class first. Do not recommend
+  changing algorithm calibration as a first troubleshooting step.
 - For logging questions, distinguish system logs, optional dropped-call logs,
   and file-only event logs. The event logs for login attempts, reputation
   drops, telnet lifecycle, ingest lifecycle, and peer lifecycle do not add

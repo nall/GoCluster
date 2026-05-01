@@ -1,4 +1,7 @@
 # Final region-aware frequency classification used only after:
+# Ownership: reference table / algorithm calibration; frequency-only inference
+# is a final fallback policy, not proof of a spot's mode.
+#
 #   1. explicit mode on the spot,
 #   2. recent trusted DX+frequency-bucket evidence,
 #   3. learned/seeded digital-frequency inference.

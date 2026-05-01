@@ -30,7 +30,7 @@ with `DXC_CONFIG_PATH` pointing at the directory:
 $env:DXC_CONFIG_PATH = "data/config.local"
 ```
 
-Minimum files to review before running a real node:
+Review normal deployment/runtime files before first run:
 
 - `app.yaml`: set `server.node_id`, choose local UI mode, and confirm log paths.
 - `runtime.yaml`: confirm telnet port, filter defaults, buffers, and memory controls.
@@ -40,6 +40,11 @@ Minimum files to review before running a real node:
 - `solarweather.yaml`: edit only if solar/geomagnetic path overrides are enabled.
 - `data.yaml`: adjust CTY, FCC, H3, skew, and data paths if your deployment layout differs.
 - `spot_taxonomy.yaml`: edit only when changing supported modes, event families, or PSKReporter mode routing.
+
+Do not retune `pipeline.yaml`, path thresholds, solar override gates, or
+mode-inference calibration as normal setup. Use
+[`data/config/README.md`](data/config/README.md) for the ownership class before
+editing a YAML file.
 
 The loader expects a complete config directory, rejects unknown YAML files and
 unknown keys, and fails fast when required YAML-owned settings or reference
@@ -430,6 +435,9 @@ With the shipped defaults:
 Local non-test `DX` self-spots are treated as operator-authoritative and are forced to `V`.
 
 For the exact FT timing knobs, burst rules, and decision history, see [`spot/README.md`](spot/README.md).
+The FT corroboration counts and timing knobs are explicit operator policy.
+Resolver gates, distance models, Bayesian rails, and correction-family policy
+are algorithm calibration and should be changed only with replay/validation.
 
 ## Diagnostic Comments
 
@@ -504,7 +512,11 @@ Example readings:
 
 ## Path Reliability Tags
 
-Path reliability is an optional telnet hint based on your grid, the DX grid, recent reports, and the shipped tuning in [`data/config/path_reliability.yaml`](data/config/path_reliability.yaml).
+Path reliability is an optional telnet hint based on your grid, the DX grid,
+recent reports, and the active settings in
+[`data/config/path_reliability.yaml`](data/config/path_reliability.yaml). Some
+path settings are operator policy, but decay, merge weights, mode thresholds,
+offsets, and noise tables are algorithm calibration.
 
 At a high level, the cluster:
 

@@ -21,6 +21,7 @@ existing operator-facing docs.
 | --- | --- |
 | Understand `DXC_CONFIG_PATH` | `data/config/README.md` |
 | Know which YAML file owns a setting | `data/config/README.md` |
+| Know whether a YAML setting is operator policy or algorithm calibration | `data/config/README.md` |
 | Fix unknown file/key startup errors | `data/config/README.md` |
 | Keep secrets out of public config | `data/config/README.md`, `docs/OPERATOR_GUIDE.md` |
 | Change supported modes or events | `data/config/README.md`, `README.md` |

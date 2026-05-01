@@ -205,6 +205,15 @@ Runtime path reliability settings are owned by [`../data/config/path_reliability
 
 `DefaultConfig()` remains a package-local test/helper baseline for constructing in-memory fixtures. It is not a runtime fallback, and production behavior should be documented from YAML.
 
+## Config Boundary
+
+`enabled`, `display_enabled`, `glyph_symbols`, `allowed_bands`,
+`min_observation_count`, and `receiver_contribution_mode` are operator policy.
+Half-lives, stale/freshness multipliers, effective weight, fine/coarse merge,
+reverse discount, mode thresholds, mode offsets, and noise tables are algorithm
+calibration; do not retune them under normal operation without validation and
+decision-memory handling.
+
 ## Solar Overrides
 
 The predictor itself returns the normal class and glyph. Optional `R` and `G` solar-weather overrides are applied later by the telnet layer.

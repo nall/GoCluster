@@ -32,7 +32,7 @@ For a real node:
 2. Edit the private copy.
 3. Start the server with `DXC_CONFIG_PATH` pointing at that directory.
 
-Review these files before real operation:
+Review normal deployment/runtime files before first run:
 
 - `app.yaml`: server node ID, console/headless mode, and logging paths.
 - `runtime.yaml`: telnet port, default filters, buffers, and memory controls.
@@ -43,6 +43,10 @@ Review these files before real operation:
 - `data.yaml`: CTY, FCC, H3, skew, and runtime data paths.
 - `spot_taxonomy.yaml`: only when changing supported modes, events, or
   PSKReporter mode routing.
+
+Do not retune `pipeline.yaml`, path thresholds, solar override gates, or
+mode-inference calibration as normal setup. Use `data/config/README.md` for the
+ownership class before editing a YAML file.
 
 Keep real callsigns, peer hosts/IPs, passwords, and service tokens out of the
 public example config and out of shared archives.

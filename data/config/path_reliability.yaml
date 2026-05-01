@@ -1,3 +1,10 @@
+# Ownership: mixed operator policy and algorithm calibration.
+# Routine operator policy is limited to enable/display behavior, allowed bands,
+# global sample-floor policy, receiver contribution mode, and glyph characters.
+# Decay, weights, thresholds, mode offsets, merge rules, and noise tables are
+# algorithm calibration. Do not retune those under normal operation without
+# validation and decision-memory handling.
+
 # Path reliability tuning
 # This feature uses a single combined FT8-equivalent dB bucket family.
 # It ingests FT8/FT4/CW/RTTY/PSK/WSPR into the same bucket set.

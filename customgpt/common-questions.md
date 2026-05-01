@@ -11,6 +11,7 @@ docs listed here instead of restating the full behavior.
 | Which release asset should I use? | `README.md`, `docs/OPERATOR_GUIDE.md` |
 | Why should I not use GitHub's source archive? | `README.md`, `download/README.md` |
 | How do I configure a real node? | `data/config/README.md`, `docs/OPERATOR_GUIDE.md` |
+| Which YAML files are normal operator knobs? | `data/config/README.md`, `docs/OPERATOR_GUIDE.md` |
 | What is `DXC_CONFIG_PATH`? | `data/config/README.md` |
 | Why does config load fail? | `customgpt/troubleshooting-index.md`, `data/config/README.md` |
 | How do I run on Windows? | `docs/OPERATOR_GUIDE.md`, `README.md` |
@@ -41,6 +42,7 @@ docs listed here instead of restating the full behavior.
 | What does `n<capped>/r<raw>` mean in `SET DIAG PATH`? | `docs/OPERATOR_GUIDE.md`, `README.md`, `pathreliability/README.md` |
 | What do `low_count` and `low_weight` mean in path prediction logs? | `docs/OPERATOR_GUIDE.md`, `README.md`, `pathreliability/README.md` |
 | How do receiver contribution caps affect path reliability? | `pathreliability/README.md`, `data/config/path_reliability.yaml`, `README.md` |
+| Should I change path or call-correction thresholds? | `data/config/README.md`, `spot/README.md`, `pathreliability/README.md`, `docs/decision-log.md` |
 | What sources feed spots into the cluster? | `README.md`, `rbn/README.md`, `pskreporter/README.md`, `dxsummit/README.md`, `peer/README.md` |
 
 ## Developer Questions

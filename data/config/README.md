@@ -6,25 +6,54 @@ tokens, or other private operational state. For a real node, copy the whole
 directory to ignored `data/config.local`, edit that private copy, and run with
 `DXC_CONFIG_PATH=data/config.local`.
 
+## YAML Ownership Classes
+
+The active config directory is both an operator contract and a behavior
+contract. Not every YAML file is the same kind of knob.
+
+| Class | Meaning | Normal operator action |
+| --- | --- | --- |
+| Deployment/runtime settings | Node identity, ports, source credentials, storage paths, logging, memory, enabled sources, and report scheduling. | Review before running a node and edit for the local deployment. |
+| Operator policy settings | Explicit cluster policy that changes what users see, such as dedupe windows, flood rails, filter defaults, supported mode/event routing, path sample floors, and logging/event retention. | Change deliberately, document the operational reason, restart when required, and validate behavior. |
+| Reference tables | Domain tables consumed at startup, such as supported taxonomy, regional mode inference, IARU region mapping, and seeded digital frequencies. | Edit only to correct or extend known domain/reference data; deploy with the matching binary/config directory. |
+| Algorithm calibration | Thresholds, weights, distance models, decay/merge rules, correction rails, and path/scoring calibration used by call correction, path reliability, mode inference, solar overrides, and similar methods. | Do not change during normal operation. Change only with field evidence, replay/validation, documentation review, and decision-memory handling. |
+
+If a setting is unclear, treat it as algorithm calibration until the owning
+README or ADR says it is a normal operator knob.
+
 Configuration is split by concern so you only edit the relevant file:
 
-- `app.yaml` - server identity, stats interval, console UI, system logging, and optional dropped-call logs.
-- `ingest.yaml` - RBN/PSKReporter/human/DXSummit ingest plus the shared call cache.
-- `dedupe.yaml` - primary/secondary dedupe policy windows.
-- `floodcontrol.yaml` - shared-ingest flood rails, actions, windows, and per-source thresholds.
-- `pipeline.yaml` - call correction, harmonics, spot policy.
-- `data.yaml` - CTY/FCC/skew sources, grid DB tuning, and H3 table path.
-- `mode_seeds.yaml` - seeded FT4/FT8/JS8 frequency hints used by digital mode inference.
-- `path_reliability.yaml` - path reliability aggregation thresholds, glyph tuning, and allowed band list.
-- `runtime.yaml` - Go runtime memory tuning, telnet server settings, WHOSPOTSME window, buffer capacity, and filter defaults.
-- `prop_report.yaml` - scheduled propagation-report generation controls.
-- `reputation.yaml` - telnet reputation gate thresholds and IPinfo/Cymru enrichment.
-- `peering.yaml` - DXSpider peer configuration (inbound/outbound, ACLs, topology cache).
-- `iaru_regions.yaml` - DXCC/ADIF to IARU region mapping used by final regional mode policy.
-- `iaru_mode_inference.yaml` - region-aware frequency classification table for final mode labeling.
-- `spot_taxonomy.yaml` - canonical supported MODE and EVENT families, parser tokens, PSKReporter routing, and mode capability flags.
-- `solarweather.yaml` - solar/geomagnetic override gating for path reliability glyphs.
-- `openai.yaml` - optional local LLM settings for propagation-report generation; this file is secret-bearing and ignored by git.
+- `app.yaml` - deployment/runtime settings for server identity, stats interval, console UI, system logging, and optional dropped-call logs.
+- `runtime.yaml` - deployment/runtime settings plus operator policy for default filters, telnet messages, dedupe defaults, and `who_spots_me.window_minutes`.
+- `ingest.yaml` - deployment/runtime settings for RBN/PSKReporter/human/DXSummit source enablement, source cadence, and call cache bounds.
+- `peering.yaml` - deployment/runtime settings for peer links and ACLs.
+- `reputation.yaml` - deployment/runtime settings plus operator policy for reputation gates.
+- `archive.yaml` - deployment/runtime settings for archive enablement, storage path, backpressure, and retention.
+- `data.yaml` - deployment/runtime settings for CTY/FCC/skew sources, grid/cache tuning, data paths, and H3 table path.
+- `prop_report.yaml` - deployment/runtime settings for scheduled propagation-report generation controls.
+- `openai.yaml` - optional secret-bearing tool config for LLM report generation.
+- `dedupe.yaml` - operator policy settings for primary/secondary dedupe windows.
+- `floodcontrol.yaml` - operator policy settings for shared-ingest flood rails, actions, windows, and per-source thresholds.
+- `spot_taxonomy.yaml` - reference table plus limited operator policy for supported modes, events, and PSKReporter routing; YAML can only select behavior families already implemented by the binary.
+- `mode_seeds.yaml` - reference table / algorithm calibration for digital frequency hints.
+- `iaru_regions.yaml` - reference table for DXCC/ADIF to IARU region mapping.
+- `iaru_mode_inference.yaml` - reference table / algorithm calibration for final regional frequency policy.
+- `pipeline.yaml` - algorithm calibration for call correction, harmonics, mode inference, and spot-quality policy; not a normal operator tuning surface.
+- `path_reliability.yaml` - operator policy for enable/display/sample-floor/receiver-cap mode, plus algorithm calibration for decay, weights, thresholds, offsets, and noise tables.
+- `solarweather.yaml` - operator policy for enable/fetch/reporting controls, plus algorithm calibration for daylight/high-latitude/level thresholds and override glyph behavior.
+
+Normal operator edits:
+- identity, ports, source credentials, source enablement, peer details, paths,
+  logs, memory controls, retention, and scheduled reports.
+
+Advanced policy edits:
+- dedupe/flood rails, supported taxonomy/routing, filter defaults, the cluster
+  `SET PATHSAMPLES` floor, and receiver cap enforcement.
+
+Algorithm calibration edits:
+- `pipeline.yaml`, most of `path_reliability.yaml`, numerical solarweather
+  gates, and mode inference reference/calibration require validation and
+  decision-memory handling before changes.
 
 Loader behavior:
 - The server defaults to this directory (`data/config`). Override with `DXC_CONFIG_PATH` to point at another complete config directory, such as ignored `data/config.local`.

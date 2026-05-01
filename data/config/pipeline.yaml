@@ -1,3 +1,10 @@
+# Ownership: algorithm calibration.
+# This file exposes call-correction, harmonics, mode-inference, and spot-policy
+# thresholds used by the spot-quality pipeline. It is YAML-owned so active
+# behavior is inspectable, but it is not a routine operator tuning surface.
+# Change values only with field evidence, replay/validation, docs review, and
+# decision-memory handling.
+
 ################################################################################
 # PIPELINE CONFIGURATION
 # Purpose: Spot-quality controls applied in the output pipeline after ingest.
