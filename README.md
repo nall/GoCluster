@@ -2,188 +2,45 @@
 
 GoCluster is a Go-based DX cluster for amateur radio operators. It collects spots from skimmer and operator feeds, adds CTY metadata, applies protection and cleanup stages, and serves fixed-width telnet output with filtering, confidence tags, and optional path hints.
 
-## Download Latest Ready-To-Run Binary
+## Start As A Telnet User
 
-Compiled ready-to-run packages are published on GitHub Releases. The current
-published binary package is Windows amd64:
-
-1. Open the latest release:
-   [`https://github.com/N2WQ/GoCluster/releases/latest`](https://github.com/N2WQ/GoCluster/releases/latest)
-2. Download the release asset named `gocluster-windows-amd64.zip`.
-3. Extract the zip and open the `ready_to_run/` directory.
-4. Start with the packaged `ready_to_run/README.md`.
-
-Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
-downloads unless you want the developer source tree. Those archives are not the
-ready-to-run package.
-
-More detail is in [`download/README.md`](download/README.md).
-
-## Configure A Real Node
-
-The checked-in [`data/config`](data/config) directory is public example config.
-For a real node, copy the whole directory to a private complete config
-directory such as ignored `data/config.local`, edit that private copy, and run
-with `DXC_CONFIG_PATH` pointing at the directory:
-
-```pwsh
-$env:DXC_CONFIG_PATH = "data/config.local"
-```
-
-Review normal deployment/runtime files before first run:
-
-- `app.yaml`: set `server.node_id`, choose local UI mode, and confirm log paths.
-- `runtime.yaml`: confirm telnet port, filter defaults, buffers, and memory controls.
-- `ingest.yaml`: configure RBN, PSKReporter, DXSummit, and local/human ingest settings.
-- `peering.yaml`: edit only if this node peers with other clusters.
-- `reputation.yaml`: edit only if IPinfo/Cymru reputation enrichment is enabled.
-- `solarweather.yaml`: edit only if solar/geomagnetic path overrides are enabled.
-- `data.yaml`: adjust CTY, FCC, H3, skew, and data paths if your deployment layout differs.
-- `spot_taxonomy.yaml`: edit only when changing supported modes, event families, or PSKReporter mode routing.
-
-Do not retune `pipeline.yaml`, path thresholds, solar override gates, or
-mode-inference calibration as normal setup. Use
-[`data/config/README.md`](data/config/README.md) for the ownership class before
-editing a YAML file.
-
-The loader expects a complete config directory, rejects unknown YAML files and
-unknown keys, and fails fast when required YAML-owned settings or reference
-tables are missing. Keep private callsigns, peer hostnames/IPs, passwords, and
-tokens out of committed example config.
-
-At minimum, replace the public placeholder identity before connecting a real
-node: change `server.node_id` in `app.yaml` from `N0CALL-1`, change the RBN
-login callsigns in `ingest.yaml` from `N0CALL-1`, and update any private
-upstream telnet `host` and login fields you enable. If peering is enabled,
-also replace peer hosts, login callsigns, and passwords in `peering.yaml`.
-
-See [`data/config/README.md`](data/config/README.md) for the full config layout.
-
-## Run And Connect
-
-From a ready-to-run Windows package:
-
-```pwsh
-cd ready_to_run
-$env:DXC_CONFIG_PATH = "data/config.local"
-.\gocluster.exe
-```
-
-From a source checkout:
-
-```pwsh
-$env:DXC_CONFIG_PATH = "data/config.local"
-go run .
-```
-
-Then connect with telnet using the configured port from
-`data/config/runtime.yaml`:
+Connect to the cluster's configured telnet host and port. For a local default
+setup, the shipped port is `8300`:
 
 ```text
 telnet localhost 8300
 ```
 
-Log in with your callsign and type `HELP`.
+Log in with your callsign, then start with:
 
-## Build From Source
+- `HELP`: show the command list.
+- `HELP <command>`: show command-specific help.
+- `SHOW MYDX` or `SHOW DX`: show recent spots after your filters.
+- `SHOW FILTER`: show your active filter state.
+- `SHOW DEDUPE`: show your repeated-spot suppression policy.
+- `SET GRID <grid>`: set your 4-6 character Maidenhead grid for distance,
+  nearby filtering, and path hints.
+- `SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL`: set local receive noise
+  class for path hints.
+- `BYE`: disconnect.
 
-GoCluster builds from the repo root with Go `1.26+`.
+The sections below prioritize the telnet experience: commands first, then
+filters, dedupe, confidence, diagnostics, and path hints. Node setup, build,
+release, and service details are later in this file and in
+[`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md).
 
-Windows amd64 binary:
+## Common Telnet Workflows
 
-```pwsh
-go test ./...
-go build -trimpath -o gocluster.exe .
-```
-
-Windows release-style package for local testing:
-
-```pwsh
-.\scripts\create-release.ps1 -PackageOnly -AllowDirty
-```
-
-Clean publishable Windows release package:
-
-```pwsh
-.\scripts\create-release.ps1
-```
-
-The release script refuses a dirty worktree, runs `go mod tidy -diff`, stages
-`ready_to_run/`, writes `gocluster-windows-amd64.zip`, creates and pushes the
-Git tag, and publishes the GitHub Release asset.
-
-Linux amd64 binary from source:
-
-```sh
-go test ./...
-GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
-```
-
-Deploy the Linux binary together with a complete config directory and required
-runtime data such as `data/cty`, `data/h3`, `data/peers/topology.db`, and
-`data/skm_correction/rbnskew.json` when those inputs are used by your config.
-There is not currently a published Linux ready-to-run release asset.
-
-## Run As A Linux Service
-
-For unattended Linux operation, use a private config directory and set
-`ui.mode: headless` in that config's `app.yaml`. The interactive local console
-requires a real terminal and is not shown by a normal `systemd` service.
-
-Prepare the install path and service account before enabling the unit:
-
-```sh
-sudo useradd -r -s /bin/false gocluster
-sudo mkdir -p /opt/gocluster
-sudo cp gocluster /opt/gocluster/
-sudo cp -R data /opt/gocluster/
-sudo chown -R gocluster:gocluster /opt/gocluster
-```
-
-Create the unit file as `/etc/systemd/system/gocluster.service`:
-
-```ini
-[Unit]
-Description=GoCluster DX Cluster
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=gocluster
-Group=gocluster
-WorkingDirectory=/opt/gocluster
-Environment=DXC_CONFIG_PATH=/opt/gocluster/data/config.local
-ExecStart=/opt/gocluster/gocluster
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Typical service commands:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now gocluster
-sudo systemctl status gocluster
-journalctl -u gocluster -f
-telnet localhost 8300
-```
-
-To inspect the interactive console on Linux, stop the service and run the
-binary manually from an interactive terminal with a UI mode such as `ansi` or
-`tview-v2` in your private `app.yaml`:
-
-```sh
-sudo systemctl stop gocluster
-cd /opt/gocluster
-DXC_CONFIG_PATH=/opt/gocluster/data/config.local ./gocluster
-```
-
-Return production service config to `ui.mode: headless` before starting it
-again under `systemd`.
+- To allow or block spots, use `PASS <type> <list>` and
+  `REJECT <type> <list>`, then confirm with `SHOW FILTER`.
+- To change how repeated spots appear, use `SET DEDUPE FAST|MED|SLOW`.
+- To focus on nearby spots, set your grid and use `PASS NEARBY ON`.
+- To investigate surprising output, use
+  `SET DIAG OFF|DEDUPE|SOURCE|CONF|PATH|MODE`.
+- To understand path hints, use `SET GRID` and `SET NOISE`, then use `SET DIAG PATH`
+  on spots whose path glyphs look surprising.
+- To see recent spotter countries for your own call, use `WHOSPOTSME [band]`.
+- To receive periodic solar summaries, use `SET SOLAR 15|30|60|OFF`.
 
 ## HELP
 
@@ -279,49 +136,6 @@ Supported bands:
   1.25m, 70cm, 33cm, 23cm, 13cm
 ```
 <!-- END DEFAULT_GO_HELP -->
-
-## What The Cluster Does
-
-- Ingests spots from RBN CW/RTTY, RBN digital, PSKReporter, optional DXSummit HTTP polling, local `DX` commands, and optional peer feeds.
-- Shows enabled ingest sources in the console dashboard; DXSummit appears as `DXSUMMIT` when enabled and recently polling.
-- Normalizes callsigns, frequencies, modes, and reports before shared validation and enrichment.
-- Adds CTY metadata and optional FCC license checks where that policy applies.
-- Applies shared-ingest flood policy before primary dedupe using the shipped `floodcontrol.yaml` rails.
-- Deduplicates and fans out spots to telnet clients with per-user filters.
-- Optionally derives path-reliability glyphs from recent reports between your grid and the DX grid.
-
-The main operator-facing configuration lives in [`data/config`](data/config). Startup uses an explicit filename registry, rejects unknown YAML files/keys, and fails fast when required YAML-owned settings or reference tables are missing. Documented zero sentinels, such as disabled keepalives or immediate broadcast delivery, are preserved as operator choices rather than replaced by code defaults. The config directory layout is described in [`data/config/README.md`](data/config/README.md).
-
-## Repo Layout
-
-The repo root now follows a simple ownership rule:
-
-- `main.go` is the live binary entrypoint only.
-- `internal/cluster` contains the live runtime implementation and cluster-local helpers.
-- `cmd/` contains standalone tools and offline runners.
-- Domain packages such as `spot`, `peer`, `telnet`, `config`, and `pathreliability` remain reusable subsystems with their own tests and package-local docs.
-
-Historical analysis notes and protocol reference material live under [`docs/archive/analysis`](docs/archive/analysis) and [`docs/reference`](docs/reference) rather than competing with the live binary at the repo root.
-
-## Dropped Call Logs
-
-`logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. The shipped config enables it; set `logging.dropped_calls.enabled: false` to disable those files. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.
-
-Each entry uses the same timestamped daily-file logger as the system log and records only the ingestion source, dropped role, reason, call, DE, DX, mode, and a short detail field. Frequency, category, and dashboard text are intentionally omitted.
-
-`logging.login_attempts`, `logging.reputation_drops`, `logging.telnet_connections`, `logging.ingest_connections`, and `logging.peer_connections` write separate file-only daily event logs for failed or blocked login attempts, reputation-gated spot drops, telnet lifecycle, ingest lifecycle, and peer lifecycle. These event logs do not add local console or UI output; check `data/config/README.md` for the per-log `enabled`, `dir`, `retention_days`, and `dedupe_window_seconds` settings.
-
-```yaml
-logging:
-  dropped_calls:
-    enabled: true
-    dir: "data/logs/dropped_calls"
-    retention_days: 7
-    dedupe_window_seconds: 120
-    bad_de_dx: true
-    no_license: true
-    harmonics: true
-```
 
 ## Dedupe Policies
 
@@ -569,6 +383,155 @@ If solar-weather support is enabled, a normal path glyph can be replaced by:
 Those overrides never replace `INSUFFICIENT`.
 
 For the exact thresholds, per-mode offsets, weight rules, and shipped tables, see [`pathreliability/README.md`](pathreliability/README.md).
+
+## What The Cluster Does
+
+- Ingests spots from RBN CW/RTTY, RBN digital, PSKReporter, optional DXSummit HTTP polling, local `DX` commands, and optional peer feeds.
+- Shows enabled ingest sources in the console dashboard; DXSummit appears as `DXSUMMIT` when enabled and recently polling.
+- Normalizes callsigns, frequencies, modes, and reports before shared validation and enrichment.
+- Adds CTY metadata and optional FCC license checks where that policy applies.
+- Applies shared-ingest flood policy before primary dedupe using the shipped `floodcontrol.yaml` rails.
+- Deduplicates and fans out spots to telnet clients with per-user filters.
+- Optionally derives path-reliability glyphs from recent reports between your grid and the DX grid.
+
+## Running A Node
+
+Compiled ready-to-run packages are published on GitHub Releases. The current
+published binary package is Windows amd64:
+
+1. Open the latest release:
+   [`https://github.com/N2WQ/GoCluster/releases/latest`](https://github.com/N2WQ/GoCluster/releases/latest)
+2. Download the release asset named `gocluster-windows-amd64.zip`.
+3. Extract the zip and open the `ready_to_run/` directory.
+4. Start with the packaged `ready_to_run/README.md`.
+
+Do not use GitHub's automatic `Source code (zip)` or `Source code (tar.gz)`
+downloads unless you want the developer source tree. Those archives are not the
+ready-to-run package. More detail is in [`download/README.md`](download/README.md).
+
+From a ready-to-run Windows package:
+
+```pwsh
+cd ready_to_run
+$env:DXC_CONFIG_PATH = "data/config.local"
+.\gocluster.exe
+```
+
+From a source checkout:
+
+```pwsh
+$env:DXC_CONFIG_PATH = "data/config.local"
+go run .
+```
+
+Then connect with telnet using the configured port from
+`data/config/runtime.yaml`.
+
+## Configuring A Real Node
+
+The checked-in [`data/config`](data/config) directory is public example config.
+For a real node, copy the whole directory to a private complete config
+directory such as ignored `data/config.local`, edit that private copy, and run
+with `DXC_CONFIG_PATH` pointing at the directory.
+
+Review normal deployment/runtime files before first run:
+
+- `app.yaml`: set `server.node_id`, choose local UI mode, and confirm log paths.
+- `runtime.yaml`: confirm telnet port, filter defaults, buffers, and memory controls.
+- `ingest.yaml`: configure RBN, PSKReporter, DXSummit, and local/human ingest settings.
+- `peering.yaml`: edit only if this node peers with other clusters.
+- `reputation.yaml`: edit only if IPinfo/Cymru reputation enrichment is enabled.
+- `solarweather.yaml`: edit only if solar/geomagnetic path overrides are enabled.
+- `data.yaml`: adjust CTY, FCC, H3, skew, and data paths if your deployment layout differs.
+- `spot_taxonomy.yaml`: edit only when changing supported modes, event families, or PSKReporter mode routing.
+
+Do not retune `pipeline.yaml`, path thresholds, solar override gates, or
+mode-inference calibration as normal setup. Use
+[`data/config/README.md`](data/config/README.md) for the ownership class before
+editing a YAML file.
+
+The loader expects a complete config directory, rejects unknown YAML files and
+unknown keys, and fails fast when required YAML-owned settings or reference
+tables are missing. Keep private callsigns, peer hostnames/IPs, passwords, and
+tokens out of committed example config.
+
+At minimum, replace the public placeholder identity before connecting a real
+node: change `server.node_id` in `app.yaml` from `N0CALL-1`, change the RBN
+login callsigns in `ingest.yaml` from `N0CALL-1`, and update any private
+upstream telnet `host` and login fields you enable. If peering is enabled,
+also replace peer hosts, login callsigns, and passwords in `peering.yaml`.
+
+## Build And Service Notes
+
+GoCluster builds from the repo root with Go `1.26+`.
+
+Windows amd64 binary:
+
+```pwsh
+go test ./...
+go build -trimpath -o gocluster.exe .
+```
+
+Windows release-style package for local testing:
+
+```pwsh
+.\scripts\create-release.ps1 -PackageOnly -AllowDirty
+```
+
+Clean publishable Windows release package:
+
+```pwsh
+.\scripts\create-release.ps1
+```
+
+Linux amd64 binary from source:
+
+```sh
+go test ./...
+GOOS=linux GOARCH=amd64 go build -trimpath -o gocluster .
+```
+
+Deploy the Linux binary together with a complete config directory and required
+runtime data such as `data/cty`, `data/h3`, `data/peers/topology.db`, and
+`data/skm_correction/rbnskew.json` when those inputs are used by your config.
+There is not currently a published Linux ready-to-run release asset.
+
+For unattended Linux operation, use a private config directory and set
+`ui.mode: headless` in that config's `app.yaml`. The interactive local console
+requires a real terminal and is not shown by a normal `systemd` service. See
+[`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md) for the complete service
+account, unit-file, and operational command sequence.
+
+## Operator Logs
+
+`logging.dropped_calls` can write optional daily files for dropped calls without changing any drop policy. The shipped config enables it; set `logging.dropped_calls.enabled: false` to disable those files. When enabled, the cluster writes separate files for bad DE/DX calls, FCC no-license drops, and harmonic suppressions under `logging.dropped_calls.dir`.
+
+Each entry uses the same timestamped daily-file logger as the system log and records only the ingestion source, dropped role, reason, call, DE, DX, mode, and a short detail field. Frequency, category, and dashboard text are intentionally omitted.
+
+`logging.login_attempts`, `logging.reputation_drops`, `logging.telnet_connections`, `logging.ingest_connections`, and `logging.peer_connections` write separate file-only daily event logs for failed or blocked login attempts, reputation-gated spot drops, telnet lifecycle, ingest lifecycle, and peer lifecycle. These event logs do not add local console or UI output; check `data/config/README.md` for the per-log `enabled`, `dir`, `retention_days`, and `dedupe_window_seconds` settings.
+
+```yaml
+logging:
+  dropped_calls:
+    enabled: true
+    dir: "data/logs/dropped_calls"
+    retention_days: 7
+    dedupe_window_seconds: 120
+    bad_de_dx: true
+    no_license: true
+    harmonics: true
+```
+
+## Repo Layout
+
+The repo root now follows a simple ownership rule:
+
+- `main.go` is the live binary entrypoint only.
+- `internal/cluster` contains the live runtime implementation and cluster-local helpers.
+- `cmd/` contains standalone tools and offline runners.
+- Domain packages such as `spot`, `peer`, `telnet`, `config`, and `pathreliability` remain reusable subsystems with their own tests and package-local docs.
+
+Historical analysis notes and protocol reference material live under [`docs/archive/analysis`](docs/archive/analysis) and [`docs/reference`](docs/reference) rather than competing with the live binary at the repo root.
 
 ## Deeper Docs
 
