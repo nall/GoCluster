@@ -214,44 +214,20 @@ Session behavior:
 
 Confidence tags appear in the telnet confidence column and can be filtered with `PASS CONFIDENCE` and `REJECT CONFIDENCE`.
 
-There are two confidence families:
-
-- Resolver-capable modes: `CW`, `RTTY`, `USB`, `LSB`
-- FT corroboration modes: `FT2`, `FT4`, `FT8`
-
-### Resolver-capable modes
-
-- `?`: only one reporter supported the emitted call, or there was no usable corroboration.
-- `S`: still a one-reporter spot, but the call has static support or recent on-band support.
-- `P`: more than one reporter was involved, but support is weaker or the result is contested.
-- `V`: strong multi-reporter support.
+- `?`: little evidence.
+- `S`: one current report, but the call has static or recent on-band support.
+- `P`: corroborated, but not the strongest support level.
+- `V`: strongly corroborated.
 - `C`: the DX call was corrected and the corrected call passed validation.
 - `B`: a correction was attempted, but the suggested call failed validation, so the original call was kept.
 
-Operationally, think of resolver-mode glyphs this way:
-
-- `?`: very little evidence
-- `S`: only one current report, but the call already looks plausible from prior knowledge or recent local history
-- `P`: some corroboration, but not strong
-- `V`: strong corroboration
-- `C` and `B`: correction outcomes, not raw confidence grades
-
-### FT2, FT4, and FT8
-
-FT modes use a separate corroboration rule. The cluster groups reports by normalized DX call, exact FT mode, and canonical dial frequency into a bounded live burst.
-
-With the shipped defaults:
-
-- `P` means exactly 2 unique reporters in the same burst.
-- `V` means 3 or more unique reporters in the same burst.
-- `S` can still appear for a one-reporter spot if static or recent support promotes it.
+Different mode families calculate support differently, but the displayed glyphs
+are intended to be read the same way by telnet users.
 
 Local non-test `DX` self-spots are treated as operator-authoritative and are forced to `V`.
 
-For the exact FT timing knobs, burst rules, and decision history, see [`spot/README.md`](spot/README.md).
-The FT corroboration counts and timing knobs are explicit operator policy.
-Resolver gates, distance models, Bayesian rails, and correction-family policy
-are algorithm calibration and should be changed only with replay/validation.
+For the mode-specific support rules, timing knobs, and decision history, see
+[`spot/README.md`](spot/README.md).
 
 ## Diagnostic Comments
 
