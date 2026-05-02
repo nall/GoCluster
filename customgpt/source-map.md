@@ -5,52 +5,52 @@ linking or citing these docs over duplicating their content here.
 
 | Topic | Primary source | Supporting source |
 | --- | --- | --- |
-| Project overview | `README.md` | `docs/OPERATOR_GUIDE.md` |
-| Ready-to-run release package | `README.md` | `download/README.md` |
-| Windows run steps | `docs/OPERATOR_GUIDE.md` | `README.md` |
-| Linux build and service steps | `docs/OPERATOR_GUIDE.md` | `README.md` |
-| Real-node configuration | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
-| YAML ownership boundaries | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md`, package READMEs |
-| Config loader behavior | `data/config/README.md` | `config/` tests |
-| Secrets and private config safety | `data/config/README.md` | `README.md`, `docs/OPERATOR_GUIDE.md` |
-| System, dropped-call, and file-only event logs | `data/config/README.md` | `docs/OPERATOR_GUIDE.md`, `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
-| Telnet login and session behavior | `telnet/README.md` | `docs/OPERATOR_GUIDE.md` |
-| Command HELP source | `commands/README.md` | `commands/processor.go`, `README.md` |
-| Command dialects | `commands/README.md` | `telnet/README.md` |
-| `DX`, `SHOW`, `SHOW MYDX`, `SHOW DXCC` | `commands/README.md` | `commands/processor.go` |
-| `WHOSPOTSME` | `README.md` | `commands/README.md`, `spot/who_spots_me.go` |
-| Solar summaries | `README.md` | `docs/OPERATOR_GUIDE.md`, `commands/README.md` |
-| Filters | `telnet/README.md` | `commands/README.md`, `filter/` |
-| EVENT filtering | `README.md` | `telnet/README.md`, `data/config/README.md` |
-| MODE taxonomy | `data/config/README.md` | `README.md`, `spot/README.md` |
-| `NEARBY` filtering | `README.md` | `telnet/README.md` |
-| Dedupe policies | `README.md` | `telnet/README.md`, `dedup/` |
-| Bulletin dedupe | `telnet/README.md` | `data/config/README.md` |
-| Confidence tags | `README.md` | `spot/README.md` |
-| Call correction | `spot/README.md` | `docs/decisions/`, `docs/troubleshooting/` |
-| Path reliability tags | `README.md` | `pathreliability/README.md` |
-| RBN ingest | `rbn/README.md` | `rbn/` tests |
-| PSKReporter ingest | `pskreporter/README.md` | `pskreporter/` tests |
-| DXSummit ingest | `dxsummit/README.md` | `data/config/README.md` |
-| Peer behavior | `peer/README.md` | `docs/decisions/` |
-| Repo layout | `README.md` | package READMEs |
-| Developer workflow | `AGENTS.md` | `docs/WORKING_WITH_CODEX.md`, `docs/change-workflow.md` |
-| Code quality | `docs/code-quality.md` | `AGENTS.md` |
-| Domain contract | `docs/domain-contract.md` | `telnet/README.md`, `peer/README.md` |
-| Validation commands | `docs/dev-runbook.md` | `VALIDATION.md` |
-| Review and closeout | `docs/review-checklist.md` | `docs/templates/non-trivial-change-template.md` |
-| ADR and TSR handling | `docs/decision-memory.md` | `docs/decision-log.md`, `docs/troubleshooting-log.md` |
-| Accepted design decisions | `docs/decision-log.md` | `docs/decisions/` |
-| Troubleshooting records | `docs/troubleshooting-log.md` | `docs/troubleshooting/` |
-| Symptom-based troubleshooting | `customgpt/troubleshooting-index.md` | `docs/troubleshooting-log.md`, package READMEs |
+| Project overview | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
+| Ready-to-run release package | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [download/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/download/README.md) |
+| Windows run steps | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
+| Linux build and service steps | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
+| Real-node configuration | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
+| YAML ownership boundaries | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), package READMEs |
+| Config loader behavior | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | `config/` tests |
+| Secrets and private config safety | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
+| System, dropped-call, and file-only event logs | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), [docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md) |
+| Telnet login and session behavior | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
+| Command HELP source | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md) | [commands/processor.go](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/processor.go), [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
+| Command dialects | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md) | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md) |
+| `DX`, `SHOW`, `SHOW MYDX`, `SHOW DXCC` | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md) | [commands/processor.go](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/processor.go) |
+| `WHOSPOTSME` | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md), [spot/who_spots_me.go](https://raw.githubusercontent.com/N2WQ/GoCluster/main/spot/who_spots_me.go) |
+| Solar summaries | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md) |
+| Filters | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md) | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md), `filter/` |
+| EVENT filtering | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md), [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) |
+| MODE taxonomy | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [spot/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/spot/README.md) |
+| `NEARBY` filtering | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md) |
+| Dedupe policies | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md), `dedup/` |
+| Bulletin dedupe | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md) | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) |
+| Confidence tags | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [spot/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/spot/README.md) |
+| Call correction | [spot/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/spot/README.md) | `docs/decisions/`, `docs/troubleshooting/` |
+| Path reliability tags | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [pathreliability/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/pathreliability/README.md) |
+| RBN ingest | [rbn/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/rbn/README.md) | `rbn/` tests |
+| PSKReporter ingest | [pskreporter/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/pskreporter/README.md) | `pskreporter/` tests |
+| DXSummit ingest | [dxsummit/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/dxsummit/README.md) | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) |
+| Peer behavior | [peer/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/peer/README.md) | `docs/decisions/` |
+| Repo layout | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | package READMEs |
+| Developer workflow | [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) | [docs/WORKING_WITH_CODEX.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/WORKING_WITH_CODEX.md), [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md) |
+| Code quality | [docs/code-quality.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/code-quality.md) | [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) |
+| Domain contract | [docs/domain-contract.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/domain-contract.md) | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md), [peer/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/peer/README.md) |
+| Validation commands | [docs/dev-runbook.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/dev-runbook.md) | [VALIDATION.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/VALIDATION.md) |
+| Review and closeout | [docs/review-checklist.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/review-checklist.md) | [docs/templates/non-trivial-change-template.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/templates/non-trivial-change-template.md) |
+| ADR and TSR handling | [docs/decision-memory.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-memory.md) | [docs/decision-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-log.md), [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md) |
+| Accepted design decisions | [docs/decision-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-log.md) | `docs/decisions/` |
+| Troubleshooting records | [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md) | `docs/troubleshooting/` |
+| Symptom-based troubleshooting | [customgpt/troubleshooting-index.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/troubleshooting-index.md) | [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md), package READMEs |
 
 ## Routing Rules
 
-- For operator behavior, route to `README.md`, `docs/OPERATOR_GUIDE.md`, or a
+- For operator behavior, route to [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), or a
   package README before using code.
-- For developer behavior, route to `AGENTS.md` and the workflow docs before
+- For developer behavior, route to [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) and the workflow docs before
   implementation advice.
-- For config-sensitive answers, route to `data/config/README.md` and tell the
+- For config-sensitive answers, route to [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) and tell the
   user to check their effective YAML.
 - For YAML tuning questions, check the ownership class first. Do not recommend
   changing algorithm calibration as a first troubleshooting step.
@@ -58,6 +58,6 @@ linking or citing these docs over duplicating their content here.
   and file-only event logs. The event logs for login attempts, reputation
   drops, telnet lifecycle, ingest lifecycle, and peer lifecycle do not add
   console or UI output.
-- For symptom reports, route to `customgpt/troubleshooting-index.md` before
+- For symptom reports, route to [customgpt/troubleshooting-index.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/troubleshooting-index.md) before
   using broad docs or historical TSRs.
 - For decision history, route to the ADR/TSR indexes before summarizing.

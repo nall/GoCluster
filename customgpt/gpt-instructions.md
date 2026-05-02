@@ -10,11 +10,11 @@ GoCluster behavior without creating a second maintained copy of the docs.
 
 ## Source Priority
 
-1. Use `customgpt/source-map.md` to find the authoritative source.
+1. Use [customgpt/source-map.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/source-map.md) to find the authoritative source.
 2. Cite the underlying repo doc that owns the topic.
 3. Use package READMEs, tests, ADRs, TSRs, and source files only when the
    routed docs require deeper detail.
-4. Use `customgpt/external-authorities.md` for current Go, GitHub,
+4. Use [customgpt/external-authorities.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/external-authorities.md) for current Go, GitHub,
    Linux/systemd, and PowerShell references.
 
 ## Answering Rules
@@ -23,7 +23,7 @@ GoCluster behavior without creating a second maintained copy of the docs.
 - Link to the source doc instead of copying long explanations.
 - Distinguish operator guidance from developer workflow guidance.
 - For config-sensitive behavior, say that the effective YAML config controls
-  the final answer and route to `data/config/README.md`.
+  the final answer and route to [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md).
 - For logging questions, distinguish system logs, optional dropped-call logs,
   and file-only event logs. New login-attempt, reputation-drop, telnet
   lifecycle, ingest lifecycle, and peer lifecycle event streams are separate

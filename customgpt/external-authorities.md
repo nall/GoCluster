@@ -42,7 +42,7 @@ For machine-specific Linux answers, prefer distro-local manuals when available:
 
 ## Use Rules
 
-- For GoCluster-specific behavior, prefer repo docs over external docs.
+- For GoCluster-specific behavior, use only repo docs.
 - For tool behavior outside this repository, prefer the official upstream docs.
 - If upstream docs are versioned or change over time, tell the user to verify
   against the current upstream page.

@@ -6,55 +6,55 @@ workflow rules.
 
 ## First Stops
 
-- Start with `README.md` for repo layout and package ownership.
+- Start with [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) for repo layout and package ownership.
 - Read the relevant package README before reading code.
-- Use `AGENTS.md` and `docs/change-workflow.md` before planning changes.
-- Use `docs/decision-log.md` and `docs/troubleshooting-log.md` before changing
+- Use [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) and [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md) before planning changes.
+- Use [docs/decision-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-log.md) and [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md) before changing
   behavior with decision history.
 
 ## Package Ownership
 
 | Area | Start here |
 | --- | --- |
-| Live runtime | `internal/cluster/`, `README.md` |
-| Telnet sessions, filters, and queues | `telnet/README.md`, `telnet/` |
-| Command HELP and command dispatch | `commands/README.md`, `commands/` |
-| Spot record, formatting, confidence, correction | `spot/README.md`, `spot/` |
-| Path reliability | `pathreliability/README.md`, `pathreliability/` |
-| Config loading and validation | `data/config/README.md`, `config/` |
-| RBN ingest | `rbn/README.md`, `rbn/` |
-| PSKReporter ingest | `pskreporter/README.md`, `pskreporter/` |
-| DXSummit ingest | `dxsummit/README.md`, `dxsummit/` |
-| Peer protocol and forwarding | `peer/README.md`, `peer/` |
-| Reputation gate and lookups | `reputation/`, `data/config/reputation.yaml` |
-| UI/dashboard | `ui/`, `internal/cluster/dashboard.go` |
+| Live runtime | `internal/cluster/`, [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
+| Telnet sessions, filters, and queues | [telnet/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/telnet/README.md), `telnet/` |
+| Command HELP and command dispatch | [commands/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/commands/README.md), `commands/` |
+| Spot record, formatting, confidence, correction | [spot/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/spot/README.md), `spot/` |
+| Path reliability | [pathreliability/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/pathreliability/README.md), `pathreliability/` |
+| Config loading and validation | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md), `config/` |
+| RBN ingest | [rbn/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/rbn/README.md), `rbn/` |
+| PSKReporter ingest | [pskreporter/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/pskreporter/README.md), `pskreporter/` |
+| DXSummit ingest | [dxsummit/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/dxsummit/README.md), `dxsummit/` |
+| Peer protocol and forwarding | [peer/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/peer/README.md), `peer/` |
+| Reputation gate and lookups | `reputation/`, [data/config/reputation.yaml](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/reputation.yaml) |
+| UI/dashboard | `ui/`, [internal/cluster/dashboard.go](https://raw.githubusercontent.com/N2WQ/GoCluster/main/internal/cluster/dashboard.go) |
 
 ## Workflow
 
-- Small vs Non-trivial classification is owned by `AGENTS.md` and
-  `docs/change-workflow.md`.
+- Small vs Non-trivial classification is owned by [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) and
+  [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md).
 - Non-trivial work requires a Scope Ledger and exact `Approved vN` before code.
 - Config, protocol, parser, concurrency, queue, retained-state, hot-path, or
   operator-visible changes are normally Non-trivial.
 - Workflow-doc or repo-managed skill edits require the workflow-drift audit in
-  `docs/change-workflow.md`.
+  [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md).
 
 ## Audits And Risk Areas
 
 | Change area | Required routing |
 | --- | --- |
-| YAML/config/defaults/schema | `docs/change-workflow.md`, `data/config/README.md` |
-| Retained maps/caches/stores/indexes | `docs/code-quality.md` |
-| Hot paths, fan-out, parsing loops, queues | `docs/code-quality.md`, `docs/dev-runbook.md` |
-| Concurrency, lifecycle, shutdown, timers | `docs/domain-contract.md`, `docs/dev-runbook.md` |
-| Protocol/parser behavior | `docs/domain-contract.md`, package tests |
-| Operator-visible behavior | `README.md`, package README, HELP/docs tests |
-| Decisions or reversals | `docs/decision-memory.md`, `docs/decision-log.md` |
-| Troubleshooting or incident learnings | `docs/decision-memory.md`, `docs/troubleshooting-log.md` |
+| YAML/config/defaults/schema | [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md), [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) |
+| Retained maps/caches/stores/indexes | [docs/code-quality.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/code-quality.md) |
+| Hot paths, fan-out, parsing loops, queues | [docs/code-quality.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/code-quality.md), [docs/dev-runbook.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/dev-runbook.md) |
+| Concurrency, lifecycle, shutdown, timers | [docs/domain-contract.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/domain-contract.md), [docs/dev-runbook.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/dev-runbook.md) |
+| Protocol/parser behavior | [docs/domain-contract.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/domain-contract.md), package tests |
+| Operator-visible behavior | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), package README, HELP/docs tests |
+| Decisions or reversals | [docs/decision-memory.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-memory.md), [docs/decision-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-log.md) |
+| Troubleshooting or incident learnings | [docs/decision-memory.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-memory.md), [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md) |
 
 ## Validation
 
-Use `docs/dev-runbook.md` as the command source. Use `VALIDATION.md` as the
+Use [docs/dev-runbook.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/dev-runbook.md) as the command source. Use [VALIDATION.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/VALIDATION.md) as the
 Non-trivial compliance rubric.
 
 - Small changes need targeted checks and normally `go test ./...`.

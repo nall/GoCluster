@@ -16,15 +16,15 @@ maintained copy.
 GoCluster behavior is owned by the existing repository docs and source tree.
 Use this folder to find the right source, not as a replacement for that source.
 
-- Start with [source-map.md](source-map.md) for topic-to-document routing.
-- Use [operator-guide-index.md](operator-guide-index.md) for operator support.
-- Use [developer-guide-index.md](developer-guide-index.md) for contributor
+- Start with [source-map.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/source-map.md) for topic-to-document routing.
+- Use [operator-guide-index.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/operator-guide-index.md) for operator support.
+- Use [developer-guide-index.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/developer-guide-index.md) for contributor
   support.
-- Use [troubleshooting-index.md](troubleshooting-index.md) when a user reports a
+- Use [troubleshooting-index.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/troubleshooting-index.md) when a user reports a
   symptom, failure, or surprising cluster output.
-- Use [external-authorities.md](external-authorities.md) for current official
+- Use [external-authorities.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/external-authorities.md) for current official
   Go, GitHub, Linux/systemd, and PowerShell references.
-- Use [gpt-instructions.md](gpt-instructions.md) as the custom GPT instruction
+- Use [gpt-instructions.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/customgpt/gpt-instructions.md) as the custom GPT instruction
   seed.
 
 When a repo doc and this folder disagree, prefer the repo doc. When a question
