@@ -38,6 +38,9 @@ Default full sequence:
 5. `golangci-lint run ./... --config=.golangci.yaml`
 
 Also required as applicable:
+- `scripts/check-yaml-doc-rigor.ps1` for checked-in first-party YAML additions
+  or edits; add `-CommentOnlyCompare` when the intended YAML change is
+  comment-only
 - `go test -race ./...` for concurrency, queues, timers, cancellation, lifecycle, shutdown, or long-lived connections
 - fuzzing for parser/protocol changes
 - benchmarks for hot-path changes

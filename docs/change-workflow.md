@@ -197,6 +197,28 @@ details that apply.
 The audit must distinguish YAML-owned operator settings from validation
 constants, algorithm constants, compatibility boundaries, and test fixtures.
 
+### YAML Documentation Rigor
+Required when a task adds or edits checked-in first-party YAML, especially
+`data/config/*.yaml`.
+
+Use `data/config/README.md` as the source of truth for YAML file headers and
+key-comment standards. Verify:
+- checked-in `data/config/*.yaml` files keep the exact five-line header
+- new or changed YAML keys explain purpose when units, sentinel values,
+  ownership, side effects, runtime consequences, or safe-edit boundaries are
+  non-obvious
+- obvious true/false toggles are not comment-noised unless side effects are
+  non-obvious
+- repeated list/table schemas document the first occurrence or use a field
+  guide instead of duplicating comments on every row
+- YAML comments remain local context only, not schema, defaults, or runtime
+  proof when code or docs disagree
+
+Run `scripts/check-yaml-doc-rigor.ps1` for mechanical checks. Use
+`-CommentOnlyCompare` when the intended YAML change is comment-only. Treat
+script warnings as review prompts; human review remains responsible for
+subjective comment quality and drift against loaders/docs/code.
+
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.
 

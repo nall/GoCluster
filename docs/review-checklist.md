@@ -33,6 +33,12 @@ Review focus:
 - missing tests
 - documentation gaps
 - support-agent routing drift when operator docs or operator-visible behavior changed
+- YAML header consistency on new or changed first-party config files
+- YAML key-comment coverage for non-obvious units, sentinels, ownership,
+  side effects, runtime consequences, and safe-edit boundaries
+- repeated YAML list/table schemas documented once by first occurrence or field
+  guide, without duplicated row noise
+- YAML comment drift against loaders, config docs, current code, or ADRs
 
 If there are no material findings, say:
 - `Review Pass findings: none material`

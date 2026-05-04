@@ -71,6 +71,8 @@ When the user asks what existing code does and has not asked for changes:
   settings/reference tables/tool or secret config; `go-hotpath-design` for Go
   hot paths, allocation-sensitive runtime paths, fan-out, queues, parsing
   loops, or optimization claims.
+- When touching checked-in first-party YAML, apply the header/key-comment
+  standard in `data/config/README.md` and report the YAML comment/header audit.
 
 ## Task Gates
 - Before every change, classify the task and confirm current Scope Ledger
