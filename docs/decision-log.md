@@ -11,6 +11,8 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0108 | Repo-Derived Support-Agent Routes | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0108-repo-derived-support-agent-routes.md` |
+| ADR-0107 | Support-Agent Action Contract Alignment | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0107-support-agent-action-contract-alignment.md` |
 | ADR-0106 | Go Crawler Entry Comments | Accepted | 2026-05-04 | workflow, code quality, supportability | - | - | `docs/decisions/ADR-0106-go-crawler-entry-comments.md` |
 | ADR-0105 | Go Comment Intent Workflow Gate | Accepted | 2026-05-04 | workflow, code quality, supportability | - | - | `docs/decisions/ADR-0105-go-comment-intent-workflow-gate.md` |
 | ADR-0104 | Go Comment Intent Pass | Accepted | 2026-05-04 | runtime, replay, supportability | - | - | `docs/decisions/ADR-0104-go-comment-intent-pass.md` |

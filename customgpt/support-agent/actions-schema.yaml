@@ -1,0 +1,397 @@
+openapi: 3.1.0
+info:
+  title: GoCluster Repository Retrieval Action
+  description: Read-only authenticated API for retrieving current public GoCluster repository files by source map, troubleshooting index, repo-relative path, bundle, or approved raw GitHub URL. The GPT routes through repo-derived routes, symptom_routes, and related_paths, then retrieves authoritative files before answering.
+  version: 4.2.0
+
+servers:
+  - url: https://gocluster-docs-action.n2wq-api.workers.dev
+
+security:
+  - bearerAuth: []
+
+paths:
+  /version:
+    get:
+      operationId: getVersion
+      summary: Get service status
+      description: Returns Worker status, repository identity, branch, retrieval backend, and entrypoint path.
+      responses:
+        "200":
+          description: Version response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+        "401":
+          description: Missing or invalid bearer token
+
+  /entrypoint:
+    get:
+      operationId: getEntrypoint
+      summary: Retrieve the GoCluster custom GPT crawl entrypoint
+      description: Retrieves customgpt/source-map.md, including discovered related_paths for follow-up retrieval.
+      responses:
+        "200":
+          description: Retrieved entrypoint file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "401":
+          description: Missing or invalid bearer token
+        "404":
+          description: Entrypoint file not found
+
+  /source-map:
+    get:
+      operationId: getSourceMap
+      summary: Retrieve the GoCluster source map
+      description: Retrieves customgpt/source-map.md, including discovered related_paths for follow-up retrieval.
+      responses:
+        "200":
+          description: Retrieved source map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "401":
+          description: Missing or invalid bearer token
+        "404":
+          description: Source map not found
+
+  /troubleshooting-index:
+    get:
+      operationId: getTroubleshootingIndex
+      summary: Retrieve the GoCluster troubleshooting index
+      description: Retrieves customgpt/troubleshooting-index.md, including discovered related_paths for follow-up retrieval.
+      responses:
+        "200":
+          description: Retrieved troubleshooting index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "401":
+          description: Missing or invalid bearer token
+        "404":
+          description: Troubleshooting index not found
+
+  /external-authorities:
+    get:
+      operationId: getExternalAuthorities
+      summary: Retrieve approved external authorities
+      description: Retrieves customgpt/external-authorities.md for approved Go, GitHub, Linux/systemd, and PowerShell references.
+      responses:
+        "200":
+          description: Retrieved external authorities document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "401":
+          description: Missing or invalid bearer token
+        "404":
+          description: External authorities document not found
+
+  /doc:
+    get:
+      operationId: getDoc
+      summary: Retrieve one safe GoCluster repository file
+      description: Retrieves a single safe repo-relative file path or approved raw GitHub URL. Use related_paths from prior responses to decide follow-up paths.
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: Repo-relative path such as telnet/README.md or pathreliability/predictor.go.
+          schema:
+            type: string
+        - name: url
+          in: query
+          required: false
+          description: Approved raw GitHub URL under https://raw.githubusercontent.com/N2WQ/GoCluster/main/.
+          schema:
+            type: string
+        - name: base
+          in: query
+          required: false
+          description: Optional base repo path used to resolve relative links such as ../spot/spot.go.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Retrieved file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Missing or invalid path
+        "401":
+          description: Missing or invalid bearer token
+        "403":
+          description: Path is not safe for retrieval
+        "404":
+          description: Path not found
+
+  /file:
+    get:
+      operationId: getFile
+      summary: Retrieve one safe GoCluster repository file
+      description: Alias of getDoc. Retrieves a single safe repo-relative file path or approved raw GitHub URL.
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: Repo-relative path such as telnet/README.md or pathreliability/predictor.go.
+          schema:
+            type: string
+        - name: url
+          in: query
+          required: false
+          description: Approved raw GitHub URL under https://raw.githubusercontent.com/N2WQ/GoCluster/main/.
+          schema:
+            type: string
+        - name: base
+          in: query
+          required: false
+          description: Optional base repo path used to resolve relative links such as ../spot/spot.go.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Retrieved file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+        "400":
+          description: Missing or invalid path
+        "401":
+          description: Missing or invalid bearer token
+        "403":
+          description: Path is not safe for retrieval
+        "404":
+          description: Path not found
+
+  /bundle:
+    get:
+      operationId: getBundle
+      summary: Retrieve multiple safe GoCluster repository files
+      description: Retrieves multiple safe repo-relative paths in one response. Use this only after discovering concrete paths from related_paths. The Worker returns an error instead of a partial file bundle if any requested path fails.
+      parameters:
+        - name: paths
+          in: query
+          required: false
+          description: Comma-separated repo-relative file paths.
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          description: Optional repeated repo-relative file path parameter.
+          schema:
+            type: array
+            items:
+              type: string
+            style: form
+            explode: true
+      responses:
+        "200":
+          description: Retrieved file bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BundleResponse"
+        "400":
+          description: Missing paths
+        "401":
+          description: Missing or invalid bearer token
+        "403":
+          description: One requested path is not safe for retrieval
+        "404":
+          description: One requested path was not found
+        "502":
+          description: GitHub retrieval failed for one requested path
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    VersionResponse:
+      type: object
+      properties:
+        service:
+          type: string
+        status:
+          type: string
+        repo:
+          type: string
+        branch:
+          type: string
+        backend:
+          type: string
+        entrypoint:
+          type: string
+        auth:
+          type: string
+        retrieved_at:
+          type: string
+        message:
+          type: string
+      required:
+        - service
+        - status
+        - repo
+        - branch
+        - backend
+        - entrypoint
+        - auth
+        - retrieved_at
+        - message
+
+    FileResponse:
+      type: object
+      properties:
+        repo:
+          type: string
+        branch:
+          type: string
+        path:
+          type: string
+        source_url:
+          type: string
+        retrieved_at:
+          type: string
+        kind:
+          type: string
+        header:
+          type: string
+        related_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/RelatedPath"
+        routes:
+          type: array
+          description: Structured routes parsed from customgpt/source-map.md when that file is retrieved.
+          items:
+            $ref: "#/components/schemas/SourceMapRoute"
+        symptom_routes:
+          type: array
+          description: Structured symptom routes parsed from customgpt/troubleshooting-index.md when that file is retrieved.
+          items:
+            $ref: "#/components/schemas/SymptomRoute"
+        truncated:
+          type: boolean
+        content:
+          type: string
+      required:
+        - repo
+        - branch
+        - path
+        - source_url
+        - retrieved_at
+        - kind
+        - header
+        - related_paths
+        - truncated
+        - content
+
+    RelatedPath:
+      type: object
+      properties:
+        path:
+          type: string
+        source_url:
+          type: string
+        text:
+          type: string
+        context:
+          type: string
+      required:
+        - path
+        - source_url
+        - text
+        - context
+
+    RoutePath:
+      type: object
+      properties:
+        path:
+          type: string
+        source_url:
+          type: string
+        text:
+          type: string
+      required:
+        - path
+        - source_url
+        - text
+
+    SourceMapRoute:
+      type: object
+      properties:
+        topic:
+          type: string
+        primary_path:
+          type: string
+        primary_source_url:
+          type: string
+        supporting_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutePath"
+      required:
+        - topic
+        - primary_path
+        - primary_source_url
+        - supporting_paths
+
+    SymptomRoute:
+      type: object
+      properties:
+        symptom:
+          type: string
+        first_checks:
+          type: string
+        route_paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutePath"
+        do_not_guess:
+          type: string
+      required:
+        - symptom
+        - first_checks
+        - route_paths
+        - do_not_guess
+
+    BundleResponse:
+      type: object
+      properties:
+        repo:
+          type: string
+        branch:
+          type: string
+        retrieved_at:
+          type: string
+        requested_paths:
+          type: array
+          items:
+            type: string
+        file_count:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileResponse"
+      required:
+        - repo
+        - branch
+        - retrieved_at
+        - requested_paths
+        - file_count
+        - files
