@@ -45,6 +45,8 @@ const (
 
 var errMissingRBNColumns = errors.New("missing required RBN CSV columns")
 
+// interner compresses repeated callsigns into numeric IDs so evaluation maps can
+// stay small while still writing human-readable mismatches at the end.
 type interner struct {
 	ids map[string]uint32
 	arr []string
@@ -82,6 +84,8 @@ type labelKey struct {
 	SubjectID  uint32
 }
 
+// predictedEvent records both the predicted winner and the resolver branch that
+// produced it, which makes mismatches actionable during policy tuning.
 type predictedEvent struct {
 	WinnerID uint32
 	Reason   string
@@ -258,6 +262,9 @@ func (x *xorshift64) next() uint64 {
 	return s
 }
 
+// main runs an offline resolver evaluation by pairing RBN candidates with
+// corrected labels from other-cluster logs. It is intentionally batch-oriented:
+// every output is a file artifact that can be compared across config revisions.
 func main() {
 	var (
 		rbnDir       = flag.String("rbn-dir", "archive data", "RBN .zip/.csv directory")
@@ -455,6 +462,9 @@ func main() {
 	log.Printf("Wrote outputs to %s", *outDir)
 }
 
+// replayRBNFile streams a single RBN input into the resolver evaluator. Schema
+// misses are returned distinctly so one older file does not abort the whole
+// directory run.
 func replayRBNFile(ctx context.Context, path string, st *runState, evalNeg int) (int64, int64, error) {
 	reader, closeFn, err := openRBNReader(path)
 	if err != nil {
@@ -507,6 +517,8 @@ func replayRBNFile(ctx context.Context, path string, st *runState, evalNeg int) 
 	return rows, badRows, nil
 }
 
+// processRBNRow advances resolver time around each observation to preserve the
+// production observe-before-drain ordering used by correction decisions.
 func processRBNRow(st *runState, row rbnRow, evalNeg int) {
 	now := row.Time.UTC()
 	if !st.lastReplayTS.IsZero() && now.Before(st.lastReplayTS) {
@@ -582,6 +594,9 @@ type resolverDecision struct {
 	Reason   string
 }
 
+// evaluateResolverPrimaryDecision mirrors the primary resolver gate stack and
+// increments reason counters at each exit so config changes can be evaluated by
+// failure mode, not only aggregate precision/recall.
 func evaluateResolverPrimaryDecision(
 	st *runState,
 	spotEntry *spot.Spot,
@@ -796,6 +811,8 @@ func evaluateResolverPrimaryDecision(
 	return resolverDecision{Applied: true, Winner: winnerCall, Reason: reason}
 }
 
+// buildEvalReport combines positive-label scoring, sampled negatives, and branch
+// counters into the JSON report consumed by tuning notes.
 func buildEvalReport(st *runState, labels otherLoadStats) evalReport {
 	report := evalReport{
 		Replay:   st.replay,
@@ -832,6 +849,9 @@ func buildEvalReport(st *runState, labels otherLoadStats) evalReport {
 	return report
 }
 
+// scorePositives matches expected and predicted winners per minute/frequency/
+// spotter/subject key. It records only a bounded mismatch sample to keep reports
+// readable on large archives.
 func scorePositives(
 	expectedByKey map[labelKey][]uint32,
 	predictedByKey map[labelKey][]predictedEvent,
@@ -948,6 +968,9 @@ func recordNegativeSample(st *runState, limit int, applied bool) {
 	}
 }
 
+// recordRecentBandObservation mirrors runtime support-memory admission after an
+// unsuppressed decision so recent-band gates are evaluated against replayed
+// output, not raw candidate input.
 func recordRecentBandObservation(s *spot.Spot, store *spot.RecentBandStore, cfg config.CallCorrectionConfig) {
 	if s == nil || store == nil || s.IsBeacon {
 		return
@@ -981,6 +1004,9 @@ func recordRecentBandObservation(s *spot.Spot, store *spot.RecentBandStore, cfg 
 	store.Record(call, band, mode, reporter, s.Time)
 }
 
+// loadOtherLabels extracts corrected-call labels from other-cluster logs. These
+// labels are treated as evaluation evidence, not training truth, so conflicts
+// are counted instead of silently resolved.
 func loadOtherLabels(files []string, in *interner, freqBucketHz int64) (map[labelKey][]uint32, otherLoadStats, error) {
 	labels := map[labelKey][]uint32{}
 	stats := otherLoadStats{}
@@ -1056,6 +1082,8 @@ func loadOtherLabels(files []string, in *interner, freqBucketHz int64) (map[labe
 	return labels, stats, nil
 }
 
+// discover returns deterministic file order so repeated evaluations over the
+// same inputs produce comparable reservoir samples and counters.
 func discover(root string, exts []string) ([]string, error) {
 	set := map[string]struct{}{}
 	for _, ext := range exts {
@@ -1075,6 +1103,8 @@ func discover(root string, exts []string) ([]string, error) {
 	return out, err
 }
 
+// openRBNReader supports zipped and plain CSV inputs without forcing callers to
+// normalize archive layouts before evaluation.
 func openRBNReader(path string) (io.Reader, func() error, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".csv":
@@ -1108,6 +1138,8 @@ func openRBNReader(path string) (io.Reader, func() error, error) {
 	}
 }
 
+// parseRBNHeader fails if required columns are missing because silently shifting
+// schema would corrupt precision/recall evidence.
 func parseRBNHeader(row []string) (rbnHeader, error) {
 	h := rbnHeader{callsign: -1, freq: -1, band: -1, dx: -1, db: -1, date: -1, spotMode: -1, txMode: -1}
 	for i, raw := range row {
@@ -1158,6 +1190,8 @@ func parseRBNHeader(row []string) (rbnHeader, error) {
 	return h, nil
 }
 
+// parseRBNRecord separates spot class from transmit mode so beacon/accepted
+// filtering matches RBN semantics instead of assuming one mode column.
 func parseRBNRecord(record []string, h rbnHeader) (rbnRow, rbnRecordStatus) {
 	get := func(idx int) string {
 		if idx < 0 || idx >= len(record) {
@@ -1202,6 +1236,8 @@ func parseRBNRecord(record []string, h rbnHeader) (rbnRow, rbnRecordStatus) {
 	return rbnRow{Time: ts.UTC(), FreqKHz: freqKHz, Band: band, DXCall: dxCall, Spotter: spotter, Mode: mode, SpotClass: spotClass, Report: report}, rbnRecordAccepted
 }
 
+// configureULS aligns the offline evaluator with production licensing
+// allowlists so CTY/license-related rejection reasons remain comparable.
 func configureULS(cfg *config.Config) error {
 	if cfg == nil {
 		return errors.New("nil config")
@@ -1220,6 +1256,9 @@ func configureULS(cfg *config.Config) error {
 	return nil
 }
 
+// loadCTY treats disabled CTY as a nil database but fails fast on enabled,
+// missing CTY so rejection counters are not based on accidental config drift.
+//
 //nolint:nilnil // A nil CTY database with nil error means CTY support is disabled.
 func loadCTY(cfg *config.Config) (*cty.CTYDatabase, error) {
 	if cfg == nil || !cfg.CTY.Enabled {
@@ -1235,6 +1274,8 @@ func loadCTY(cfg *config.Config) (*cty.CTYDatabase, error) {
 	return cty.LoadCTYDatabase(path)
 }
 
+// shouldRejectCTYCall mirrors production malformed-base rejection for corrected
+// winners before CTY lookup.
 func shouldRejectCTYCall(call string) bool {
 	base := strings.TrimSpace(uls.NormalizeForLicense(call))
 	if base == "" {

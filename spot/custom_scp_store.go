@@ -82,7 +82,9 @@ type customSCPEntry struct {
 	oldestSeenUnix int64
 }
 
-// CustomSCPOptions configures runtime and persistence behavior.
+// CustomSCPOptions configures runtime and persistence behavior. The max/horizon
+// fields are the memory contract: runtime evidence is useful only while it
+// remains bounded and recent enough to support correction decisions.
 type CustomSCPOptions struct {
 	Path string
 
@@ -141,7 +143,10 @@ type customSCPDiagnostics struct {
 }
 
 // CustomSCPStore holds runtime-learned static membership and recent-evidence
-// rails for the correction/confidence path.
+// rails for the correction/confidence path. The store owns all maps, expiry
+// heaps, interned strings, and Pebble persistence under s.mu; delete paths must
+// release secondary indexes and intern refs before an observation key or static
+// call leaves the primary maps.
 type CustomSCPStore struct {
 	mu sync.RWMutex
 
@@ -230,7 +235,9 @@ func (i *customSCPInterner) distinct() int {
 	return len(i.refs)
 }
 
-// OpenCustomSCPStore opens (or creates) a Pebble-backed custom SCP store.
+// OpenCustomSCPStore opens (or creates) the Pebble-backed custom SCP store and
+// rebuilds bounded in-memory indexes before the runtime starts using evidence.
+// Startup fails rather than running with a partially loaded correction memory.
 func OpenCustomSCPStore(opts CustomSCPOptions) (*CustomSCPStore, error) {
 	opts = sanitizeCustomSCPOptions(opts)
 	if strings.TrimSpace(opts.Path) == "" {
@@ -280,7 +287,8 @@ func OpenCustomSCPStore(opts CustomSCPOptions) (*CustomSCPStore, error) {
 	return store, nil
 }
 
-// Close closes the underlying Pebble DB.
+// Close stops cleanup before closing Pebble so no background cleanup can race
+// the durable store during shutdown.
 func (s *CustomSCPStore) Close() error {
 	if s == nil {
 		return nil
@@ -294,7 +302,8 @@ func (s *CustomSCPStore) Close() error {
 	return err
 }
 
-// StartCleanup starts periodic in-memory and on-disk stale-data cleanup.
+// StartCleanup starts periodic in-memory and on-disk stale-data cleanup. The
+// cleanup loop is the owner of horizon reclamation between live observations.
 func (s *CustomSCPStore) StartCleanup() {
 	if s == nil || s.opts.CleanupInterval <= 0 {
 		return
@@ -304,7 +313,8 @@ func (s *CustomSCPStore) StartCleanup() {
 	})
 }
 
-// StopCleanup stops periodic cleanup.
+// StopCleanup ends the periodic cleanup owner before shutdown or tests inspect
+// retained state.
 func (s *CustomSCPStore) StopCleanup() {
 	if s == nil {
 		return
@@ -355,6 +365,9 @@ func VerifyCustomSCPCheckpoint(ctx context.Context, path string, maxDuration tim
 	return verifyCustomSCPDB(ctx, db, maxDuration)
 }
 
+// verifyCustomSCPDB intentionally checks only record shape and scan liveness.
+// Semantic pruning is handled by loadFromDB/cleanup so checkpoint verification
+// can stay bounded and safe for operational use.
 func verifyCustomSCPDB(ctx context.Context, db *pebble.DB, maxDuration time.Duration) (int64, error) {
 	if db == nil {
 		return 0, errors.New("custom_scp: database is nil")
@@ -400,7 +413,9 @@ func verifyCustomSCPDB(ctx context.Context, db *pebble.DB, maxDuration time.Dura
 	return scanned, nil
 }
 
-// RecordSpot records one accepted spot into custom SCP runtime evidence.
+// RecordSpot records one accepted V-confidence spot into custom SCP runtime
+// evidence. The V-only gate prevents the learned SCP memory from reinforcing
+// uncertain or SCP-promoted outputs.
 func (s *CustomSCPStore) RecordSpot(sp *Spot) {
 	if s == nil || sp == nil || sp.IsBeacon {
 		return
@@ -466,6 +481,9 @@ func (s *CustomSCPStore) RecordSpot(sp *Spot) {
 	}
 }
 
+// recordObservation owns the mutation path for one retained observation. It
+// couples the primary entries map, static membership, expiry heaps, interner,
+// active counters, and Pebble writes so all retained views converge under churn.
 func (s *CustomSCPStore) recordObservation(call, band, mode, spotter string, cellRes1 uint16, report int, hasReport bool, seenAt time.Time) {
 	if s == nil {
 		return

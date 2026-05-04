@@ -11,6 +11,10 @@ const (
 	defaultDropLogDedupeMaxKeys = 512
 )
 
+// dropLogDeduper protects the operator console/system log from repeated
+// validation drops while preserving periodic evidence that a drop class is
+// still happening. It is intentionally bounded by maxKeys because bad calls,
+// IPs, or feed bugs can create unbounded distinct log text.
 type dropLogDeduper struct {
 	mu      sync.Mutex
 	window  time.Duration
@@ -25,6 +29,8 @@ type dropLogDedupeEntry struct {
 	suppressed uint64
 }
 
+// newDropLogDeduper returns nil when dedupe is disabled so the caller's logging
+// path stays simple and explicit.
 func newDropLogDeduper(window time.Duration, maxKeys int) *dropLogDeduper {
 	if window <= 0 || maxKeys <= 0 {
 		return nil
@@ -37,6 +43,9 @@ func newDropLogDeduper(window time.Duration, maxKeys int) *dropLogDeduper {
 	}
 }
 
+// Process decides whether a validation log line should be emitted now. Only
+// known high-chatter drop formats are deduped; unfamiliar lines pass through so
+// new troubleshooting evidence is not hidden by an overbroad filter.
 func (d *dropLogDeduper) Process(line string) (string, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -78,6 +87,8 @@ func (d *dropLogDeduper) Process(line string) (string, bool) {
 	return line, true
 }
 
+// evictOneIfNeededLocked keeps the dedupe table bounded by removing the
+// oldest-seen key. Callers hold d.mu.
 func (d *dropLogDeduper) evictOneIfNeededLocked() {
 	if d == nil || d.maxKeys <= 0 {
 		return
@@ -100,6 +111,9 @@ func (d *dropLogDeduper) evictOneIfNeededLocked() {
 	}
 }
 
+// dropLogDedupeKey recognizes the validation-drop families that can repeat at
+// high volume. The key keeps role and call because those are the support fields
+// operators need when investigating CTY or license-data problems.
 func dropLogDedupeKey(line string) (string, bool) {
 	fields := strings.Fields(strings.TrimSpace(line))
 	if len(fields) < 5 {
@@ -128,6 +142,8 @@ func dropLogDedupeKey(line string) (string, bool) {
 	return "", false
 }
 
+// cleanLogToken strips cosmetic tags/punctuation before keying log lines so
+// formatting changes do not defeat dedupe for the same operational event.
 func cleanLogToken(token string) string {
 	if token == "" {
 		return ""

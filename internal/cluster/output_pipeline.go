@@ -20,8 +20,10 @@ import (
 )
 
 // outputPipeline owns the single consumer of deduplicated spots plus the
-// temporal and FT corroboration timer state. The only extra goroutine is the
-// pre-existing telnet stabilizer release loop.
+// temporal and FT corroboration timer state. This is the runtime boundary where
+// a spot becomes archive/peer/telnet output, so comment changes here should
+// preserve the support model: explain why a spot was delayed, mutated, dropped,
+// or delivered, without splitting ownership across goroutines.
 type outputPipeline struct {
 	outputChan              <-chan *spot.Spot
 	secondaryFast           *dedup.SecondaryDeduper
@@ -76,6 +78,9 @@ type outputPipeline struct {
 	ftTimerCh               <-chan time.Time
 }
 
+// outputSpotContext carries mutable spot state and resolver context through the
+// staged output path. The intent is to keep support-critical side effects
+// visible in one object instead of hiding them in package-level state.
 type outputSpotContext struct {
 	spot                       *spot.Spot
 	ctyDB                      *cty.CTYDatabase
@@ -86,6 +91,9 @@ type outputSpotContext struct {
 	stabilizerEvidenceEnqueued bool
 }
 
+// newOutputPipeline wires optional runtime stages from config. Disabled stages
+// remain nil rather than no-op wrappers so troubleshooting can map missing
+// behavior directly to config and startup wiring.
 func newOutputPipeline(
 	deduplicator *dedup.Deduplicator,
 	secondaryFast *dedup.SecondaryDeduper,
@@ -200,6 +208,9 @@ func newOutputPipeline(
 	return pipeline
 }
 
+// run advances timer-backed stages before every select so idle ingest still
+// releases bounded temporal and FT holds. On input close it force-drains held
+// work before returning to avoid silently losing already accepted spots.
 func (p *outputPipeline) run() {
 	if p.stabilizerEnabled {
 		defer p.telnetStabilizer.Stop()
@@ -231,6 +242,9 @@ func (p *outputPipeline) run() {
 	}
 }
 
+// processSpot shields the long-lived output loop from one malformed spot or
+// unexpected stage panic. The recovery keeps the cluster alive while preserving
+// the stack needed for operator triage.
 func (p *outputPipeline) processSpot(s *spot.Spot, temporalRelease *runtimeTemporalRelease) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -240,6 +254,8 @@ func (p *outputPipeline) processSpot(s *spot.Spot, temporalRelease *runtimeTempo
 	p.processSpotBody(s, temporalRelease)
 }
 
+// processSpotBody is intentionally a linear stage list: each stage answers one
+// support question about how a spot changed before fanout.
 func (p *outputPipeline) processSpotBody(s *spot.Spot, temporalRelease *runtimeTemporalRelease) {
 	ctx, ok := p.prepareSpotContext(s)
 	if !ok {
@@ -263,6 +279,9 @@ func (p *outputPipeline) processSpotBody(s *spot.Spot, temporalRelease *runtimeT
 	p.deliverSpot(&ctx)
 }
 
+// stopTemporalTimer clears both the timer and exposed channel so the main
+// select cannot wake on stale timer state after the temporal stage is disabled
+// or drained.
 func (p *outputPipeline) stopTemporalTimer() {
 	if p.temporalTimer == nil {
 		return
@@ -277,6 +296,9 @@ func (p *outputPipeline) stopTemporalTimer() {
 	p.temporalTimerCh = nil
 }
 
+// scheduleTemporalTimer mirrors the next pending temporal deadline into the
+// output loop's select. A zero or overdue delay is deliberate: release promptly
+// without spinning in a separate goroutine.
 func (p *outputPipeline) scheduleTemporalTimer(now time.Time) {
 	if p.temporal == nil || !p.temporal.Enabled() {
 		p.stopTemporalTimer()

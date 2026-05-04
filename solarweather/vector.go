@@ -15,6 +15,8 @@ type Vec3 struct {
 	Z float64
 }
 
+// Vec3 methods are small value operations used by the solar gate geometry. They
+// intentionally avoid allocation so path override checks stay cheap per spot.
 func (v Vec3) Dot(o Vec3) float64 {
 	return v.X*o.X + v.Y*o.Y + v.Z*o.Z
 }

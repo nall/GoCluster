@@ -25,6 +25,8 @@ type ftConfidenceTiming struct {
 	hardCap  time.Duration
 }
 
+// ftConfidencePolicy is separated from config so the runtime stage can enforce
+// safe defaults even when older configs omit newer FT corroboration knobs.
 type ftConfidencePolicy struct {
 	pMinUniqueSpotters int
 	vMinUniqueSpotters int
@@ -33,12 +35,16 @@ type ftConfidencePolicy struct {
 	ft2Timing          ftConfidenceTiming
 }
 
+// ftConfidenceKey groups only reports that can corroborate the same FT display
+// claim: same normalized call, timing family, and tight frequency bucket.
 type ftConfidenceKey struct {
 	call    string
 	mode    string
 	freqKey int64
 }
 
+// ftConfidencePendingGroup is the bounded burst being held until either the
+// quiet gap suggests the burst ended or the hard cap forces release.
 type ftConfidencePendingGroup struct {
 	key          ftConfidenceKey
 	firstSeen    time.Time
@@ -50,6 +56,8 @@ type ftConfidencePendingGroup struct {
 	spotters     map[string]struct{}
 }
 
+// ftConfidencePendingContext preserves just enough output context to release a
+// held FT spot without rerunning upstream resolver stages.
 type ftConfidencePendingContext struct {
 	spot                       *spot.Spot
 	ctyDB                      *cty.CTYDatabase
@@ -87,6 +95,8 @@ type ftConfidenceItem struct {
 	seq uint64
 }
 
+// ftConfidenceHeap is implemented locally instead of container/heap so the
+// single output goroutine can avoid interface conversions in this hot path.
 type ftConfidenceHeap []ftConfidenceItem
 
 func (h ftConfidenceHeap) Len() int { return len(h) }
@@ -246,6 +256,9 @@ func newFTConfidencePolicy(cfg config.CallCorrectionConfig) ftConfidencePolicy {
 	}
 }
 
+// newFTConfidenceController creates the FT burst controller even when few FT
+// modes are active; mode-specific gating happens in Observe so the output
+// pipeline has one consistent stage boundary.
 func newFTConfidenceController(cfg config.CallCorrectionConfig, tracker *stats.Tracker) *ftConfidenceController {
 	controller := &ftConfidenceController{
 		enabled:          true,
@@ -265,6 +278,9 @@ func (c *ftConfidenceController) Enabled() bool {
 	return c != nil && c.enabled
 }
 
+// Observe either appends a spot to a bounded corroboration burst or declines to
+// hold it. Declines are fail-open: the caller assigns a glyph immediately so
+// memory pressure cannot suppress telnet output.
 func (c *ftConfidenceController) Observe(now time.Time, ctx outputSpotContext) (bool, int) {
 	if !c.Enabled() || ctx.spot == nil {
 		return false, 1
@@ -339,6 +355,8 @@ func (c *ftConfidenceController) Observe(now time.Time, ctx outputSpotContext) (
 	return true, 1
 }
 
+// Drain releases only the current heap entries for each group; stale heap
+// entries are expected after due-time advances and are discarded here.
 func (c *ftConfidenceController) Drain(now time.Time, force bool) []*ftConfidencePendingGroup {
 	if !c.Enabled() {
 		return nil
@@ -374,6 +392,8 @@ func (c *ftConfidenceController) Drain(now time.Time, force bool) []*ftConfidenc
 	return out
 }
 
+// NextDue exposes the next real group deadline to the output loop, skipping
+// stale heap nodes produced by burst extension.
 func (c *ftConfidenceController) NextDue() (time.Time, bool) {
 	if !c.Enabled() {
 		return time.Time{}, false
@@ -390,6 +410,8 @@ func (c *ftConfidenceController) NextDue() (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// buildFTConfidenceKey normalizes call/mode/frequency once so support traces can
+// explain why two FT spots did or did not land in the same corroboration burst.
 func buildFTConfidenceKey(s *spot.Spot) (ftConfidenceKey, string, bool) {
 	if s == nil {
 		return ftConfidenceKey{}, "", false
@@ -422,6 +444,8 @@ func buildFTConfidenceKey(s *spot.Spot) (ftConfidenceKey, string, bool) {
 	}, spotter, true
 }
 
+// ftConfidenceTimingForMode keeps timing policy tied to taxonomy-known FT
+// families instead of treating every digital mode as burst-correlated.
 func ftConfidenceTimingForMode(mode string, policy ftConfidencePolicy) (ftConfidenceTiming, bool) {
 	quietKey, hardCapKey, ok := spot.FTConfidenceTimingKeys(mode)
 	if !ok {
@@ -439,6 +463,8 @@ func ftConfidenceTimingForMode(mode string, policy ftConfidencePolicy) (ftConfid
 	}
 }
 
+// ftConfidenceBurstDue chooses the earlier of quiet-gap release and hard cap so
+// the UI gets fast confirmation when the burst ends but never waits forever.
 func ftConfidenceBurstDue(lastSeen, hardDeadline time.Time, timing ftConfidenceTiming) time.Time {
 	due := lastSeen.Add(timing.quietGap)
 	if due.After(hardDeadline) {
@@ -501,6 +527,9 @@ func ftConfidenceFrequencyKey(freqKHz float64) int64 {
 	return int64(math.Round(freqKHz * 100))
 }
 
+// ftConfidenceGlyphForUniqueSpotters keeps FT glyphs tied to independent
+// receiver count rather than resolver confidence so FT support remains
+// explainable to telnet users.
 func ftConfidenceGlyphForUniqueSpotters(uniqueSpotters int, policy ftConfidencePolicy) string {
 	switch {
 	case uniqueSpotters >= policy.vMinUniqueSpotters:
@@ -512,6 +541,9 @@ func ftConfidenceGlyphForUniqueSpotters(uniqueSpotters int, policy ftConfidenceP
 	}
 }
 
+// newFTRecentBandStore uses tighter bounds than the general recent-band store
+// because FT bursts can be high-volume and are only needed as support-floor
+// context for uncertain FT glyphs.
 func newFTRecentBandStore(cfg config.CallCorrectionConfig) *spot.RecentBandStore {
 	if !cfg.RecentBandBonusEnabled {
 		return nil
@@ -525,6 +557,9 @@ func newFTRecentBandStore(cfg config.CallCorrectionConfig) *spot.RecentBandStore
 	})
 }
 
+// applyFTConfidenceStage diverts only unresolved FT glyphs onto the burst rail.
+// Existing confidence, beacons, and non-FT modes keep their earlier pipeline
+// decisions.
 func (p *outputPipeline) applyFTConfidenceStage(ctx *outputSpotContext, now time.Time) bool {
 	if p == nil || ctx == nil || ctx.spot == nil {
 		return false
@@ -546,6 +581,8 @@ func (p *outputPipeline) applyFTConfidenceStage(ctx *outputSpotContext, now time
 	return true
 }
 
+// assignFTConfidence writes the telnet glyph from unique spotter count and then
+// applies support floors only to uncertain bursts, preserving stronger evidence.
 func (p *outputPipeline) assignFTConfidence(ctx *outputSpotContext, uniqueSpotters int) {
 	if p == nil || ctx == nil || ctx.spot == nil {
 		return
@@ -562,6 +599,8 @@ func (p *outputPipeline) assignFTConfidence(ctx *outputSpotContext, uniqueSpotte
 	ctx.dirty = true
 }
 
+// releaseDueFT sends every spot in a completed FT burst through the remaining
+// output stages with the same unique-spotter glyph.
 func (p *outputPipeline) releaseDueFT(now time.Time, force bool) {
 	if p == nil || p.ftConfidence == nil || !p.ftConfidence.Enabled() {
 		return
@@ -589,6 +628,8 @@ func (p *outputPipeline) releaseDueFT(now time.Time, force bool) {
 	}
 }
 
+// stopFTTimer mirrors stopTemporalTimer for the FT rail: clear both the timer
+// and select channel to avoid stale wakeups after all groups drain.
 func (p *outputPipeline) stopFTTimer() {
 	if p == nil || p.ftTimer == nil {
 		return
@@ -603,6 +644,8 @@ func (p *outputPipeline) stopFTTimer() {
 	p.ftTimerCh = nil
 }
 
+// scheduleFTTimer lets the single output goroutine wake for FT hard-cap or
+// quiet-gap release while ingest is idle.
 func (p *outputPipeline) scheduleFTTimer(now time.Time) {
 	if p == nil || p.ftConfidence == nil || !p.ftConfidence.Enabled() {
 		p.stopFTTimer()
@@ -631,6 +674,9 @@ func (p *outputPipeline) scheduleFTTimer(now time.Time) {
 	p.ftTimerCh = p.ftTimer.C
 }
 
+// recordFTRecentBandObservation feeds the FT-only support floor after a spot
+// has earned a display glyph, keeping future uncertain FT bursts from starting
+// cold on the same band/call.
 func (p *outputPipeline) recordFTRecentBandObservation(s *spot.Spot) {
 	if p == nil || p.ftRecentBandStore == nil || s == nil || s.IsBeacon {
 		return

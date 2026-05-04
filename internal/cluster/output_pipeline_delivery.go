@@ -17,6 +17,10 @@ type outputDeliveryPlan struct {
 	familySnapshotOK    bool
 }
 
+// startStabilizerReleaseLoop routes delayed spots back through the output
+// pipeline instead of broadcasting from the stabilizer. That preserves one
+// fanout owner and keeps delayed-output support evidence in the same path as
+// immediate output.
 func (p *outputPipeline) startStabilizerReleaseLoop() {
 	go func() {
 		releaseCh := p.telnetStabilizer.ReleaseChan()
@@ -26,6 +30,9 @@ func (p *outputPipeline) startStabilizerReleaseLoop() {
 	}()
 }
 
+// handleStabilizerRelease rechecks resolver, support-floor, license, and
+// secondary gates after a delay because the evidence that justified holding the
+// spot may have changed while it was queued.
 func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvelope) {
 	if envelope == nil || envelope.spot == nil {
 		return
@@ -125,6 +132,9 @@ func (p *outputPipeline) handleStabilizerRelease(envelope *telnetStabilizerEnvel
 	p.telnet.BroadcastSpotOwned(delayedSnapshot, allowFast, allowMed, allowSlow)
 }
 
+// computeTelnetAllows translates optional secondary dedup rails into fast/med/
+// slow telnet delivery decisions. The fallback keeps older configs usable when
+// only one rail is enabled.
 func (p *outputPipeline) computeTelnetAllows(s *spot.Spot) (bool, bool, bool) {
 	allowFast := true
 	if p.secondaryFast != nil {
@@ -158,6 +168,8 @@ func (p *outputPipeline) computeTelnetAllows(s *spot.Spot) (bool, bool, bool) {
 	return allowFast, allowMed, allowSlow
 }
 
+// deliverSpot is the final synchronous fanout stage after all mutation and
+// suppression decisions are complete.
 func (p *outputPipeline) deliverSpot(ctx *outputSpotContext) {
 	if p.secondaryStage != nil {
 		p.secondaryStage.Add(1)
@@ -170,6 +182,9 @@ func (p *outputPipeline) deliverSpot(ctx *outputSpotContext) {
 	p.emitSpot(ctx, plan)
 }
 
+// resolveDeliveryPlan decides whether telnet sees the spot now, later, only as
+// a self-owned echo, or not at all. Archive/peer allowance is kept separate so
+// telnet-facing stabilization never changes archival truth.
 func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeliveryPlan, bool) {
 	s := ctx.spot
 	plan := outputDeliveryPlan{
@@ -278,6 +293,9 @@ func (p *outputPipeline) updateGridCache(s *spot.Spot) {
 	}
 }
 
+// emitSpot seals a single immutable snapshot for all asynchronous consumers.
+// This avoids support-confusing races where archive, peer, and telnet could see
+// different versions of the same corrected spot.
 func (p *outputPipeline) emitSpot(ctx *outputSpotContext, plan outputDeliveryPlan) {
 	if ctx == nil || ctx.spot == nil {
 		return

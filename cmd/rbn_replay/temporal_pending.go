@@ -8,6 +8,9 @@ import (
 	"dxcluster/spot"
 )
 
+// replayTemporalPending preserves the resolver evidence and selected snapshot
+// for a held observation so lag-release scoring can use the same inputs runtime
+// saw at hold time.
 type replayTemporalPending struct {
 	id          uint64
 	spot        *spot.Spot
@@ -17,6 +20,8 @@ type replayTemporalPending struct {
 	selection   correctionflow.ResolverPrimarySelection
 }
 
+// replayTemporalItem orders pending temporal observations by release time and
+// sequence for deterministic replay artifacts.
 type replayTemporalItem struct {
 	id  uint64
 	due time.Time
@@ -57,6 +62,9 @@ func (h *replayTemporalHeap) Pop() any {
 	return item
 }
 
+// popReplayTemporalDue returns every item due at the replay timestamp. Stale or
+// missing pending IDs are handled by the caller because the decoder owns the
+// final decision state.
 func popReplayTemporalDue(h *replayTemporalHeap, now time.Time) []*replayTemporalItem {
 	if h == nil || h.Len() == 0 {
 		return nil

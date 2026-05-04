@@ -17,6 +17,9 @@ type conditionalFetcher struct {
 	client       *http.Client
 }
 
+// Fetch uses HTTP conditional headers so regular polling does not download
+// unchanged NOAA payloads. The updated flag lets callers distinguish "not
+// modified" from failed fetches.
 func (f *conditionalFetcher) Fetch(ctx context.Context) ([]byte, bool, error) {
 	if f == nil {
 		return nil, false, fmt.Errorf("nil fetcher")
@@ -66,6 +69,8 @@ type goesSample struct {
 	Flux float64
 }
 
+// parseGOES keeps only the configured energy band and returns samples sorted by
+// observation time so R-level seeding can reason over the recent history.
 func parseGOES(body []byte, energyBand string) ([]goesSample, bool) {
 	var entries []goesEntry
 	if err := json.Unmarshal(body, &entries); err != nil {
@@ -94,6 +99,8 @@ func parseGOES(body []byte, energyBand string) ([]goesSample, bool) {
 	return samples, true
 }
 
+// parseKp extracts the latest Kp row from NOAA's tabular JSON payload. Invalid
+// rows are skipped so one malformed sample does not discard the whole feed.
 func parseKp(body []byte) (float64, time.Time, bool) {
 	var rows [][]string
 	if err := json.Unmarshal(body, &rows); err != nil {

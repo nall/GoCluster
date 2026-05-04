@@ -50,6 +50,8 @@ type replayResolverApplyOutcome struct {
 	GateEvaluated bool
 }
 
+// normalizedDXCall exists to keep replay code visually aligned with the runtime
+// pipeline while sharing correctionflow's canonical normalization.
 func normalizedDXCall(s *spot.Spot) string {
 	return correctionflow.NormalizedDXCall(s)
 }
@@ -69,6 +71,8 @@ func evaluateStabilizerDelay(
 	return correctionflow.EvaluateStabilizerDelay(s, store, cfg, now, snapshot, snapshotOK)
 }
 
+// observeResolverPrimaryDecision writes replay decisions into the same tracker
+// dimensions used by runtime summaries, making replay output usable in runbooks.
 func observeResolverPrimaryDecision(tracker *stats.Tracker, decision, reason string, candidateRank int) {
 	if tracker == nil {
 		return
@@ -179,6 +183,9 @@ func maybeApplyResolverCorrectionReplay(
 	)
 }
 
+// maybeApplyResolverCorrectionReplayWithSelectionOverride is the replay mirror
+// of runtime resolver application. The explicit outcome object lets A/B reports
+// explain not only whether a correction applied, but why gates rejected it.
 func maybeApplyResolverCorrectionReplayWithSelectionOverride(
 	spotEntry *spot.Spot,
 	resolver *spot.SignalResolver,
@@ -325,6 +332,8 @@ func maybeApplyResolverCorrectionReplayWithSelectionOverride(
 	return outcome
 }
 
+// evaluateResolverPrimaryGateReplay keeps replay gate decisions on the same
+// inputs as runtime while avoiding telnet/archive side effects.
 func evaluateResolverPrimaryGateReplay(
 	spotEntry *spot.Spot,
 	preCorrectionCall string,
@@ -399,6 +408,8 @@ func evaluateResolverPrimaryGateReplay(
 	), true
 }
 
+// shouldRejectCTYCall applies the same prefilter used by ingest validation so
+// replayed corrections fail for the same malformed-base reasons as production.
 func shouldRejectCTYCall(call string) bool {
 	base := strings.TrimSpace(uls.NormalizeForLicense(call))
 	if base == "" {
@@ -436,6 +447,9 @@ func hasLeadingLettersBeforeDigit(call string, threshold int) bool {
 	return count >= threshold
 }
 
+// recordRecentBandObservation updates replay support memory only after a spot
+// would have survived output. That keeps stabilizer and recent-band metrics from
+// learning from suppressed corrections.
 func recordRecentBandObservation(s *spot.Spot, store spot.RecentSupportStore, cfg config.CallCorrectionConfig) {
 	if s == nil || store == nil || s.IsBeacon {
 		return

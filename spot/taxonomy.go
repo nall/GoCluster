@@ -13,6 +13,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// The taxonomy keeps mode and EVENT behavior in config-owned data instead of
+// scattering special cases through ingest, filters, archive, path reliability,
+// and support commands. Runtime code reads immutable lookup tables built at
+// startup; the hard caps below keep a bad YAML edit from creating oversized
+// process-lifetime maps.
 const (
 	UnknownModeToken = "UNKNOWN"
 
@@ -64,6 +69,9 @@ const (
 	maxTaxonomyPrefixesPerEvent = 32
 )
 
+// Taxonomy is the immutable runtime view of spot_taxonomy.yaml. The maps are
+// process-lifetime after ConfigureTaxonomy, so buildTaxonomy validates
+// uniqueness and cardinality before publishing the table atomically.
 type Taxonomy struct {
 	modesByName map[string]ModeDefinition
 	modeOrder   []string
@@ -84,11 +92,17 @@ type Taxonomy struct {
 	keywordScanner *acScanner
 }
 
+// taxonomyFile mirrors the YAML shape so strict decoding can reject unknown
+// fields before any runtime lookup table is built.
 type taxonomyFile struct {
 	Modes  []ModeDefinition  `yaml:"modes"`
 	Events []EventDefinition `yaml:"events"`
 }
 
+// ModeDefinition is one mode contract shared by ingest, filtering, confidence,
+// archive retention, path reliability, source skew, and custom-SCP behavior.
+// A field should live here only when support needs the mode behavior to be
+// data-owned rather than hard-coded in one package.
 type ModeDefinition struct {
 	Name                      string                 `yaml:"name"`
 	Display                   string                 `yaml:"display"`
@@ -118,12 +132,16 @@ type ModeDefinition struct {
 	PathReliabilityOffsetMode string                 `yaml:"path_reliability_offset_mode"`
 }
 
+// FTConfidenceDefinition links a mode to pipeline timing keys. The taxonomy
+// stores key names, not durations, so timing remains owned by pipeline config.
 type FTConfidenceDefinition struct {
 	Enabled            bool   `yaml:"enabled"`
 	QuietGapSecondsKey string `yaml:"quiet_gap_seconds_key"`
 	HardCapSecondsKey  string `yaml:"hard_cap_seconds_key"`
 }
 
+// EventDefinition defines the operator-visible EVENT families and the comment
+// tokens that turn raw spot text into filterable event masks.
 type EventDefinition struct {
 	Name              string   `yaml:"name"`
 	Display           string   `yaml:"display"`
@@ -139,6 +157,9 @@ type eventReferenceMatcher struct {
 	suffix string
 }
 
+// currentTaxonomy is the global read-mostly routing table. atomic.Value lets
+// startup publish the checked YAML table once while tests can replace it without
+// racing readers.
 var currentTaxonomy atomic.Value
 
 func init() {
@@ -149,6 +170,9 @@ func init() {
 	currentTaxonomy.Store(t)
 }
 
+// LoadTaxonomyFile decodes the checked-in reference table with KnownFields so
+// misspelled support/operator knobs fail at startup instead of silently changing
+// mode behavior.
 func LoadTaxonomyFile(path string) (*Taxonomy, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -170,6 +194,8 @@ func LoadTaxonomyFile(path string) (*Taxonomy, error) {
 	return buildTaxonomy(file)
 }
 
+// ConfigureTaxonomy publishes a fully built taxonomy. It panics on nil because
+// every reader depends on this process-lifetime table being present.
 func ConfigureTaxonomy(t *Taxonomy) {
 	if t == nil {
 		panic("spot: nil taxonomy")
@@ -177,6 +203,9 @@ func ConfigureTaxonomy(t *Taxonomy) {
 	currentTaxonomy.Store(t)
 }
 
+// CurrentTaxonomy returns the active immutable taxonomy for package-level
+// helpers. A missing table is a startup/programming error, not a recoverable
+// per-spot condition.
 func CurrentTaxonomy() *Taxonomy {
 	loaded := currentTaxonomy.Load()
 	t, ok := loaded.(*Taxonomy)
@@ -186,6 +215,9 @@ func CurrentTaxonomy() *Taxonomy {
 	return t
 }
 
+// buildTaxonomy turns YAML definitions into bounded lookup maps. The duplicate
+// checks protect support semantics: one token or variant must not route to two
+// different modes or EVENT families.
 func buildTaxonomy(file taxonomyFile) (*Taxonomy, error) {
 	if len(file.Modes) == 0 {
 		return nil, fmt.Errorf("spot taxonomy: modes must not be empty")
@@ -392,6 +424,9 @@ func sortModesByPreferredOrder(modes []string, preferred []string) {
 	})
 }
 
+// validateModeDefinition rejects behavior names the binary does not implement.
+// This keeps spot_taxonomy.yaml extensible without pretending a config edit can
+// invent new runtime behavior.
 func validateModeDefinition(mode ModeDefinition) error {
 	if mode.PSKReporterRoute != "" {
 		switch mode.PSKReporterRoute {
@@ -428,6 +463,8 @@ func validateModeDefinition(mode ModeDefinition) error {
 	return nil
 }
 
+// normalizeTaxonomyName keeps all taxonomy keys ASCII-ish and uppercase so the
+// same tables can be used by telnet commands, parsers, and support tooling.
 func normalizeTaxonomyName(value, field string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -487,6 +524,8 @@ func (t *Taxonomy) CanonicalMode(mode string) string {
 	return upper
 }
 
+// CanonicalFilterMode treats a blank filter token as UNKNOWN because telnet
+// filters need an explicit bucket for spots whose mode could not be inferred.
 func (t *Taxonomy) CanonicalFilterMode(mode string) string {
 	upper := strings.ToUpper(strings.TrimSpace(mode))
 	if upper == "" {
@@ -495,6 +534,9 @@ func (t *Taxonomy) CanonicalFilterMode(mode string) string {
 	return t.CanonicalMode(upper)
 }
 
+// CommentModeToken maps human/source comment tokens to canonical modes. It is
+// intentionally separate from variants because comments are evidence, while
+// variants are accepted alternate spellings of a mode.
 func (t *Taxonomy) CommentModeToken(token string) (string, bool) {
 	upper := strings.ToUpper(strings.TrimSpace(token))
 	if upper == "" {
@@ -556,6 +598,8 @@ func (t *Taxonomy) PSKReporterRoute(mode string) string {
 	return pskReporterRouteIgnore
 }
 
+// HasPSKReporterPathOnlyModes lets startup/reporting explain whether any mode
+// is intentionally routed into path reliability without normal spot broadcast.
 func (t *Taxonomy) HasPSKReporterPathOnlyModes() bool {
 	for _, modeName := range t.modeOrder {
 		def := t.modesByName[modeName]
@@ -668,6 +712,9 @@ func (t *Taxonomy) PathReliabilityOffsetMode(mode string) string {
 	return t.CanonicalMode(mode)
 }
 
+// PathReliabilityModePolicies exposes the ingest modes and offset families as a
+// copy so path reliability can build its policy map without retaining taxonomy
+// internals.
 func (t *Taxonomy) PathReliabilityModePolicies() map[string]string {
 	out := make(map[string]string)
 	for _, modeName := range t.modeOrder {
@@ -684,6 +731,8 @@ func (t *Taxonomy) PathReliabilityModePolicies() map[string]string {
 	return out
 }
 
+// EventMaskForName is the exact-name path used by SET/SHOW filters; comment
+// parsing uses EventFromCommentToken below.
 func (t *Taxonomy) EventMaskForName(event string) EventMask {
 	upper := strings.ToUpper(strings.TrimSpace(event))
 	if upper == "" {

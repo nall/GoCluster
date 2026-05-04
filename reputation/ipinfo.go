@@ -32,6 +32,9 @@ type ipRange6 struct {
 	countryCode string
 }
 
+// ipinfoIndex is an immutable in-memory snapshot used for fast IPv4 lookups and
+// optional IPv6 tests. Gate swaps whole indexes so readers never observe partial
+// imports.
 type ipinfoIndex struct {
 	v4       []ipRange4
 	v6       []ipRange6
@@ -39,7 +42,10 @@ type ipinfoIndex struct {
 	source   string
 }
 
-// LoadIPInfoSnapshot parses the IPinfo Lite CSV into an in-memory index.
+// LoadIPInfoSnapshot parses the IPinfo Lite CSV into an in-memory index. It
+// accepts several header shapes because IPinfo exports and local fixtures have
+// changed over time, but the resulting ranges are normalized and sorted for
+// deterministic binary search.
 func LoadIPInfoSnapshot(path string) (*ipinfoIndex, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -128,6 +134,8 @@ func LoadIPInfoSnapshot(path string) (*ipinfoIndex, error) {
 	return index, nil
 }
 
+// lookup performs range search without allocation; country names are filled by
+// later metadata layers when needed.
 func (idx *ipinfoIndex) lookup(addr netip.Addr) (LookupResult, bool) {
 	if idx == nil {
 		return LookupResult{}, false
@@ -166,6 +174,8 @@ func (idx *ipinfoIndex) lookup(addr netip.Addr) (LookupResult, bool) {
 	}, true
 }
 
+// parseRowRange supports start/end, CIDR, and single-IP rows so the importer can
+// keep working across provider export variations.
 func parseRowRange(row []string, startIdx, endIdx, cidrIdx, ipIdx int) (netip.Addr, netip.Addr, bool) {
 	if startIdx >= 0 && endIdx >= 0 {
 		start, ok := parseAddr(fieldAt(row, startIdx))

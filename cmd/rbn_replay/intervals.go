@@ -16,6 +16,8 @@ type resolverSample struct {
 	Metrics spot.SignalResolverMetrics
 }
 
+// intervalRow is the operator-facing delta between two resolver samples. The
+// fields intentionally preserve the short counter names used in runbook notes.
 type intervalRow struct {
 	T0 string
 	T1 string
@@ -40,6 +42,8 @@ type intervalRow struct {
 	SplitSharePct   float64
 }
 
+// gatesSummary captures the replay go/no-go evidence: resolver pressure,
+// correction stability, and A/B metrics from the same run.
 type gatesSummary struct {
 	Overall struct {
 		MaxQueueDepth     int                    `json:"max_queue_depth"`
@@ -61,6 +65,9 @@ type gatesSummary struct {
 	} `json:"threshold_hits"`
 }
 
+// computeIntervalsAndGates converts monotonic resolver metrics into interval
+// deltas and threshold hits so profiling can identify when pressure happened,
+// not just the final totals.
 func computeIntervalsAndGates(samples []resolverSample, queueSize int) (intervals []intervalRow, hits []intervalRow, gates gatesSummary) {
 	if len(samples) < 2 {
 		return nil, nil, gates
@@ -169,6 +176,8 @@ func roundFloat(v float64, places int) float64 {
 	return math.Round(v*factor) / factor
 }
 
+// writeIntervalsCSV emits CSV instead of only JSON because operators often sort
+// and filter pressure intervals in spreadsheet tools during replay analysis.
 func writeIntervalsCSV(path string, rows []intervalRow) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {

@@ -2,18 +2,27 @@ package spot
 
 const customSCPImmediateCleanupDueUnix int64 = -1 << 63
 
+// customSCPEntryExpiryItem links one observation key to the next time cleanup
+// should inspect it. The heap is a secondary index for CustomSCPStore.entries,
+// so delete paths must remove or invalidate the matching item.
 type customSCPEntryExpiryItem struct {
 	key     customSCPKey
 	dueUnix int64
 	index   int
 }
 
+// customSCPEntryExpiryQueue is a min-heap plus key index. It exists so cleanup
+// can find stale or oversized observation entries without scanning every key on
+// every interval; the index is rebuilt lazily after root pops to keep churn
+// bounded and simple.
 type customSCPEntryExpiryQueue struct {
 	items        []customSCPEntryExpiryItem
 	indexes      map[customSCPKey]int
 	indexesDirty bool
 }
 
+// newCustomSCPEntryExpiryQueue pre-sizes the secondary index to the expected
+// active observation cardinality; the primary MaxKeys cap still owns the bound.
 func newCustomSCPEntryExpiryQueue(capacity int) customSCPEntryExpiryQueue {
 	return customSCPEntryExpiryQueue{
 		items:   make([]customSCPEntryExpiryItem, 0, capacity),
@@ -28,6 +37,8 @@ func (h *customSCPEntryExpiryQueue) Len() int {
 	return len(h.items)
 }
 
+// Less orders by cleanup due time first and key second so repeated runs are
+// deterministic when multiple entries expire at the same second.
 func (h *customSCPEntryExpiryQueue) Less(i, j int) bool {
 	if h.items[i].dueUnix != h.items[j].dueUnix {
 		return h.items[i].dueUnix < h.items[j].dueUnix
@@ -140,12 +151,17 @@ type customSCPStaticExpiryItem struct {
 	index   int
 }
 
+// customSCPStaticExpiryQueue mirrors the observation expiry heap for the
+// static-membership map. It is separate because static calls have a longer
+// horizon and different primary owner than observation entries.
 type customSCPStaticExpiryQueue struct {
 	items        []customSCPStaticExpiryItem
 	indexes      map[string]int
 	indexesDirty bool
 }
 
+// newCustomSCPStaticExpiryQueue pre-sizes the static secondary index; the
+// static map and horizon cleanup own its retained cardinality.
 func newCustomSCPStaticExpiryQueue(capacity int) customSCPStaticExpiryQueue {
 	return customSCPStaticExpiryQueue{
 		items:   make([]customSCPStaticExpiryItem, 0, capacity),
@@ -160,6 +176,7 @@ func (h *customSCPStaticExpiryQueue) Len() int {
 	return len(h.items)
 }
 
+// Less keeps static cleanup deterministic for equal timestamps.
 func (h *customSCPStaticExpiryQueue) Less(i, j int) bool {
 	if h.items[i].dueUnix != h.items[j].dueUnix {
 		return h.items[i].dueUnix < h.items[j].dueUnix
@@ -266,6 +283,9 @@ func (h *customSCPStaticExpiryQueue) ensureIndexes() {
 	h.indexesDirty = false
 }
 
+// refreshEntryAgesLocked recomputes age bounds from retained spotters after
+// inserts, trims, or load. Cleanup uses oldestSeenUnix to know when an entry can
+// still contain stale observations.
 func (s *CustomSCPStore) refreshEntryAgesLocked(entry *customSCPEntry) {
 	if entry == nil || len(entry.spotters) == 0 {
 		if entry != nil {
@@ -289,6 +309,9 @@ func (s *CustomSCPStore) refreshEntryAgesLocked(entry *customSCPEntry) {
 	entry.oldestSeenUnix = oldest
 }
 
+// entryCleanupDueUnix returns the next cleanup trigger for one observation
+// entry. Oversized entries are marked immediately so overflow cannot remain
+// until the normal age horizon.
 func (s *CustomSCPStore) entryCleanupDueUnix(entry *customSCPEntry) int64 {
 	if entry == nil || len(entry.spotters) == 0 {
 		return 0
@@ -299,6 +322,8 @@ func (s *CustomSCPStore) entryCleanupDueUnix(entry *customSCPEntry) int64 {
 	return entry.oldestSeenUnix
 }
 
+// upsertEntryExpiryLocked keeps the observation expiry heap coupled to the
+// primary entries map. Callers hold s.mu.
 func (s *CustomSCPStore) upsertEntryExpiryLocked(key customSCPKey, entry *customSCPEntry) {
 	if s == nil {
 		return
@@ -321,6 +346,8 @@ func (s *CustomSCPStore) upsertEntryExpiryLocked(key customSCPKey, entry *custom
 	s.entryExpiry.push(customSCPEntryExpiryItem{key: key, dueUnix: dueUnix})
 }
 
+// deleteEntryExpiryLocked removes the secondary heap/index item when the primary
+// observation entry is deleted. Callers hold s.mu.
 func (s *CustomSCPStore) deleteEntryExpiryLocked(key customSCPKey) {
 	if s == nil {
 		return
@@ -333,6 +360,8 @@ func (s *CustomSCPStore) deleteEntryExpiryLocked(key customSCPKey) {
 	s.entryExpiry.remove(idx)
 }
 
+// markEntryForCleanupLocked refreshes age metadata before updating the expiry
+// heap so cleanup decisions are based on the current retained spotter set.
 func (s *CustomSCPStore) markEntryForCleanupLocked(key customSCPKey, entry *customSCPEntry) {
 	if s == nil {
 		return
@@ -341,6 +370,8 @@ func (s *CustomSCPStore) markEntryForCleanupLocked(key customSCPKey, entry *cust
 	s.upsertEntryExpiryLocked(key, entry)
 }
 
+// popDueEntryExpiryLocked returns one currently due primary entry and discards
+// stale heap entries caused by deletes or timestamp updates. Callers hold s.mu.
 func (s *CustomSCPStore) popDueEntryExpiryLocked(observationCutoff int64) (customSCPKey, *customSCPEntry, bool) {
 	for s != nil && s.entryExpiry.Len() > 0 {
 		item := s.entryExpiry.items[0]
@@ -362,6 +393,8 @@ func (s *CustomSCPStore) popDueEntryExpiryLocked(observationCutoff int64) (custo
 	return customSCPKey{}, nil, false
 }
 
+// upsertStaticExpiryLocked keeps the static-membership expiry heap coupled to
+// the static map. Callers hold s.mu.
 func (s *CustomSCPStore) upsertStaticExpiryLocked(call string, seenUnix int64) {
 	if s == nil || call == "" || seenUnix <= 0 {
 		s.deleteStaticExpiryLocked(call)
@@ -376,6 +409,8 @@ func (s *CustomSCPStore) upsertStaticExpiryLocked(call string, seenUnix int64) {
 	s.staticExpiry.push(customSCPStaticExpiryItem{call: call, dueUnix: seenUnix})
 }
 
+// deleteStaticExpiryLocked removes the secondary heap/index item for a static
+// call when the primary static map no longer owns it. Callers hold s.mu.
 func (s *CustomSCPStore) deleteStaticExpiryLocked(call string) {
 	if s == nil || call == "" {
 		return
@@ -388,6 +423,8 @@ func (s *CustomSCPStore) deleteStaticExpiryLocked(call string) {
 	s.staticExpiry.remove(idx)
 }
 
+// popDueStaticExpiryLocked returns one currently stale static call and drops
+// obsolete heap entries after updates/deletes. Callers hold s.mu.
 func (s *CustomSCPStore) popDueStaticExpiryLocked(staticCutoff int64) (string, bool) {
 	for s != nil && s.staticExpiry.Len() > 0 {
 		item := s.staticExpiry.items[0]

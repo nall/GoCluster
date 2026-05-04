@@ -30,6 +30,9 @@ type replayRunRecord struct {
 	ABMetrics         replayABMetrics        `json:"ab_metrics"`
 }
 
+// writeReplayRunHistory writes both an immutable run snapshot and an append-only
+// index. The hashes make later support comparisons independent of mutable file
+// names or local config edits.
 func writeReplayRunHistory(
 	archiveDir string,
 	replayConfigPath string,
@@ -90,6 +93,8 @@ func writeReplayRunHistory(
 	return nil
 }
 
+// buildReplayRunID derives a stable sortable ID from finish time; replay inputs
+// are already captured by hashes in the record.
 func buildReplayRunID(manifest replayManifest) string {
 	ts := strings.TrimSpace(manifest.FinishedAtUTC)
 	ts = strings.ReplaceAll(ts, ":", "")
@@ -111,6 +116,8 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+// hashAnyStable is used for config structs where JSON field order is stable
+// enough for change detection between runs.
 func hashAnyStable(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -120,6 +127,8 @@ func hashAnyStable(v any) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// appendJSONL keeps the run index append-only so failed or repeated replay
+// experiments do not overwrite historical evidence.
 func appendJSONL(path string, v any) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {

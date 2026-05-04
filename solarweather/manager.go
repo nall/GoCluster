@@ -11,6 +11,9 @@ import (
 	"dxcluster/internal/logutil"
 )
 
+// Manager owns solar-weather fetch state and the derived path override gates.
+// It is deliberately read-mostly at runtime: network polling refreshes state in
+// the background while spot evaluation reads snapshots with bounded locking.
 type Manager struct {
 	cfg       Config
 	dipole    Vec3
@@ -33,6 +36,9 @@ type sunCache struct {
 	at  time.Time
 }
 
+// State stores raw observed space-weather values plus R-level hold state. Holds
+// make short NOAA sample gaps less visible to telnet users without inventing new
+// observations.
 type State struct {
 	GOESFlux      float64
 	GOESTime      time.Time
@@ -44,6 +50,8 @@ type State struct {
 	RSeeded       bool
 }
 
+// Snapshot is the immutable support-facing view used by path override
+// evaluation and operator summaries.
 type Snapshot struct {
 	Now          time.Time
 	SunVec       Vec3
@@ -88,6 +96,8 @@ func NewManager(cfg Config, logger *log.Logger) *Manager {
 	return m
 }
 
+// Start launches a single polling loop. Fetch failures stay inside the loop as
+// logs so path evaluation continues with the previous snapshot or no override.
 func (m *Manager) Start(ctx context.Context) {
 	if m == nil || !m.cfg.Enabled {
 		return
@@ -107,6 +117,8 @@ func (m *Manager) Start(ctx context.Context) {
 	}()
 }
 
+// poll updates GOES and Kp independently because one feed can be stale or down
+// while the other still provides useful operator context.
 func (m *Manager) poll(ctx context.Context) {
 	if m == nil {
 		return
@@ -141,6 +153,8 @@ func (m *Manager) poll(ctx context.Context) {
 	}
 }
 
+// updateGOES refreshes the R-level hold state from the latest sample set. A
+// long gap forces reseeding so old flare holds do not survive a feed outage.
 func (m *Manager) updateGOES(now time.Time, samples []goesSample) {
 	if len(samples) == 0 {
 		return
@@ -167,6 +181,8 @@ func (m *Manager) updateGOES(now time.Time, samples []goesSample) {
 	m.applyRSampleLocked(latest)
 }
 
+// updateKp stores the latest geomagnetic sample without hold logic; the gate
+// layer applies hysteresis per path instead.
 func (m *Manager) updateKp(now time.Time, kp float64, t time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -175,6 +191,8 @@ func (m *Manager) updateKp(now time.Time, kp float64, t time.Time) {
 	m.state.KpUpdatedAt = now
 }
 
+// Snapshot derives stale flags at read time so support output can separate
+// "quiet conditions" from "feed unavailable."
 func (m *Manager) Snapshot(now time.Time) Snapshot {
 	if m == nil {
 		return Snapshot{}
@@ -215,6 +233,8 @@ func (m *Manager) Snapshot(now time.Time) Snapshot {
 	}
 }
 
+// OverrideGlyph returns a display override only when solar state and path gates
+// agree that the specific path/band is affected.
 func (m *Manager) OverrideGlyph(now time.Time, input PathInput) (string, OverrideKind) {
 	if m == nil || !m.cfg.Enabled {
 		return "", OverrideNone

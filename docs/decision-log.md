@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0104 | Go Comment Intent Pass | Accepted | 2026-05-04 | runtime, replay, supportability | - | - | `docs/decisions/ADR-0104-go-comment-intent-pass.md` |
 | ADR-0103 | YAML Documentation Rigor Workflow Gate | Accepted | 2026-05-04 | workflow, config, docs | - | - | `docs/decisions/ADR-0103-yaml-documentation-rigor-workflow-gate.md` |
 | ADR-0102 | YAML Key Comment Standard | Accepted | 2026-05-04 | config, docs, customgpt | - | - | `docs/decisions/ADR-0102-yaml-key-comment-standard.md` |
 | ADR-0101 | PowerShell Script Header Standard | Accepted | 2026-05-04 | scripts, docs, customgpt | - | - | `docs/decisions/ADR-0101-powershell-script-header-standard.md` |

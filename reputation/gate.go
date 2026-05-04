@@ -17,7 +17,9 @@ import (
 	"dxcluster/strutil"
 )
 
-// Gate enforces the passwordless telnet reputation policy.
+// Gate enforces the passwordless telnet reputation policy. It is designed to
+// slow or cap suspicious self-spot traffic without blocking the login path on
+// live network lookups.
 type Gate struct {
 	cfg              gateConfig
 	ctyLookup        func() *cty.CTYDatabase
@@ -36,6 +38,8 @@ type Gate struct {
 	sweeperEvery     time.Duration
 }
 
+// gateConfig is the normalized operational contract for reputation decisions.
+// Durations and caps are resolved before runtime so Check can stay predictable.
 type gateConfig struct {
 	enabled                  bool
 	initialWait              time.Duration
@@ -90,11 +94,16 @@ type gateConfig struct {
 	ipv6BucketRefillPerSec   int
 }
 
+// callShard bounds lock contention by callsign; each shard owns only the calls
+// mapped to it.
 type callShard struct {
 	mu    sync.Mutex
 	calls map[string]*callState
 }
 
+// callState is the active per-login-call probation window. Historical ASN and
+// country slices are copied from Store records so support output can explain why
+// a user was treated as new or risky.
 type callState struct {
 	windowStart        time.Time
 	nextAllowedAt      time.Time
@@ -119,7 +128,9 @@ type callState struct {
 	continentHistory   []string
 }
 
-// NewGate builds the telnet reputation gate with normalized config defaults.
+// NewGate builds the telnet reputation gate with normalized config defaults and
+// bounded helper caches. Expensive data sources are optional so operators can
+// turn reputation on before every enrichment feed is available.
 func NewGate(cfg config.ReputationConfig, ctyLookup func() *cty.CTYDatabase) (*Gate, error) {
 	gcfg := normalizeGateConfig(cfg)
 	if !gcfg.enabled {
@@ -165,7 +176,9 @@ func NewGate(cfg config.ReputationConfig, ctyLookup func() *cty.CTYDatabase) (*G
 	return g, nil
 }
 
-// Start launches background workers (DNS fallback, sweeper, optional downloader).
+// Start launches background workers (DNS fallback, sweeper, optional downloader)
+// after trying to load the local IPinfo store. Failures are logged as warnings
+// because admission must remain available with reduced enrichment.
 func (g *Gate) Start(ctx context.Context) {
 	if g == nil || !g.cfg.enabled {
 		return
@@ -197,7 +210,9 @@ func (g *Gate) Close() {
 	}
 }
 
-// LoadStore refreshes the Pebble store handle and (optionally) the IPv4 in-memory index.
+// LoadStore refreshes the Pebble store handle and optionally builds the IPv4
+// in-memory index. The pointer swap keeps readers on either the old complete
+// store or the new complete store, never a half-loaded one.
 func (g *Gate) LoadStore() error {
 	if g == nil || !g.cfg.enabled {
 		return nil
@@ -238,7 +253,9 @@ func (g *Gate) LoadSnapshot() error {
 	return g.LoadStore()
 }
 
-// RecordLogin seeds or refreshes the per-call reputation state.
+// RecordLogin seeds or refreshes per-call reputation state from CTY, IPinfo, and
+// Cymru evidence. It front-loads the expensive context so later Check calls can
+// make bounded, lock-local decisions.
 func (g *Gate) RecordLogin(call, ip string, now time.Time) {
 	if g == nil || !g.cfg.enabled {
 		return
@@ -323,7 +340,9 @@ func (g *Gate) RecordLogin(call, ip string, now time.Time) {
 	shard.mu.Unlock()
 }
 
-// Check applies the reputation policy to an incoming spot request.
+// Check applies the runtime reputation policy to an incoming self-spot. Prefix
+// caps run before per-call locks so reconnect storms from one network cannot
+// create unbounded per-call state.
 func (g *Gate) Check(req Request) Decision {
 	if g == nil || !g.cfg.enabled {
 		return Decision{Allow: true}
@@ -404,6 +423,9 @@ func (g *Gate) Check(req Request) Decision {
 	return decision
 }
 
+// dropDecision creates a denied decision outside the caller's lock context.
+// Support fields are still copied from call state so drop logs have enough
+// evidence to explain probation, cap, or prefix decisions.
 func (g *Gate) dropDecision(call, prefix string, reason DropReason) Decision {
 	shard := g.callShard(call)
 	shard.mu.Lock()
@@ -453,6 +475,8 @@ func (g *Gate) resetState(state *callState, now time.Time, initialWait, extraDel
 	}
 }
 
+// advanceState moves a call through probation and ramp windows using elapsed
+// time, not number of checks, so quiet users do not consume work just to mature.
 func (g *Gate) advanceState(state *callState, now time.Time) {
 	if state == nil {
 		return

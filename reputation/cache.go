@@ -12,6 +12,9 @@ type cacheEntry struct {
 	negative  bool
 }
 
+// ttlCache is the bounded shared lookup cache for reputation enrichment. It
+// caches misses separately so missing IP metadata does not cause repeated live
+// fallback work under reconnect bursts.
 type ttlCache struct {
 	shards     []cacheShard
 	ttl        time.Duration
@@ -43,6 +46,9 @@ func newTTLCache(shards int, ttl, negativeTTL time.Duration, maxEntries int) *tt
 	return c
 }
 
+// get returns whether a value was cached and whether that value represents a
+// negative lookup. Expired entries are removed by the reader that observes them
+// to avoid a separate sweeper goroutine.
 func (c *ttlCache) get(key string, now time.Time) (LookupResult, bool, bool) {
 	if c == nil || strings.TrimSpace(key) == "" {
 		return LookupResult{}, false, false
@@ -61,6 +67,9 @@ func (c *ttlCache) get(key string, now time.Time) (LookupResult, bool, bool) {
 	return entry.value, true, entry.negative
 }
 
+// set writes positive and negative enrichment results into the selected shard.
+// Size enforcement is intentionally approximate per shard; strict global LRU is
+// not worth the lock contention on the login path.
 func (c *ttlCache) set(key string, value LookupResult, now time.Time, negative bool) {
 	if c == nil || strings.TrimSpace(key) == "" {
 		return
@@ -82,6 +91,9 @@ func (c *ttlCache) set(key string, value LookupResult, now time.Time, negative b
 	}
 }
 
+// sweepShardLocked removes expired entries first, then arbitrary entries if the
+// shard is still over cap. Any retained result is a cache optimization, not
+// source-of-truth state.
 func (c *ttlCache) sweepShardLocked(shard *cacheShard, now time.Time) {
 	if shard == nil {
 		return

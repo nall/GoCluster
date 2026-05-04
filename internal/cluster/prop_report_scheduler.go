@@ -20,6 +20,9 @@ const (
 	propReportLogDateLayout = "02-Jan-2006"
 )
 
+// propReportJob identifies one daily log file that should produce a propagation
+// report. Date is the stable dedupe key; LogPath is allowed to be filled in late
+// so manual and rotation-triggered jobs share the same path logic.
 type propReportJob struct {
 	Date    time.Time
 	LogPath string
@@ -29,6 +32,9 @@ type propReportRunner interface {
 	Run(ctx context.Context, job propReportJob) error
 }
 
+// propReportScheduler isolates slow report generation from log rotation and
+// shutdown paths. It keeps at most one queued job plus one running job so a bad
+// LLM/tool boundary cannot build an unbounded backlog.
 type propReportScheduler struct {
 	enabled bool
 	queue   chan propReportJob
@@ -42,6 +48,9 @@ type propReportScheduler struct {
 	wg      sync.WaitGroup
 }
 
+// newPropReportScheduler wires a bounded queue and timeout around the runner.
+// A disabled scheduler still returns an object so startup code does not need a
+// second nil-oriented control path.
 func newPropReportScheduler(enabled bool, runner propReportRunner, logger *log.Logger, timeout time.Duration) *propReportScheduler {
 	if timeout <= 0 {
 		timeout = propReportTimeout
@@ -56,6 +65,8 @@ func newPropReportScheduler(enabled bool, runner propReportRunner, logger *log.L
 	}
 }
 
+// Start launches the single worker. The worker exits through ctx cancellation
+// so shutdown owns the lifetime instead of report generation.
 func (s *propReportScheduler) Start(ctx context.Context) {
 	if s == nil || !s.enabled {
 		return
@@ -64,6 +75,8 @@ func (s *propReportScheduler) Start(ctx context.Context) {
 	go s.run(ctx)
 }
 
+// Wait lets shutdown drain an in-flight report worker without accepting new
+// jobs through any separate close protocol.
 func (s *propReportScheduler) Wait() {
 	if s == nil {
 		return
@@ -71,6 +84,9 @@ func (s *propReportScheduler) Wait() {
 	s.wg.Wait()
 }
 
+// Enqueue coalesces jobs by date to avoid duplicate reports for the same log
+// rotation. A full queue drops the request and logs the skip rather than
+// blocking the runtime path that noticed the report opportunity.
 func (s *propReportScheduler) Enqueue(job propReportJob) bool {
 	if s == nil || !s.enabled {
 		return false
@@ -104,6 +120,8 @@ func (s *propReportScheduler) Enqueue(job propReportJob) bool {
 	}
 }
 
+// run serializes report generation so the report tool reads one log/config
+// snapshot at a time and pending/running bookkeeping converges after failures.
 func (s *propReportScheduler) run(ctx context.Context) {
 	defer s.wg.Done()
 	for {
@@ -150,6 +168,9 @@ type propReportGenerator struct {
 	logger       *log.Logger
 }
 
+// newPropReportGenerator binds report generation to the active config
+// directory, including the optional private openai.yaml used at the tool
+// boundary.
 func newPropReportGenerator(configDir string, logger *log.Logger) *propReportGenerator {
 	return &propReportGenerator{
 		configDir:    configDir,
@@ -158,6 +179,8 @@ func newPropReportGenerator(configDir string, logger *log.Logger) *propReportGen
 	}
 }
 
+// Run invokes the report tool with deterministic output paths for the report
+// date. The timeout comes from the scheduler so tool failures remain bounded.
 func (g *propReportGenerator) Run(ctx context.Context, job propReportJob) error {
 	if job.Date.IsZero() {
 		return fmt.Errorf("missing job date")

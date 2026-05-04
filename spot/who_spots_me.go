@@ -14,11 +14,17 @@ const (
 	defaultWhoSpotsMeCleanupInterval = time.Minute
 )
 
+// WhoSpotsMeCountryCount is the compact result shape used by the telnet command:
+// support needs counts by country, not the raw spotter identities retained in
+// the rolling store.
 type WhoSpotsMeCountryCount struct {
 	ADIF  int
 	Count int
 }
 
+// WhoSpotsMeOptions makes the store bounds explicit for tests and future
+// operator tuning. The default production shape is a bounded rolling window,
+// not an unbounded archive of who has ever heard a call.
 type WhoSpotsMeOptions struct {
 	Window               time.Duration
 	Shards               int
@@ -27,6 +33,11 @@ type WhoSpotsMeOptions struct {
 	CleanupInterval      time.Duration
 }
 
+// WhoSpotsMeStore retains accepted recent observations for the WHOSPOTSME
+// command. The intent is retrospective local evidence: it records what this
+// cluster recently accepted, using rolling second buckets so old evidence
+// expires deterministically and memory is bounded by active keys, countries per
+// key, and the configured time window.
 type WhoSpotsMeStore struct {
 	shards               []whoSpotsMeShard
 	buckets              []whoSpotsMeBucket
@@ -44,6 +55,9 @@ type WhoSpotsMeStore struct {
 	quit      chan struct{}
 }
 
+// whoSpotsMeShard limits lock contention for per-call/band summaries. Entries
+// are bounded by perShardMax and are also removed when their rolling buckets
+// expire.
 type whoSpotsMeShard struct {
 	mu      sync.RWMutex
 	entries map[whoSpotsMeKey]*whoSpotsMeEntry
@@ -64,11 +78,15 @@ type whoSpotsMeRecordKey struct {
 	country whoSpotsMeCountryKey
 }
 
+// whoSpotsMeEntry holds the current aggregate for one call+band. The bucket
+// ring owns exact per-second decrements; totals are only a fast query view.
 type whoSpotsMeEntry struct {
 	totals   map[whoSpotsMeCountryKey]int
 	lastSeen int64
 }
 
+// whoSpotsMeBucket records the increments for one second so expiry can subtract
+// exactly what was admitted, including multiple spots for the same country.
 type whoSpotsMeBucket struct {
 	second int64
 	counts map[whoSpotsMeRecordKey]int
@@ -78,6 +96,9 @@ func NewWhoSpotsMeStore(window time.Duration) *WhoSpotsMeStore {
 	return NewWhoSpotsMeStoreWithOptions(WhoSpotsMeOptions{Window: window})
 }
 
+// NewWhoSpotsMeStoreWithOptions normalizes every bound before allocation. The
+// bucket ring size is the time-window bound; shard and country caps bound the
+// cardinality of active keys and per-key detail.
 func NewWhoSpotsMeStoreWithOptions(opts WhoSpotsMeOptions) *WhoSpotsMeStore {
 	window := opts.Window
 	if window <= 0 {
@@ -137,6 +158,8 @@ func (s *WhoSpotsMeStore) Window() time.Duration {
 	return s.window
 }
 
+// StartCleanup advances the rolling window even during quiet periods so old
+// observations expire without waiting for the next spot or command query.
 func (s *WhoSpotsMeStore) StartCleanup() {
 	if s == nil || s.cleanupInterval <= 0 {
 		return
@@ -153,6 +176,9 @@ func (s *WhoSpotsMeStore) StopCleanup() {
 	stopPeriodicCleanup(&s.cleanupMu, &s.quit)
 }
 
+// Record admits one accepted observation. It drops invalid country metadata and
+// over-cap countries rather than widening the support contract beyond the
+// compact per-continent summary the telnet command displays.
 func (s *WhoSpotsMeStore) Record(call, band string, countryADIF int, continent string, seenAt time.Time) {
 	if s == nil || countryADIF <= 0 {
 		return
@@ -201,6 +227,9 @@ func (s *WhoSpotsMeStore) Record(call, band string, countryADIF int, continent s
 	s.mu.Unlock()
 }
 
+// CountryCountsByContinent returns the current aggregate for one call+band after
+// first advancing expiry to now. The returned map is detached from retained
+// state so command formatting cannot race the store.
 func (s *WhoSpotsMeStore) CountryCountsByContinent(call, band string, now time.Time) map[string][]WhoSpotsMeCountryCount {
 	if s == nil {
 		return nil
@@ -239,6 +268,8 @@ func (s *WhoSpotsMeStore) CountryCountsByContinent(call, band string, now time.T
 	return out
 }
 
+// ActiveKeyCount is diagnostic-only cardinality visibility for the retained
+// call+band map.
 func (s *WhoSpotsMeStore) ActiveKeyCount() int {
 	if s == nil {
 		return 0
@@ -263,6 +294,9 @@ func (s *WhoSpotsMeStore) cleanup(now time.Time) {
 	s.mu.Unlock()
 }
 
+// admitSecondLocked is the window owner. It advances the second-bucket ring,
+// expires old increments, and rejects observations that are older than the
+// current rolling window. Callers hold s.mu.
 func (s *WhoSpotsMeStore) admitSecondLocked(target int64) bool {
 	if s == nil || s.windowSeconds <= 0 || target <= 0 {
 		return false
@@ -301,6 +335,9 @@ func (s *WhoSpotsMeStore) admitSecondLocked(target int64) bool {
 	return target > s.latestUnix-s.windowSeconds
 }
 
+// expireBucketLocked subtracts a bucket's exact increments from shard totals so
+// the query view converges with the rolling window. Callers hold s.mu; this
+// method also takes the relevant shard lock for entry updates.
 func (s *WhoSpotsMeStore) expireBucketLocked(bucket *whoSpotsMeBucket) {
 	if bucket == nil || len(bucket.counts) == 0 {
 		return
@@ -359,6 +396,9 @@ func (s *WhoSpotsMeStore) evictOneEntryLocked(shard *whoSpotsMeShard) {
 	s.scrubKeyFromBucketsLocked(oldestKey)
 }
 
+// scrubKeyFromBucketsLocked removes secondary bucket references after a primary
+// entry eviction. Without this coupling, later bucket expiry could retain stale
+// keys or subtract from a newly admitted entry with the same key.
 func (s *WhoSpotsMeStore) scrubKeyFromBucketsLocked(key whoSpotsMeKey) {
 	for i := range s.buckets {
 		bucket := &s.buckets[i]

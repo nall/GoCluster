@@ -79,6 +79,8 @@ func (c *replayResolverStateCounts) Observe(state spot.ResolverState) {
 	}
 }
 
+// replayResolverABMetrics preserves the branch-level reasons behind resolver
+// outcomes so replay can compare policy changes without reading raw logs.
 type replayResolverABMetrics struct {
 	Samples                           uint64                    `json:"samples"`
 	MissingSnapshot                   uint64                    `json:"missing_snapshot"`
@@ -117,6 +119,9 @@ type replayResolverABMetrics struct {
 	BayesAdvantageRejectOther         uint64                    `json:"bayes_advantage_reject_other"`
 }
 
+// replayStabilizerDelayProxyMetrics estimates which replayed spots would have
+// been delayed by telnet stabilization. It is a proxy because replay does not
+// run live telnet delivery.
 type replayStabilizerDelayProxyMetrics struct {
 	Eligible                 uint64 `json:"eligible"`
 	WouldDelay               uint64 `json:"would_delay"`
@@ -154,6 +159,8 @@ type replayABMetrics struct {
 	Temporal             replayTemporalABMetrics           `json:"temporal"`
 }
 
+// ObserveAppliedOutput records the final glyph that replay would have emitted
+// after resolver and support-floor decisions.
 func (m *replayABMetrics) ObserveAppliedOutput(outcome replayConfidenceOutcome) {
 	if m == nil {
 		return
@@ -162,6 +169,9 @@ func (m *replayABMetrics) ObserveAppliedOutput(outcome replayConfidenceOutcome) 
 	m.Output.ConfidenceCounts.Observe(newGlyph)
 }
 
+// ObserveResolverSnapshot records raw resolver state even when the later gate
+// rejects an application, making policy changes measurable independently from
+// resolver evidence quality.
 func (m *replayABMetrics) ObserveResolverSnapshot(snap spot.ResolverSnapshot, ok bool) {
 	if m == nil {
 		return
@@ -176,6 +186,8 @@ func (m *replayABMetrics) ObserveResolverSnapshot(snap spot.ResolverSnapshot, ok
 	m.Resolver.ProjectedConfidenceCounts.Observe(projected.Final)
 }
 
+// ObserveResolverSelection records neighborhood behavior because edit-neighbor
+// handling is one of the highest-risk correction policy branches.
 func (m *replayABMetrics) ObserveResolverSelection(selection correctionflow.ResolverPrimarySelection) {
 	if m == nil {
 		return
@@ -200,6 +212,8 @@ func (m *replayABMetrics) ObserveResolverSelection(selection correctionflow.Reso
 	}
 }
 
+// ObserveResolverRecentPlus1Gate records why the recent +1 policy applied or
+// rejected so operators can tune thresholds from replay evidence.
 func (m *replayABMetrics) ObserveResolverRecentPlus1Gate(gate spot.ResolverPrimaryGateResult, evaluated bool) {
 	if m == nil || !evaluated || !gate.RecentPlus1Considered {
 		return
@@ -223,6 +237,8 @@ func (m *replayABMetrics) ObserveResolverRecentPlus1Gate(gate spot.ResolverPrima
 	}
 }
 
+// ObserveResolverBayesGate records the two Bayesian bonus rails separately
+// because their failure modes imply different config changes.
 func (m *replayABMetrics) ObserveResolverBayesGate(gate spot.ResolverPrimaryGateResult, evaluated bool) {
 	if m == nil || !evaluated {
 		return
@@ -322,6 +338,8 @@ func (m *replayTemporalABMetrics) ObservePending() {
 	m.Pending++
 }
 
+// ObserveDecision maps temporal-decoder actions to replay counters so output
+// can distinguish committed corrections from overflow and low-margin paths.
 func (m *replayTemporalABMetrics) ObserveDecision(decision correctionflow.TemporalDecision) {
 	if m == nil {
 		return
@@ -344,6 +362,8 @@ func (m *replayTemporalABMetrics) ObserveDecision(decision correctionflow.Tempor
 	}
 }
 
+// projectedResolverConfidenceOutcome reports what the resolver evidence alone
+// would imply before primary gates decide whether to mutate the spot.
 func projectedResolverConfidenceOutcome(snap spot.ResolverSnapshot) replayConfidenceOutcome {
 	if snap.State != spot.ResolverStateConfident && snap.State != spot.ResolverStateProbable {
 		return replayConfidenceOutcome{Final: "?"}

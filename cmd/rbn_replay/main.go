@@ -29,6 +29,8 @@ func main() {
 	}))
 }
 
+// loadSpotterReliability resolves optional reliability files up front so replay
+// uses the same weighting inputs as the production correction resolver.
 func loadSpotterReliability(cfg config.CallCorrectionConfig) (base spot.SpotterReliability, cw spot.SpotterReliability, rtty spot.SpotterReliability, err error) {
 	if relPath := strings.TrimSpace(cfg.SpotterReliabilityFile); relPath != "" {
 		if _, statErr := os.Stat(relPath); statErr != nil {
@@ -63,6 +65,9 @@ func loadSpotterReliability(cfg config.CallCorrectionConfig) (base spot.SpotterR
 	return base, cw, rtty, nil
 }
 
+// loadConfusionModel treats a disabled model as nil so replay can compare
+// configs with and without the model through the same runner path.
+//
 //nolint:nilnil // A nil confusion model with nil error means the optional model is disabled.
 func loadConfusionModel(cfg config.CallCorrectionConfig) (*spot.ConfusionModel, error) {
 	if !cfg.ConfusionModelEnabled {

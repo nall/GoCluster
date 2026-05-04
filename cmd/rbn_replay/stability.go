@@ -13,6 +13,8 @@ type replayStabilityConfig struct {
 	FreqToleranceHz float64 `yaml:"freq_tolerance_hz" json:"freq_tolerance_hz"`
 }
 
+// replayStabilitySummary answers whether applied corrections were followed by
+// enough confirming raw spots inside the configured window.
 type replayStabilitySummary struct {
 	WindowMinutes   int     `json:"window_minutes"`
 	MinFollowOn     int     `json:"min_follow_on"`
@@ -23,12 +25,17 @@ type replayStabilitySummary struct {
 	StablePct     float64 `json:"stable_pct"`
 }
 
+// replayStabilityCollector keeps raw spots and applied corrections separate so
+// stability evaluation can ask "did later evidence support this decision?"
+// without feeding predictions back into the evidence set.
 type replayStabilityCollector struct {
 	cfg         replayStabilityConfig
 	spots       map[string][]stabilitypkg.Spot
 	corrections []stabilitypkg.Correction
 }
 
+// normalizeReplayStabilityConfig makes replay artifacts self-describing even
+// when the YAML leaves stability settings at defaults.
 func normalizeReplayStabilityConfig(cfg replayStabilityConfig) replayStabilityConfig {
 	if cfg.WindowMinutes <= 0 {
 		cfg.WindowMinutes = 60
@@ -51,6 +58,8 @@ func newReplayStabilityCollector(cfg replayStabilityConfig) *replayStabilityColl
 	}
 }
 
+// ObserveRaw records candidate raw evidence before correction decisions mutate
+// callsigns.
 func (c *replayStabilityCollector) ObserveRaw(row rbnHistoryRow) {
 	if c == nil {
 		return
@@ -68,6 +77,7 @@ func (c *replayStabilityCollector) ObserveRaw(row rbnHistoryRow) {
 	})
 }
 
+// ObserveApplied records only corrections that would have changed output.
 func (c *replayStabilityCollector) ObserveApplied(tsUnix int64, winner string, freqKHz float64, band string) {
 	if c == nil {
 		return
@@ -91,6 +101,8 @@ func (c *replayStabilityCollector) ObserveApplied(tsUnix int64, winner string, f
 	})
 }
 
+// Evaluate delegates the scoring mechanics to the shared stability package but
+// keeps replay-specific defaults and JSON shape here.
 func (c *replayStabilityCollector) Evaluate(minTs int64) replayStabilitySummary {
 	cfg := replayStabilityConfig{}
 	if c != nil {

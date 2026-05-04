@@ -29,6 +29,9 @@ type replayRequest struct {
 	forceDownload    bool
 }
 
+// replayRunner owns one deterministic day replay. The fields mirror the
+// execution phases so support/debug work can tell whether a failure came from
+// input discovery, dependency wiring, replay runtime, or output finalization.
 type replayRunner struct {
 	request   replayRequest
 	startedAt time.Time
@@ -73,6 +76,9 @@ type replayRunner struct {
 	temporalPending    map[uint64]replayTemporalPending
 }
 
+// runReplay is the public orchestration entry point used by main and tests.
+// Cleanup is deferred here so partially initialized resources are still closed
+// when an early phase returns an error.
 func runReplay(req replayRequest) error {
 	runner := newReplayRunner(req)
 	defer runner.close()
@@ -119,6 +125,8 @@ func (r *replayRunner) run() error {
 	return r.finalize()
 }
 
+// close releases replay-only files and stores. It is intentionally best-effort
+// because the primary error should remain the replay phase that failed.
 func (r *replayRunner) close() {
 	if r.csvParser != nil {
 		_ = r.csvParser.Close()
@@ -172,6 +180,8 @@ func (r *replayRunner) loadClusterConfig() error {
 	return nil
 }
 
+// prepareArchiveDirs keeps downloaded inputs and generated outputs under the
+// replay archive root so operators can collect a complete evidence bundle.
 func (r *replayRunner) prepareArchiveDirs() error {
 	r.archiveDir = resolveReplayArchiveDir(r.request.archiveDir, r.replayCfg)
 	if err := ensureDir(r.archiveDir); err != nil {
@@ -182,6 +192,8 @@ func (r *replayRunner) prepareArchiveDirs() error {
 	return ensureDir(r.outDir)
 }
 
+// downloadInputZip records the download result in the manifest; "not modified"
+// is still useful evidence when comparing replay runs.
 func (r *replayRunner) downloadInputZip() error {
 	forceRBNDownload := r.replayCfg.ForceDownload || r.request.forceDownload
 	r.zipPath = buildReplayZipPath(r.archiveDir, r.dayCompact)
@@ -200,6 +212,8 @@ func (r *replayRunner) downloadInputZip() error {
 	return nil
 }
 
+// configureExternalDependencies loads the same CTY/ULS surfaces the runtime
+// uses so replay failures match production support conditions.
 func (r *replayRunner) configureExternalDependencies() error {
 	cfg := r.cfg
 
@@ -248,6 +262,9 @@ func (r *replayRunner) configureExternalDependencies() error {
 	return nil
 }
 
+// buildReplayRuntime constructs the correction pipeline in shadow form. It uses
+// bounded resolver settings so replay can expose cap pressure instead of hiding
+// it behind unbounded analysis-only state.
 func (r *replayRunner) buildReplayRuntime() error {
 	cfg := r.cfg
 
@@ -310,6 +327,9 @@ func (r *replayRunner) buildReplayRuntime() error {
 	return nil
 }
 
+// openRecentBandStore selects the same support-memory backend as runtime, but
+// writes custom_scp data under the replay output directory to keep experiments
+// isolated from production state.
 func (r *replayRunner) openRecentBandStore() error {
 	cfg := r.cfg
 	if !cfg.CallCorrection.Enabled {
@@ -367,6 +387,8 @@ func (r *replayRunner) openRecentBandStore() error {
 	return nil
 }
 
+// openReplayOutputs creates all evidence artifacts before replay starts so a
+// failed run still leaves the input/header context needed for troubleshooting.
 func (r *replayRunner) openReplayOutputs() error {
 	r.runbookSamplesPath = filepath.Join(r.outDir, "runbook_samples.log")
 	runbookSamplesFile, err := os.OpenFile(r.runbookSamplesPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -386,6 +408,9 @@ func (r *replayRunner) openReplayOutputs() error {
 	return nil
 }
 
+// replayDay streams the CSV once, emits fixed-interval samples, and force-drains
+// temporal holds after the day so every accepted observation has a final
+// decision in the artifacts.
 func (r *replayRunner) replayDay() error {
 	heap.Init(&r.temporalQueue)
 	r.nextSampleAt = r.dayStart
@@ -418,6 +443,9 @@ func (r *replayRunner) replayDay() error {
 	return nil
 }
 
+// processCSVRow enforces chronological replay. Timestamp regressions are hard
+// errors because resolver state is time-ordered and would otherwise produce
+// misleading A/B metrics.
 func (r *replayRunner) processCSVRow(row rbnHistoryRow, ok bool) error {
 	r.recordsTotal++
 	if !ok {
@@ -492,6 +520,8 @@ func (r *replayRunner) processCSVRow(row rbnHistoryRow, ok bool) error {
 	return nil
 }
 
+// maybeHoldTemporal mirrors the runtime temporal decoder but records A/B
+// outcomes instead of delivering telnet output.
 func (r *replayRunner) maybeHoldTemporal(
 	spotEntry *spot.Spot,
 	resolverEvidence spot.ResolverEvidence,
@@ -567,6 +597,9 @@ func (r *replayRunner) maybeHoldTemporal(
 	return false
 }
 
+// emitSample captures resolver pressure at fixed wall-clock replay intervals.
+// Any resolver drop is a failure because this tool is used to validate bounded
+// settings, not to tolerate hidden analysis loss.
 func (r *replayRunner) emitSample(ts time.Time) error {
 	ts = ts.UTC()
 	r.driver.Sweep(ts)
@@ -590,6 +623,8 @@ func (r *replayRunner) emitSample(ts time.Time) error {
 	return nil
 }
 
+// processOutcome feeds replay metrics and support-memory state from the same
+// post-correction point runtime would use before output.
 func (r *replayRunner) processOutcome(spotEntry *spot.Spot, outcome replayResolverApplyOutcome, now time.Time) {
 	if spotEntry == nil {
 		return
@@ -620,6 +655,8 @@ func (r *replayRunner) processOutcome(spotEntry *spot.Spot, outcome replayResolv
 	recordRecentBandObservation(spotEntry, r.recentBandStore, r.cfg.CallCorrection)
 }
 
+// drainTemporal releases due temporal holds through the replay correction path
+// so delayed and immediate observations are scored consistently.
 func (r *replayRunner) drainTemporal(now time.Time, force bool) {
 	if r.temporalDecoder == nil || !r.temporalDecoder.Enabled() {
 		return
@@ -697,6 +734,9 @@ func (r *replayRunner) drainTemporal(now time.Time, force bool) {
 	}
 }
 
+// finalize writes derived interval, gate, manifest, and run-history artifacts in
+// one phase so downstream comparisons can treat the output directory as complete
+// only after this returns nil.
 func (r *replayRunner) finalize() error {
 	if err := r.runbookSamplesFile.Sync(); err != nil {
 		return fmt.Errorf("sync runbook samples file: %w", err)

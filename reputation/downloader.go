@@ -16,6 +16,9 @@ import (
 	"dxcluster/internal/schedule"
 )
 
+// downloadLoop refreshes the local IPinfo store on the configured UTC cadence.
+// Runtime admission never waits on this loop; failed refreshes leave the last
+// loaded store in place and surface as warnings.
 func (g *Gate) downloadLoop(ctx context.Context) {
 	if g == nil || !g.cfg.enabled || !g.cfg.ipinfoDownloadEnabled {
 		return
@@ -38,6 +41,8 @@ func (g *Gate) downloadLoop(ctx context.Context) {
 	}
 }
 
+// downloadAndLoad keeps the store refresh transaction simple: fetch/build first,
+// then atomically swap the gate to the newly built Pebble store.
 func (g *Gate) downloadAndLoad(ctx context.Context) error {
 	if g == nil || !g.cfg.ipinfoDownloadEnabled {
 		return nil
@@ -56,6 +61,9 @@ func (g *Gate) downloadAndLoad(ctx context.Context) error {
 	return nil
 }
 
+// downloadSnapshot downloads the compressed source, expands it to a temporary
+// CSV, builds a versioned Pebble store, and flips the current pointer only after
+// the build succeeds.
 func downloadSnapshot(ctx context.Context, cfg gateConfig) (bool, error) {
 	url := strings.TrimSpace(cfg.ipinfoDownloadURL)
 	token := strings.TrimSpace(cfg.ipinfoDownloadToken)
@@ -140,6 +148,8 @@ func (g *Gate) ipinfoStoreLoaded() bool {
 	return loaded
 }
 
+// extractGzip writes through a temporary file so interrupted downloads/imports
+// never leave a partially written CSV at the configured snapshot path.
 func extractGzip(ctx context.Context, src, dest string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -190,6 +200,8 @@ func extractGzip(ctx context.Context, src, dest string) error {
 	return os.Rename(tmpPath, dest)
 }
 
+// nextRefreshDelay centralizes schedule parsing so support can reason about the
+// configured refresh time without duplicating default handling.
 func nextRefreshDelay(refreshUTC string, now time.Time) time.Duration {
 	return schedule.NextDailyUTC(refreshUTC, now, 3, 0, schedule.ParseOptions{
 		AllowDailyPrefix: true,

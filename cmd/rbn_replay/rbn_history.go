@@ -27,6 +27,9 @@ type rbnHistoryRow struct {
 	ReportDB  int
 }
 
+// rbnHistoryCSV streams one RBN history CSV member from a zip. It owns both the
+// zip reader and the entry reader so replay can process large days without
+// unpacking files or loading rows into memory.
 type rbnHistoryCSV struct {
 	zipReader *zip.ReadCloser
 	entry     io.ReadCloser
@@ -45,6 +48,8 @@ type rbnHistoryCSV struct {
 	}
 }
 
+// openRBNHistoryCSV prefers the expected day-named CSV but falls back to the
+// first CSV member so older archive layouts remain replayable.
 func openRBNHistoryCSV(zipPath string, preferredName string) (*rbnHistoryCSV, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -107,6 +112,8 @@ func openRBNHistoryCSV(zipPath string, preferredName string) (*rbnHistoryCSV, er
 	return parser, nil
 }
 
+// initColumns records header positions once because row parsing is on the
+// replay hot path.
 func (c *rbnHistoryCSV) initColumns() {
 	c.col.callsign = -1
 	c.col.freq = -1
@@ -161,6 +168,8 @@ func (c *rbnHistoryCSV) Header() []string {
 	return out
 }
 
+// requiredColumnsPresent fails early when an input schema would make replay
+// counters misleading.
 func (c *rbnHistoryCSV) requiredColumnsPresent() error {
 	if c == nil {
 		return errors.New("nil CSV parser")
@@ -196,6 +205,8 @@ func (c *rbnHistoryCSV) requiredColumnsPresent() error {
 	return nil
 }
 
+// Read returns ok=false for malformed or non-candidate rows so replay can count
+// bad input without aborting a full-day run.
 func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 	record, err := c.reader.Read()
 	if err != nil {

@@ -97,6 +97,9 @@ func (v *ingestValidator) Start() {
 	go v.run()
 }
 
+// run is the ingress pressure boundary. Validation drops are intentional data
+// quality decisions, while dedup-channel drops mean downstream backpressure and
+// are logged separately for operator troubleshooting.
 func (v *ingestValidator) run() {
 	for s := range v.input {
 		if s == nil {
@@ -261,6 +264,8 @@ func (v *ingestValidator) waitForCTY() *cty.CTYDatabase {
 	}
 }
 
+// lookupCTY keeps all CTY calls behind one helper so support diagnostics can
+// distinguish an unknown prefix from a nil database or malformed calls.
 func (v *ingestValidator) lookupCTY(db *cty.CTYDatabase, call string) (*cty.PrefixInfo, bool) {
 	if db == nil || call == "" {
 		return nil, false
@@ -278,6 +283,8 @@ func (v *ingestValidator) lookupCTY(db *cty.CTYDatabase, call string) (*cty.Pref
 	return db.LookupCallsignPortable(call)
 }
 
+// logCTYDrop records rejected DX/DE calls with rate limiting because CTY misses
+// can arrive in bursts after upstream parser or data-feed problems.
 func (v *ingestValidator) logCTYDrop(role, call string, s *spot.Spot) {
 	counter := &v.ctyDropDXCounter
 	if role == "DE" {
@@ -294,6 +301,9 @@ func (v *ingestValidator) logCTYDrop(role, call string, s *spot.Spot) {
 	}
 }
 
+// logInvalidDrop records syntactically invalid calls separately from CTY misses
+// so a support agent can route malformed input differently from missing country
+// metadata.
 func (v *ingestValidator) logInvalidDrop(role, call string, s *spot.Spot) {
 	counter := &v.invalidDropDX
 	if role == "DE" {
@@ -310,6 +320,9 @@ func (v *ingestValidator) logInvalidDrop(role, call string, s *spot.Spot) {
 	}
 }
 
+// reportBadCall feeds the separate bad-call log used by support tooling. It is
+// intentionally best-effort so diagnostics never become another ingest failure
+// path.
 func (v *ingestValidator) reportBadCall(role, reason, call string, s *spot.Spot, detail string) {
 	if v == nil || v.badCallReporter == nil || s == nil {
 		return
@@ -317,6 +330,8 @@ func (v *ingestValidator) reportBadCall(role, reason, call string, s *spot.Spot,
 	v.badCallReporter(ingestSourceLabel(s), role, reason, call, s.DECall, s.DXCall, s.ModeNorm, detail)
 }
 
+// ingestSourceLabel prefers the upstream node name when present because source
+// routing is usually the first question in support triage.
 func ingestSourceLabel(s *spot.Spot) string {
 	if s == nil {
 		return "unknown"

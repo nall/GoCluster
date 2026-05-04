@@ -17,6 +17,9 @@ type telnetFamilyBucket struct {
 	freqBin int
 }
 
+// telnetFamilyEntry is the short-lived memory of a call already emitted to
+// telnet. It stores support/contested state because suppression is a user
+// display choice, not an archive or peer mutation.
 type telnetFamilyEntry struct {
 	bucket    telnetFamilyBucket
 	key       string
@@ -172,6 +175,8 @@ func (s *telnetFamilySuppressor) monotonicNowLocked(now time.Time) time.Time {
 	return now
 }
 
+// touchEntryLocked moves repeated calls to the hot end of the LRU list so
+// eviction favors stale display history instead of currently active families.
 func (s *telnetFamilySuppressor) touchEntryLocked(entry *telnetFamilyEntry, now time.Time) {
 	if entry == nil {
 		return
@@ -180,6 +185,9 @@ func (s *telnetFamilySuppressor) touchEntryLocked(entry *telnetFamilyEntry, now 
 	s.moveToTailLocked(entry)
 }
 
+// addEntryLocked records a call only after the suppressor decides it should be
+// visible. This preserves the operator-facing invariant that hidden weaker
+// variants do not teach the suppressor to hide later stronger evidence.
 func (s *telnetFamilySuppressor) addEntryLocked(bucket telnetFamilyBucket, key string, freqKHz float64, support int, contested bool, now time.Time) {
 	calls := s.buckets[bucket]
 	if calls == nil {
@@ -199,6 +207,9 @@ func (s *telnetFamilySuppressor) addEntryLocked(bucket telnetFamilyBucket, key s
 	s.totalEntries++
 }
 
+// pruneExpiredLocked enforces the time window before size eviction so support
+// questions can be answered in terms of "recently emitted" rather than
+// arbitrary memory pressure.
 func (s *telnetFamilySuppressor) pruneExpiredLocked(now time.Time) {
 	cutoff := now.Add(-s.window)
 	for s.head != nil && s.head.seenAt.Before(cutoff) {
@@ -206,6 +217,8 @@ func (s *telnetFamilySuppressor) pruneExpiredLocked(now time.Time) {
 	}
 }
 
+// evictHeadLocked is the hard-size fallback when traffic exceeds the windowed
+// expectation; oldest visible history is the least risky information to drop.
 func (s *telnetFamilySuppressor) evictHeadLocked() bool {
 	if s.head == nil {
 		return false

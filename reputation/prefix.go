@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// prefixLimiter is a sharded token bucket for source-network admission. It
+// protects the cluster from prefix-level bursts before those requests fan into
+// per-call reputation state.
 type prefixLimiter struct {
 	capacity     int
 	refillPerSec int
@@ -46,6 +49,9 @@ func newPrefixLimiter(capacity, refillPerSec int, ttl time.Duration, maxEntries 
 	return pl
 }
 
+// allow spends one token for the prefix. Empty or disabled prefixes pass because
+// reputation should not punish missing IP evidence more than the explicit
+// unknown-IP penalties already do.
 func (p *prefixLimiter) allow(prefix string, now time.Time) bool {
 	if p == nil {
 		return true
@@ -76,6 +82,8 @@ func (p *prefixLimiter) allow(prefix string, now time.Time) bool {
 	return true
 }
 
+// refill advances whole-second token increments so refill math stays stable and
+// bounded even if checks arrive at sub-second cadence.
 func (p *prefixLimiter) refill(state *prefixState, now time.Time) {
 	if state == nil {
 		return
@@ -99,6 +107,8 @@ func (p *prefixLimiter) refill(state *prefixState, now time.Time) {
 	state.lastRefill = state.lastRefill.Add(time.Duration(add/p.refillPerSec) * time.Second)
 }
 
+// sweep removes stale prefix states and applies the hard shard cap. The cap
+// bounds reconnect-storm memory even when many prefixes appear only once.
 func (p *prefixLimiter) sweep(now time.Time) {
 	if p == nil || p.ttl <= 0 {
 		return

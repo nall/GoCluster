@@ -12,6 +12,11 @@ import (
 
 const defaultEventLogDedupeMaxKeys = 512
 
+// eventFileLogger keeps support-critical connection and gate events in
+// separate files so operators can troubleshoot login, reputation, telnet,
+// ingest, and peer behavior without scraping the console stream. Each sink is
+// optional and independently configured so a bad path disables only that event
+// file instead of preventing the cluster from starting.
 type eventFileLogger struct {
 	loginAttempts     *eventLogSink
 	reputationDrops   *eventLogSink
@@ -20,6 +25,9 @@ type eventFileLogger struct {
 	peerConnections   *eventLogSink
 }
 
+// eventLogSink couples a daily file sink with a bounded per-line deduper. The
+// deduper is intentionally local to one event class so high-volume churn in one
+// class cannot hide unrelated support evidence in another file.
 type eventLogSink struct {
 	sink    lineSink
 	deduper *eventLogDeduper
@@ -30,6 +38,9 @@ type eventLogField struct {
 	value string
 }
 
+// newEventFileLogger builds every enabled event sink up front to surface bad
+// paths during startup while still returning the partially usable logger. The
+// caller decides whether setup errors are fatal for the deployment.
 func newEventFileLogger(cfg config.LoggingConfig) (*eventFileLogger, error) {
 	logger := &eventFileLogger{}
 	var setupErrs []string
@@ -59,6 +70,8 @@ func newEventFileLogger(cfg config.LoggingConfig) (*eventFileLogger, error) {
 	return logger, nil
 }
 
+// Close flushes all enabled event sinks during shutdown. It preserves the first
+// close error because later sinks should still get a chance to release files.
 func (l *eventFileLogger) Close() error {
 	if l == nil {
 		return nil
@@ -95,6 +108,8 @@ func (l *eventFileLogger) LogPeerConnection(fields ...eventLogField) {
 	l.write(l.peerConnections, fields...)
 }
 
+// write turns structured support fields into one sanitized line. A disabled
+// sink is a no-op so call sites can report events unconditionally.
 func (l *eventFileLogger) write(sink *eventLogSink, fields ...eventLogField) {
 	if l == nil || sink == nil || sink.sink == nil {
 		return
@@ -113,6 +128,9 @@ func (l *eventFileLogger) write(sink *eventLogSink, fields ...eventLogField) {
 	sink.sink.WriteLine(line, time.Now().UTC())
 }
 
+// formatEventLogLine uses key=value tokens so support tooling can grep without
+// needing a schema registry. Empty or unsafe keys are dropped rather than
+// emitting ambiguous fields.
 func formatEventLogLine(fields ...eventLogField) string {
 	parts := make([]string, 0, len(fields))
 	for _, field := range fields {
@@ -125,6 +143,8 @@ func formatEventLogLine(fields ...eventLogField) string {
 	return strings.Join(parts, " ")
 }
 
+// sanitizeEventLogKey keeps field names stable and shell-friendly for ad hoc
+// support investigation.
 func sanitizeEventLogKey(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	if value == "" {
@@ -146,6 +166,8 @@ func sanitizeEventLogKey(value string) string {
 	return b.String()
 }
 
+// sanitizeEventLogValue preserves support evidence while preventing multiline
+// or extremely large values from corrupting the daily log format.
 func sanitizeEventLogValue(value, fallback string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -182,6 +204,10 @@ func eventLogIP(address string) string {
 	return droppedLogValue(host, "unknown")
 }
 
+// eventLogDeduper bounds repeated event chatter by exact emitted line. The
+// maxKeys cap protects memory under reconnect storms or hostile address churn;
+// oldest-seen eviction is acceptable because a later duplicate can reappear as
+// fresh evidence.
 type eventLogDeduper struct {
 	mu      sync.Mutex
 	window  time.Duration
@@ -196,6 +222,8 @@ type eventLogDedupeEntry struct {
 	suppressed uint64
 }
 
+// newEventLogDeduper returns nil when dedupe is disabled so callers keep the
+// same reporting path regardless of the operator's dedupe setting.
 func newEventLogDeduper(window time.Duration, maxKeys int) *eventLogDeduper {
 	if window <= 0 || maxKeys <= 0 {
 		return nil
@@ -208,6 +236,9 @@ func newEventLogDeduper(window time.Duration, maxKeys int) *eventLogDeduper {
 	}
 }
 
+// Process emits the first line in a window and later summarizes suppressed
+// repeats. This keeps event files useful during storms without losing the fact
+// that repetition happened.
 func (d *eventLogDeduper) Process(line string) (string, bool) {
 	if d == nil {
 		return line, true
@@ -237,6 +268,7 @@ func (d *eventLogDeduper) Process(line string) (string, bool) {
 	return line, true
 }
 
+// evictOneIfNeededLocked enforces the hard dedupe-key cap. Callers hold d.mu.
 func (d *eventLogDeduper) evictOneIfNeededLocked() {
 	if d == nil || d.maxKeys <= 0 || len(d.entries) < d.maxKeys {
 		return

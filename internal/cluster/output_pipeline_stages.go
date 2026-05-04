@@ -14,6 +14,9 @@ import (
 	"dxcluster/strutil"
 )
 
+// prepareSpotContext normalizes and hydrates metadata before any output-stage
+// decision. Keeping mode inference and beacon stamping up front makes later
+// support traces easier: downstream stages can assume canonical fields.
 func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (outputSpotContext, bool) {
 	if s == nil {
 		return outputSpotContext{}, false
@@ -48,6 +51,9 @@ func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (outputSpotContext, bo
 	}, true
 }
 
+// applyResolverStage owns resolver and temporal-decoder mutation for non-FT
+// telnet spots. It leaves FT modes alone because their support glyphs come from
+// burst corroboration rather than resolver family edits.
 func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRelease *runtimeTemporalRelease) bool {
 	s := ctx.spot
 	if spot.IsLocalSelfSpot(s) {
@@ -173,6 +179,9 @@ func (p *outputPipeline) applyResolverStage(ctx *outputSpotContext, temporalRele
 	return true
 }
 
+// maybeHoldTemporalSpot gives contested resolver selections a short bounded
+// window to settle. Overflow actions are explicit so operators can distinguish
+// "held for evidence" from "released because the hold queue was full."
 func (p *outputPipeline) maybeHoldTemporalSpot(
 	ctx *outputSpotContext,
 	now time.Time,
@@ -235,6 +244,9 @@ func (p *outputPipeline) maybeHoldTemporalSpot(
 	return false, false
 }
 
+// applyPostResolverAdjustments handles policy corrections that depend on the
+// resolver result but still precede fanout, including harmonics, averaged
+// frequency, placeholder glyphs, and support floors.
 func (p *outputPipeline) applyPostResolverAdjustments(ctx *outputSpotContext) bool {
 	s := ctx.spot
 	if !s.IsBeacon && p.harmonicDetector != nil && p.harmonicCfg.Enabled {
@@ -292,6 +304,9 @@ func (p *outputPipeline) applyPostResolverAdjustments(ctx *outputSpotContext) bo
 	return true
 }
 
+// finalizeSpotForMetrics performs the last validation and metrics accounting
+// after mutation. Keeping license drops here means corrected metadata and calls
+// are what get evaluated and reported.
 func (p *outputPipeline) finalizeSpotForMetrics(ctx *outputSpotContext) bool {
 	s := ctx.spot
 	if ctx.dirty {
@@ -439,6 +454,9 @@ func (p *outputPipeline) prepareFanoutSpot(ctx *outputSpotContext) bool {
 	return true
 }
 
+// pathReceiverHash intentionally hashes only receiver identity, not mutable
+// metadata, so receiver caps remain stable across grid backfills and CTY
+// refreshes.
 func pathReceiverHash(s *spot.Spot) uint64 {
 	if s == nil {
 		return 0
@@ -450,6 +468,8 @@ func pathReceiverHash(s *spot.Spot) uint64 {
 	return pathreliability.ReceiverIdentityHash(receiver)
 }
 
+// releaseDueTemporal re-enters held spots through processSpot so released work
+// follows the same mutation, validation, and fanout path as fresh spots.
 func (p *outputPipeline) releaseDueTemporal(now time.Time, force bool) {
 	if p.temporal == nil || !p.temporal.Enabled() {
 		return
@@ -466,6 +486,8 @@ func (p *outputPipeline) releaseDueTemporal(now time.Time, force bool) {
 	}
 }
 
+// recordRuntimeTemporalDecision maps decoder actions into tracker counters that
+// operators use to tell normal settling from overflow or low-margin abstention.
 func (p *outputPipeline) recordRuntimeTemporalDecision(decision correctionflow.TemporalDecision) {
 	if p.tracker == nil {
 		return

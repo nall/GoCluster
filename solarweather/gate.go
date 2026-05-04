@@ -8,6 +8,9 @@ import (
 	"dxcluster/strutil"
 )
 
+// PathInput carries the operator-visible path coordinates for a solar override
+// check. Cell IDs are preferred when available; grids are retained as a fallback
+// for diagnostics and older callers.
 type PathInput struct {
 	UserGrid string
 	DXGrid   string
@@ -16,6 +19,8 @@ type PathInput struct {
 	Band     string
 }
 
+// GateDecision exposes the intermediate daylight/high-latitude decisions so a
+// support agent can explain why an R/G event did or did not affect a path.
 type GateDecision struct {
 	Daylight        bool
 	HighLat         bool
@@ -26,6 +31,9 @@ type GateDecision struct {
 	MaxAbsMlatDeg   float64
 }
 
+// EvaluateGates combines geometry, Kp-derived high-latitude boundary, and
+// hysteresis into a stable per-path decision. Hysteresis is cached per path so
+// telnet glyphs do not flap near thresholds.
 func EvaluateGates(now time.Time, cfg Config, dipole Vec3, sun Vec3, kp float64, kpValid bool, input PathInput, cache *GateCache) GateDecision {
 	userVec, ok := gridVector(input.UserGrid)
 	if !ok {
@@ -66,6 +74,8 @@ func EvaluateGates(now time.Time, cfg Config, dipole Vec3, sun Vec3, kp float64,
 	}
 }
 
+// makePathKey chooses compact cell IDs when available and falls back to
+// normalized grids only when cell encoding is unavailable.
 func makePathKey(input PathInput, cfg Config) pathKey {
 	userCell := uint16(input.UserCell)
 	dxCell := uint16(input.DXCell)
@@ -111,6 +121,9 @@ func gridVector(grid string) (Vec3, bool) {
 	return latLonToVec(lat, lon).Normalize(), true
 }
 
+// daylightFraction estimates how much of the great-circle path is sunlit. It
+// returns unknown for antipodal or degenerate paths rather than forcing a false
+// precision into support output.
 func daylightFraction(a, b, sun Vec3, cfg Config) (float64, bool, bool) {
 	D := angleBetween(a, b)
 	if D <= cfg.Daylight.DSmallRad {
@@ -210,6 +223,8 @@ func sunlitTest(p, sun Vec3, cfg Config) float64 {
 	return 0
 }
 
+// applyDaylightHysteresis keeps daylight gating stable near the terminator where
+// tiny timing or grid changes could otherwise flip the override repeatedly.
 func applyDaylightHysteresis(prev bool, frac float64, nearTerminator bool, unknown bool, cfg Config) bool {
 	if unknown {
 		return false
@@ -223,6 +238,8 @@ func applyDaylightHysteresis(prev bool, frac float64, nearTerminator bool, unkno
 	return frac >= cfg.Sun.DaylightEnter
 }
 
+// highLatEdge converts Kp into the moving geomagnetic latitude boundary used by
+// G-event overrides, falling back to the fixed boundary when Kp is stale.
 func highLatEdge(cfg Config, kp float64, kpValid bool) float64 {
 	if !cfg.HighLat.UseKpBoundary {
 		return cfg.HighLat.FixedLEdgeDeg
@@ -235,6 +252,9 @@ func highLatEdge(cfg Config, kp float64, kpValid bool) float64 {
 	return clamp(raw, cfg.HighLat.LEdgeMinDeg, cfg.HighLat.LEdgeMaxDeg)
 }
 
+// highLatFractionDipole measures how much of the path crosses high magnetic
+// latitude. It uses the dipole vector so support output matches the same model
+// used for override selection.
 func highLatFractionDipole(a, b, dipole Vec3, lEdgeDeg float64, cfg Config) (float64, float64) {
 	D := angleBetween(a, b)
 	if D <= cfg.Daylight.DSmallRad || D >= cfg.Daylight.DAntipodalRad {
@@ -310,6 +330,9 @@ func maxAbsDotOnInterval(start, end, theta0, M float64) float64 {
 	return maxAbs
 }
 
+// applyHighLatHysteresis keeps high-latitude decisions sticky enough for telnet
+// readability while still releasing once both max latitude and path fraction
+// fall below exit thresholds.
 func applyHighLatHysteresis(prev bool, maxAbsDeg, frac, lEdgeDeg float64, cfg Config) bool {
 	enterMax := lEdgeDeg + cfg.HighLat.EnterMaxAbsOffset
 	exitMax := lEdgeDeg + cfg.HighLat.ExitMaxAbsOffset

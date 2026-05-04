@@ -24,6 +24,10 @@ type telnetStabilizerItem struct {
 	evidenceEnqueued bool
 }
 
+// telnetStabilizerEnvelope carries the minimum context needed to retry a held
+// telnet spot without re-running upstream stages that already made a decision.
+// Keeping this envelope small makes the delay queue easier to reason about
+// during overflow or shutdown investigations.
 type telnetStabilizerEnvelope struct {
 	spot             *spot.Spot
 	checksCompleted  int
@@ -99,6 +103,9 @@ func newTelnetSpotStabilizer(delay time.Duration, maxPending int) *telnetSpotSta
 	}
 }
 
+// Start begins the single owner goroutine for delayed telnet releases. The
+// stabilizer deliberately does not allocate one timer or goroutine per spot, so
+// bursty contested calls cannot multiply scheduler pressure.
 func (s *telnetSpotStabilizer) Start() {
 	if s == nil {
 		return
@@ -106,6 +113,9 @@ func (s *telnetSpotStabilizer) Start() {
 	go s.run()
 }
 
+// Stop drains the scheduler goroutine boundary by closing release after run
+// exits. It does not try to emit pending spots on shutdown because the main
+// pipeline is also stopping and correctness depends on a clean lifecycle.
 func (s *telnetSpotStabilizer) Stop() {
 	if s == nil {
 		return
@@ -119,6 +129,8 @@ func (s *telnetSpotStabilizer) Stop() {
 	<-s.done
 }
 
+// ReleaseChan exposes only released envelopes so the output pipeline remains
+// the sole component that decides final telnet fanout.
 func (s *telnetSpotStabilizer) ReleaseChan() <-chan *telnetStabilizerEnvelope {
 	if s == nil {
 		return nil
@@ -126,6 +138,9 @@ func (s *telnetSpotStabilizer) ReleaseChan() <-chan *telnetStabilizerEnvelope {
 	return s.release
 }
 
+// Pending reports reserved queue slots, including envelopes waiting on the
+// input channel. Support checks use it to distinguish normal delay from
+// backpressure/overflow.
 func (s *telnetSpotStabilizer) Pending() int64 {
 	if s == nil {
 		return 0
@@ -174,6 +189,8 @@ func (s *telnetSpotStabilizer) EnqueueWithContext(
 	}
 }
 
+// reserveSlot applies the hard pending cap before enqueue so the stabilizer
+// fails open by refusing more delayed work rather than growing memory.
 func (s *telnetSpotStabilizer) reserveSlot() bool {
 	for {
 		cur := s.pending.Load()
@@ -186,6 +203,9 @@ func (s *telnetSpotStabilizer) reserveSlot() bool {
 	}
 }
 
+// run owns the heap and timer so delayed telnet release is deterministic: due
+// time first, insertion sequence second. Pending is decremented only when an
+// envelope leaves this queue boundary.
 func (s *telnetSpotStabilizer) run() {
 	defer close(s.done)
 	defer close(s.release)
