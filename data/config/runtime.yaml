@@ -1,4 +1,9 @@
-# Delivery/runtime settings.
+# Purpose: Telnet delivery/runtime settings, buffer sizing, default filters, messages, dedupe, and user policy defaults.
+# Ownership: deployment/runtime settings plus operator policy.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Set memory, telnet ports/messages, default filter policy, and bounded queue values for the local deployment.
+# Source: data/config/README.md.
+
 # Persistence
 buffer:
   capacity: 75000                   # Number of spots held in the in-memory ring buffer (post-primary dedup)
@@ -10,9 +15,9 @@ go_runtime:
 
 # Telnet server (user-facing interface)
 telnet:
-  port: 8300
+  port: 8300        # TCP listen port for telnet users.
   tls_enabled: false
-  max_connections: 100
+  max_connections: 100 # Hard cap on logged-in telnet sessions.
   max_prelogin_sessions: 100      # Hard cap on unauthenticated sessions (Tier-A DoS guardrail)
   prelogin_timeout_seconds: 30    # Accept->callsign timeout for unauthenticated sessions
   accept_rate_per_ip: 3           # Per-IP prelogin admit rate (tokens/sec)
@@ -29,6 +34,7 @@ telnet:
   admission_log_interval_seconds: 10                     # Aggregate admission reject summaries over this interval
   admission_log_sample_rate: 0.05                        # Sample rate for per-event reject logs (0..1)
   admission_log_max_reason_lines_per_interval: 20        # Max sampled reject lines emitted per interval
+  # Login/message fields support the tokens documented in data/config/README.md.
   welcome_message: ""
   login_prompt: "login: "
   login_greeting: |
@@ -47,15 +53,15 @@ telnet:
     Callsign cannot be empty. Please try again.
   login_invalid_message: |
     Invalid call. Please try again.
-  nearby_login_warning: "PASS NEARBY filter is ON. Disable NEARBY if you want to use regular location filters"
+  nearby_login_warning: "PASS NEARBY filter is ON. Disable NEARBY if you want to use regular location filters" # Post-login warning when saved NEARBY is active.
   input_too_long_message: |
     <CONTEXT> input is too long (maximum <MAX_LEN> characters).
   input_invalid_char_message: |
     <CONTEXT> input may only contain <ALLOWED>.
   dialect_welcome_message: ""
-  dialect_source_default_label: "default"
-  dialect_source_persisted_label: "persisted"
-  path_status_message: ""
+  dialect_source_default_label: "default"     # Label shown when dialect comes from default config.
+  dialect_source_persisted_label: "persisted" # Label shown when dialect comes from saved user state.
+  path_status_message: ""                     # Optional path/noise status text after login.
 
   duplicate_login_message: |
     Another login with your call. This session is being closed (multiple logins are not allowed).
@@ -90,7 +96,7 @@ who_spots_me:
 
 # Default filters applied to new users
 filter:
-  default_modes:
+  default_modes: # New-user mode allowlist.
     - CW
     - LSB
     - USB
@@ -99,5 +105,5 @@ filter:
     - MSK144
     - PSK31
     - SSTV
-  default_sources:
+  default_sources: # New-user source allowlist.
     - HUMAN

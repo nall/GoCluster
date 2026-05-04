@@ -1,4 +1,9 @@
-# Shared-ingest flood control. This stage runs before primary dedupe.
+# Purpose: Shared-ingest flood rails before primary dedupe.
+# Ownership: operator policy settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Change thresholds, windows, and actions only with observed source-rate evidence and post-restart validation.
+# Source: data/config/README.md.
+
 flood_control:
   # Master switch for the shared-ingest flood controller.
   enabled: true
@@ -9,6 +14,11 @@ flood_control:
   partition_mode: exact_source_type
 
   rails:
+    # Rail field guide:
+    #   action: observe logs/counts only; suppress/drop remove spots from the shared pipeline.
+    #   window_seconds: sliding count window for one actor key.
+    #   max_entries_per_partition: hard cap on retained actor keys per SourceType partition.
+    #   thresholds_per_source_type: per-feed limits; 0 disables the rail for that feed class.
     decall:
       # Flood rail keyed by the reporting station (DE call / spotter).
       enabled: true
@@ -25,13 +35,13 @@ flood_control:
       # Maximum events allowed per SourceType inside `window_seconds`.
       # A value of 0 disables this rail for that SourceType.
       thresholds_per_source_type:
-        MANUAL: 8
-        UPSTREAM: 8
-        PEER: 8
-        RBN: 500
-        FT8: 700
-        FT4: 700
-        PSKREPORTER: 3000
+        MANUAL: 8      # Local/manual source type.
+        UPSTREAM: 8    # Human upstream telnet source type.
+        PEER: 8        # Peering source type.
+        RBN: 500       # Reverse Beacon Network CW/RTTY source type.
+        FT8: 700       # RBN digital FT8 source type.
+        FT4: 700       # RBN digital FT4 source type.
+        PSKREPORTER: 3000 # PSKReporter source type.
 
     source_node:
       # Flood rail keyed by the upstream cluster/node identity.
@@ -79,6 +89,7 @@ flood_control:
       active_mode: conservative
       # Threshold profiles for the DXCALL rail. Lower values make the rail more
       # aggressive. Each mode must define every supported SourceType.
+      # Repeated profile rows use the SourceType meanings documented above.
       thresholds_by_mode:
         conservative:
           # Conservative profile: highest allowance, least aggressive.

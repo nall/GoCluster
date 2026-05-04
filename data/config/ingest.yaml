@@ -1,4 +1,17 @@
-# Ingest sources and normalization caches.
+# Purpose: RBN, PSKReporter, human upstream, DXSummit, and ingest cache settings.
+# Ownership: deployment/runtime settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Set source enablement, credentials, cadence, queues, and cache bounds for the local deployment.
+# Source: data/config/README.md.
+
+# Telnet source field guide:
+#   name: dashboard/log label for the source.
+#   host/port: remote endpoint.
+#   callsign: login identity sent to the remote source.
+#   slot_buffer: bounded per-source queue between reader and pipeline.
+#   keepalive_seconds: periodic CRLF interval; 0 disables.
+#   keep_ssid_suffix: whether spotter SSIDs survive downstream normalization.
+#
 # RBN (CW/RTTY)
 rbn:
   enabled: true
@@ -39,21 +52,21 @@ human_telnet:
 dxsummit:
   enabled: true
   name: "DXSUMMIT"
-  base_url: "http://www.dxsummit.fi/api/v1/spots"
+  base_url: "http://www.dxsummit.fi/api/v1/spots" # HTTP API endpoint for spot polling.
   poll_interval_seconds: 60        # Poll cadence; each request is non-overlapping
   max_records_per_poll: 500        # Maps to DXSummit's limit query parameter
   request_timeout_ms: 10000        # Per-request timeout; must be below poll interval
   lookback_seconds: 300            # Query window: from_time=now-lookback to to_time=now
   startup_backfill_seconds: 300    # 0 seeds cursor on startup without replaying old spots
-  include_bands: ["HF", "VHF", "UHF"]
+  include_bands: ["HF", "VHF", "UHF"] # DXSummit include query values; limited to HF/VHF/UHF.
   spot_channel_size: 1000          # Buffered channel from poller to shared ingest
   max_response_bytes: 1048576      # Hard cap for one HTTP response body
 
 pskreporter:
   enabled: true
   name: "PSKReporter"
-  broker: "mqtt.pskreporter.info"
-  port: 1883
+  broker: "mqtt.pskreporter.info" # MQTT broker host.
+  port: 1883                      # MQTT broker port.
   topic: "pskr/filter/v2/+/+/#"         # MQTT subscription topic; filtering happens downstream
   workers: 8                          # 0 means automatic (uses all CPU cores, minimum 4)
   spot_channel_size: 25000            # Buffered ingest channel between MQTT and processing

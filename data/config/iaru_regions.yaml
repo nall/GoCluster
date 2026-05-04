@@ -1,11 +1,16 @@
-# DXCC/ADIF to IARU region mapping used by the final region-aware mode policy.
+# Purpose: DXCC/ADIF to IARU region mapping for final region-aware mode policy.
+# Ownership: reference table.
+# Runtime behavior: Required reference table loaded from the active config directory at startup.
+# Safe edits: Correct known DXCC/ADIF region mappings only with domain evidence; deploy with the matching binary/config directory.
+# Source: data/config/README.md.
+#
 # The mapping is intentionally explicit and reviewable:
 #   - continent defaults cover the common case,
 #   - ADIF overrides handle entities whose CTY continent does not match their
 #     IARU operating region or whose Asia-region assignment needs tightening.
 #
 # Region tokens accept R1/R2/R3.
-defaults_by_continent:
+defaults_by_continent: # Default region by CTY continent when no ADIF override exists.
   AF: R1
   AS: R3
   EU: R1
@@ -13,7 +18,7 @@ defaults_by_continent:
   OC: R3
   SA: R2
 
-adif_overrides:
+adif_overrides: # Entity-specific ADIF overrides for continent exceptions.
   10: R3   # Amsterdam & St. Paul Is.
   14: R1   # Armenia
   15: R1   # Asiatic Russia

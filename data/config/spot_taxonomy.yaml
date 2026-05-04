@@ -1,5 +1,10 @@
-# Canonical spot taxonomy for modes and EVENT families.
+# Purpose: Canonical supported MODE tokens, EVENT families, and PSKReporter routing.
+# Ownership: reference table plus limited operator policy.
+# Runtime behavior: Required reference table loaded from the active config directory at startup and not hot-reloaded.
+# Safe edits: Add modes/events only by selecting behavior families already implemented by the binary; restart with the matching binary/config directory.
+# Source: data/config/README.md.
 #
+# Canonical spot taxonomy for modes and EVENT families.
 # This is a required reference table. It is read at startup from the active
 # config directory and is not reloaded while the process is running.
 #
@@ -14,8 +19,12 @@
 # - comment_tokens/variants/blank_mode_token/synthetic: parser aliases.
 # - pskreporter_route: normal, path_only, or ignore.
 # - mode_inference_seed/voice_by_frequency: mode-inference participation.
-# - ft_* and ft_confidence: FT burst handling owned by existing code.
+# - ft_dial_canonicalization: canonicalize FT dial frequencies where supported.
+# - ft_confidence.enabled: include mode in bounded FT burst confidence handling.
+# - quiet_gap_seconds_key/hard_cap_seconds_key: keys into pipeline.yaml FT burst timing.
 # - archive_retention_class/report_format: archive classification and report parsing.
+# - bare_numeric_report: allow signed numeric report parsing without explicit dB token.
+# - confidence_filter_exempt: bypass confidence filters for modes where confidence is not meaningful.
 # - call_correction_profile/frequency_averaging/source_skew_correction:
 #   correction-pipeline capability flags.
 # - custom_scp_bucket/path_reliability_*: retained support and path bucket mapping.

@@ -1,4 +1,9 @@
+# Purpose: Call-correction, harmonics, mode-inference, and spot-quality pipeline thresholds.
 # Ownership: algorithm calibration.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Not a routine operator tuning surface; change only with field evidence, replay/validation, docs review, and decision-memory handling.
+# Source: data/config/README.md.
+#
 # This file exposes call-correction, harmonics, mode-inference, and spot-policy
 # thresholds used by the spot-quality pipeline. It is YAML-owned so active
 # behavior is inspectable, but it is not a routine operator tuning surface.
@@ -99,6 +104,8 @@ call_correction:
   # winners. Default OFF; when enabled, caps remain strict (+1 report gate and
   # +1 advantage tie-break only).
   bayes_bonus:
+    # Milli fields are fixed-point weights/thresholds. Distance1/Distance2
+    # variants apply different strictness based on resolver edit distance.
     enabled: true
     weight_distance1_milli: 350
     weight_distance2_milli: 200
@@ -264,6 +271,7 @@ call_correction:
     evaluation_period_seconds: 30     # How often to evaluate the rate/state machine
 
   adaptive_refresh_by_band:
+    # Band-specific refresh cadences override the global adaptive refresh state.
     enabled: true
     quiet_refresh_minutes: 30
     normal_refresh_minutes: 20
@@ -271,6 +279,10 @@ call_correction:
     min_spots_since_last_refresh: 500
 
   adaptive_min_reports:
+    # Repeated group fields:
+    #   bands: normalized band tokens covered by the group.
+    #   quiet_below/busy_above: spots-per-window activity thresholds.
+    #   *_min_reports: min report gate used in that activity state.
     enabled: true
     window_minutes: 10
     evaluation_period_seconds: 60

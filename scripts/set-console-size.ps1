@@ -20,6 +20,12 @@
 .EXAMPLE
   .\scripts\set-console-size.ps1 -Width 150 -Height 74
   Grow the console to the larger dimensions before launching the exe.
+
+.NOTES
+  Prerequisites: an interactive PowerShell host exposing RawUI.
+  Side effects: resizes the current PowerShell buffer and window only.
+  Safety: the script grows dimensions before resizing the viewport and does not
+  modify GoCluster config or runtime state.
 #>
 
 param (

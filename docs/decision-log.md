@@ -11,6 +11,9 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0102 | YAML Key Comment Standard | Accepted | 2026-05-04 | config, docs, customgpt | - | - | `docs/decisions/ADR-0102-yaml-key-comment-standard.md` |
+| ADR-0101 | PowerShell Script Header Standard | Accepted | 2026-05-04 | scripts, docs, customgpt | - | - | `docs/decisions/ADR-0101-powershell-script-header-standard.md` |
+| ADR-0100 | YAML File Header Standard | Accepted | 2026-05-04 | config, docs, customgpt | - | - | `docs/decisions/ADR-0100-yaml-file-header-standard.md` |
 | ADR-0099 | README Telnet-User First Ordering | Accepted | 2026-05-02 | docs, README, telnet | - | - | `docs/decisions/ADR-0099-readme-telnet-user-first-ordering.md` |
 | ADR-0098 | Support-Agent Raw GitHub Source URLs | Accepted | 2026-05-02 | docs, customgpt | - | - | `docs/decisions/ADR-0098-support-agent-raw-github-source-urls.md` |
 | ADR-0097 | YAML Ownership Boundary Documentation | Accepted | 2026-05-01 | config, docs, customgpt | - | - | `docs/decisions/ADR-0097-yaml-ownership-boundary-docs.md` |

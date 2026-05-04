@@ -1,4 +1,9 @@
+# Purpose: Solar/geomagnetic feed controls and path-glyph override policy.
 # Ownership: mixed operator policy and algorithm calibration.
+# Runtime behavior: Required feature-root config loaded from the active config directory at startup.
+# Safe edits: Routine edits are enablement, fetch cadence, feed URLs, and override glyphs; retune numerical calibration only with evidence and validation.
+# Source: data/config/README.md.
+#
 # Enablement, fetch cadence, feed URLs, and override glyphs are operator policy.
 # Daylight, high-latitude, R/G level, hysteresis, cache, and numerical tolerance
 # values are algorithm calibration and should not be changed casually.
@@ -36,11 +41,11 @@ sun:
 
 # Numerical tolerances for daylight fraction math (radians, norms).
 daylight:
-  cross_norm_tiny: 1e-12
-  d_small_rad: 1e-8
-  d_antipodal_rad: 3.141592643589793
-  eps_base_rad: 1e-6
-  eps_scale: 1e-6
+  cross_norm_tiny: 1e-12         # Treat path/sun cross-product norms below this as degenerate.
+  d_small_rad: 1e-8              # Small-angle cutoff for daylight arc math.
+  d_antipodal_rad: 3.141592643589793 # Near-pi cutoff for antipodal arc math.
+  eps_base_rad: 1e-6             # Base angular epsilon for stable comparisons.
+  eps_scale: 1e-6                # Scale factor for distance-relative epsilon.
 
 # High-latitude gating parameters (dipole approximation).
 high_lat:
@@ -80,6 +85,11 @@ kp:
 
 # R levels (ascending thresholds). Hold-down is per-level and restart-safe:
 # on startup, the latest 6-hour samples are scanned over the max hold window to seed the peak.
+# Repeated R-level keys:
+#   name: label shown as the R override level.
+#   min_flux_wm2: GOES X-ray flux threshold in W/m^2.
+#   hold_minutes: time to keep the level active after the peak.
+#   bands: normalized bands eligible for this override.
 r_levels:
   - name: R3
     min_flux_wm2: 1e-4
@@ -91,6 +101,10 @@ r_levels:
     bands: [80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m]
 
 # G levels (ascending thresholds). Each level controls which bands show a G override.
+# Repeated G-level keys:
+#   name: label shown as the G override level.
+#   min_kp: observed Kp threshold.
+#   bands: normalized bands eligible for this override.
 g_levels:
   - name: G2
     min_kp: 6

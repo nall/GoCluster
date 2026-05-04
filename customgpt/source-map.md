@@ -7,10 +7,12 @@ linking or citing these docs over duplicating their content here.
 | --- | --- | --- |
 | Project overview | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
 | Ready-to-run release package | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) | [download/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/download/README.md) |
+| Build, release, profiling, and helper scripts | [scripts/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/scripts/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/dev-runbook.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/dev-runbook.md), script comment-based help |
 | Windows run steps | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
 | Linux build and service steps | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) |
 | Real-node configuration | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
 | YAML ownership boundaries | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), package READMEs |
+| YAML headers, comments, and local context | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | effective YAML in the active config directory |
 | Config loader behavior | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | `config/` tests |
 | Secrets and private config safety | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md), [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md) |
 | System, dropped-call, and file-only event logs | [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) | [docs/OPERATOR_GUIDE.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/OPERATOR_GUIDE.md), [docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md) |
@@ -52,6 +54,12 @@ linking or citing these docs over duplicating their content here.
   implementation advice.
 - For config-sensitive answers, route to [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md) and tell the
   user to check their effective YAML.
+- Use YAML headers, key comments, and field guides as local context for purpose,
+  ownership, runtime behavior, units, side effects, and safe-edit boundaries,
+  but do not treat comments as schema or defaults.
+- For PowerShell script questions, use [scripts/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/scripts/README.md)
+  and the script's comment-based help for purpose, prerequisites, side effects,
+  and safety boundaries; inspect the script body before claiming exact behavior.
 - For YAML tuning questions, check the ownership class first. Do not recommend
   changing algorithm calibration as a first troubleshooting step.
 - For logging questions, distinguish system logs, optional dropped-call logs,

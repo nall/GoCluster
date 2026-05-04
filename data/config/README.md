@@ -21,6 +21,40 @@ contract. Not every YAML file is the same kind of knob.
 If a setting is unclear, treat it as algorithm calibration until the owning
 README or ADR says it is a normal operator knob.
 
+## YAML File Headers
+
+Every checked-in first-party runtime config YAML in this directory starts with
+a compact operator/support header:
+
+```yaml
+# Purpose: <what this file controls>
+# Ownership: <deployment/runtime | operator policy | reference table | algorithm calibration | mixed>
+# Runtime behavior: <required/optional, loader class, startup/tool-boundary behavior>
+# Safe edits: <normal operator edits, or warning when edits need evidence/validation>
+# Source: data/config/README.md.
+```
+
+These headers are local context for operators, support agents, and developers.
+They do not define schema, defaults, or loader behavior; the active YAML values,
+this README, package docs, current code, and ADRs remain authoritative. Header
+updates must stay comment-only unless a separate approved config/schema change
+explicitly changes runtime behavior.
+
+Private or optional secret-bearing config, such as a local `openai.yaml`, should
+keep secret-handling comments but must not be committed with real credentials.
+
+## YAML Key Comments
+
+Config comments should explain purpose where the key name and section are not
+enough. Comment keys when units, sentinel values, ownership, side effects,
+runtime consequences, or safe-edit boundaries are non-obvious.
+
+Do not add noise comments for obvious boolean toggles such as `enabled:
+true/false` unless the boolean has non-obvious side effects. When the same key
+repeats across homogeneous sections or list entries, document the first
+occurrence or use a field guide, then avoid repeating the same comment on every
+row.
+
 Configuration is split by concern so you only edit the relevant file:
 
 - `app.yaml` - deployment/runtime settings for server identity, stats interval, console UI, system logging, and optional dropped-call logs.

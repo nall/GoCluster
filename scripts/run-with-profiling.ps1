@@ -1,8 +1,21 @@
-# Launch gocluster with pprof enabled and capture 1m CPU profiles every 15m.
-# Captures heap (inuse), allocs (alloc_space), block, mutex, trace, goroutine,
-# map cardinality logs, and OS process samples as well.
-# Usage: run this script from PowerShell; it will start the cluster in a new window
-# and keep collecting profiles until the process exits.
+<#
+.SYNOPSIS
+	Launch GoCluster with pprof enabled and collect recurring runtime profiles.
+
+.DESCRIPTION
+	Starts gocluster.exe in a separate PowerShell window with profiling-related
+	environment variables, waits for the pprof endpoint, and periodically captures
+	CPU, heap, allocs, block, mutex, goroutine, trace, retained-state, and OS
+	process samples until the target process exits.
+
+.NOTES
+	Prerequisites: gocluster.exe, active config directory, PowerShell, and a
+	local pprof port that is free.
+	Side effects: starts a cluster process, writes launcher/controller logs, and
+	creates profile/sample files under logs/.
+	Safety: intended for local/profiling runs; verify config paths and profiling
+	overhead before using results for production claims.
+#>
 
 $repoRoot        = "C:\src\gocluster"
 $exePath         = Join-Path $repoRoot "gocluster.exe"

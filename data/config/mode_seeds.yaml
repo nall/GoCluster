@@ -1,7 +1,8 @@
-# Seeded digital frequency hints for mode inference.
-#
-# Ownership: reference table / algorithm calibration; frequency-only inference
-# is a fallback hint, not proof of a spot's mode.
+# Purpose: Seeded digital frequency hints for mode inference.
+# Ownership: reference table / algorithm calibration; frequency-only inference is a fallback hint, not proof of a spot's mode.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Add or correct stable dial-frequency hints only with domain evidence; use spot_taxonomy.yaml for mode capability/routing.
+# Source: data/config/README.md.
 #
 # These seeds are used only after explicit mode tokens and recent trusted
 # DX+frequency evidence fail to identify a mode. They help classify common
@@ -14,6 +15,9 @@
 #
 # Original source note: derived from C:\Ham\frequencies.ini. FT8 wins ties.
 mode_inference:
+  # Repeated seed field guide:
+  #   frequency_khz: exact dial-frequency hint in kHz.
+  #   mode: taxonomy mode token assigned when the hint is used.
   digital_seeds:
     # 6m
     - frequency_khz: 50310

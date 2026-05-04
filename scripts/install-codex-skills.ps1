@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+	Install selected repo-managed Codex skills into the local Codex home.
+
+.DESCRIPTION
+	Copies skill directories from codex-skills/ into CODEX_HOME/skills or
+	USERPROFILE/.codex/skills. By default, existing destination files are
+	overwritten by Copy-Item while extra destination files are retained unless
+	Mirror is specified.
+
+.PARAMETER Skills
+	Repo-managed skill names to install. Defaults to gh-fix-ci and sentry.
+
+.PARAMETER Mirror
+	Remove each destination skill directory before copying, making the installed
+	copy match the repo source more closely.
+
+.NOTES
+	Prerequisites: run from this repository with CODEX_HOME or USERPROFILE set.
+	Side effects: creates/updates local files under the Codex skills directory.
+	Safety: Mirror deletes the selected destination skill directories before
+	copying; it does not touch repo source files.
+#>
+
 Param(
     [string[]]$Skills = @("gh-fix-ci", "sentry"),
     [switch]$Mirror

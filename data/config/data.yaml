@@ -1,8 +1,13 @@
-# Reference data sources and persistence tuning.
+# Purpose: External data source URLs, refresh schedules, local data paths, and lookup-cache tuning.
+# Ownership: deployment/runtime settings plus reference-data fetch controls.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Set public data paths, refresh times, cache bounds, and local database locations for the deployment.
+# Source: data/config/README.md.
+
 # CTY prefix database
 cty:
   enabled: true
-  url: "https://www.country-files.com/cty/cty.plist"
+  url: "https://www.country-files.com/cty/cty.plist" # Source URL for CTY prefix data.
   file: "data/cty/cty.plist"           # Path to the CTY prefix database (cty.plist)
   refresh_utc: "00:10"                 # Daily download time in HH:MM UTC
 
@@ -17,7 +22,7 @@ fcc_uls:
   allowlist_path: "data/fcc/allowlist.txt"                          # Regex allowlist file (one pattern per line)
   cache_ttl_seconds: 21600                                          # Cache TTL for FCC ULS lookups
 
-# Grid/call metadata database (Pebble directory)
+# Grid/call metadata database (Pebble directory).
 grid_db: "data/grids/pebble"
 # H3 table directory for path reliability (res1.bin/res2.bin).
 h3_table_path: "data/h3"

@@ -1,4 +1,9 @@
+# Purpose: Path-reliability ingestion, sample floors, receiver contribution caps, decay, weights, thresholds, and glyphs.
 # Ownership: mixed operator policy and algorithm calibration.
+# Runtime behavior: Required feature-root config loaded from the active config directory at startup.
+# Safe edits: Limit routine edits to enable/display, allowed bands, sample-floor policy, receiver-cap mode, and glyphs; retune calibration only with field evidence and validation.
+# Source: data/config/README.md.
+#
 # Routine operator policy is limited to enable/display behavior, allowed bands,
 # global sample-floor policy, receiver contribution mode, and glyph characters.
 # Decay, weights, thresholds, mode offsets, merge rules, and noise tables are
@@ -86,10 +91,10 @@ min_observation_count: 19
 # diagnoses where capped evidence would be stricter; "enforce" gates glyphs and
 # PATH filters on capped evidence; "off" disables capped tracking.
 receiver_contribution_mode: shadow
-receiver_fine_slots: 4
-receiver_coarse_slots: 8
-receiver_max_effective_count: 5
-receiver_max_effective_weight: 5.0
+receiver_fine_slots: 4              # Receiver slots retained in fine buckets.
+receiver_coarse_slots: 8            # Receiver slots retained in coarse buckets.
+receiver_max_effective_count: 5     # Max capped observation count one receiver can contribute per bucket.
+receiver_max_effective_weight: 5.0  # Max capped effective weight one receiver can contribute per bucket.
 
 # Minimum fine weight required before blending fine with coarse (res-1); below this uses coarse only.
 min_fine_weight: 5
@@ -108,6 +113,8 @@ merge_transmit_weight: 0.4
 # Per-mode glyph thresholds in FT8-equivalent dB.
 # FT8/FT4 thresholds follow: < -21 unlikely, -21..-17 low, -17..-13 medium, >= -13 high.
 # CW/RTTY/PSK thresholds derive from 0/3/7/12 dB buckets with a -7 dB correction.
+# Repeated threshold keys mean: high >= high, medium >= medium, low >= low,
+# unlikely >= unlikely; below unlikely is still displayed as unlikely.
 mode_thresholds:
   ft8:
     high: -13
@@ -160,11 +167,11 @@ display_enabled: true
 
 # Mode offsets to convert to FT8-equivalent dB (applied on ingest).
 mode_offsets:
-  ft4: 0
-  cw: -7
-  rtty: -7
-  psk: -19
-  wspr: -26
+  ft4: 0    # FT4 reports use no offset before FT8-equivalent aggregation.
+  cw: -7    # CW reports are shifted into FT8-equivalent dB.
+  rtty: -7  # RTTY reports are shifted into FT8-equivalent dB.
+  psk: -19  # PSK reports are shifted into FT8-equivalent dB.
+  wspr: -26 # WSPR reports are shifted into FT8-equivalent dB.
 
 # Band-specific noise class penalties applied to DX->user direction (SET NOISE).
 # These are P.372-17-informed operational receive penalties, not literal absolute

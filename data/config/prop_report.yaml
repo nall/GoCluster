@@ -1,4 +1,8 @@
-# Propagation report generation.
+# Purpose: Scheduled propagation-report generation controls.
+# Ownership: deployment/runtime settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup; report content uses the active config directory.
+# Safe edits: Set report enablement, cadence, and output behavior for the local deployment; LLM secrets belong in private openai.yaml.
+# Source: data/config/README.md.
 #
 # The runtime can generate the daily propagation report on log rotation and on
 # this UTC schedule. Report content uses the active config directory; LLM

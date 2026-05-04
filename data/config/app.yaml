@@ -1,7 +1,13 @@
-# Core app identity and local console UI settings.
+# Purpose: Core server identity, stats cadence, console UI, and local logging.
+# Ownership: deployment/runtime settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Set node identity, console UI, stats, and logging paths for the local deployment; keep secrets out of public config.
+# Source: data/config/README.md.
+
+# Cluster identity used in greetings, logs, and node metadata.
 server:
-  name: "Go Cluster beta\r\n"
-  node_id: "N0CALL-1"
+  name: "Go Cluster beta\r\n" # Display name; include protocol line ending when needed by clients.
+  node_id: "N0CALL-1"         # Stable cluster node callsign/identifier.
 
 stats:
   display_interval_seconds: 60  # How often to print stats to stdout
@@ -38,14 +44,18 @@ ui:
       use_alternatives: true         # Enable o/i/p/e navigation
 
 # Optional daily system log files (local time, one file per day).
+# Repeated file-log blocks use:
+#   dir: output directory for daily files.
+#   retention_days: local retention window; 0 inherits the root logging value where supported.
+#   dedupe_window_seconds: repeated-event suppression window; 0 disables dedupe for that file.
 logging:
   enabled: true
-  dir: "data/logs/system"
-  retention_days: 7   # Keep daily logs for this many days
+  dir: "data/logs/system" # Root system-log directory.
+  retention_days: 7       # Keep daily logs for this many days.
   drop_dedupe_window_seconds: 120  # 0 disables console dropped-event dedupe; dropped_calls may override file dedupe
   dropped_calls:
     enabled: true
-    dir: "data/logs/dropped_calls"
+    dir: "data/logs/dropped_calls" # Separate daily file for dropped spot categories.
     retention_days: 7
     dedupe_window_seconds: 120
     bad_de_dx: true

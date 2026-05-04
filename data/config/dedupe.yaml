@@ -1,4 +1,9 @@
-# Deduplication configuration (primary + secondary policies).
+# Purpose: Primary and secondary duplicate suppression windows and preference policy.
+# Ownership: operator policy settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Change deliberately when duplicate visibility policy changes; validate telnet/archive effects after restart.
+# Source: data/config/README.md.
+
 dedup:
   cluster_window_seconds: 120                 # Primary dedupe window (all sources before ring)
   secondary_fast_window_seconds: 120          # Fast policy (broadcast-only, by DE DXCC+grid2)

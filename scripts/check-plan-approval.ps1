@@ -1,3 +1,22 @@
+<#
+.SYNOPSIS
+	Check Non-trivial workflow approval evidence for changed files.
+
+.DESCRIPTION
+	Compares the current branch and working tree against a base ref, classifies
+	changed files that need Non-trivial workflow approval evidence, and reports
+	whether the required approval marker is present.
+
+.PARAMETER BaseRef
+	Optional git ref to compare against. When omitted, the script tries
+	origin/main, then main, then HEAD~1.
+
+.NOTES
+	Prerequisites: run from a Git worktree with git available.
+	Side effects: reads git history and working-tree state only.
+	Safety: this helper does not modify files, refs, or workflow records.
+#>
+
 Param(
 	[string]$BaseRef = ""
 )

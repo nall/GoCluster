@@ -1,3 +1,21 @@
+<#
+.SYNOPSIS
+	Verify selected repo-managed Codex skills against the local Codex home.
+
+.DESCRIPTION
+	Compares files in codex-skills/ with installed copies under CODEX_HOME/skills
+	or USERPROFILE/.codex/skills and reports missing, extra, or changed files for
+	each selected skill.
+
+.PARAMETER Skills
+	Repo-managed skill names to verify. Defaults to gh-fix-ci and sentry.
+
+.NOTES
+	Prerequisites: run from this repository with CODEX_HOME or USERPROFILE set.
+	Side effects: reads repo and local Codex skill files only.
+	Safety: this verifier does not install, delete, or modify skill files.
+#>
+
 Param(
     [string[]]$Skills = @("gh-fix-ci", "sentry")
 )

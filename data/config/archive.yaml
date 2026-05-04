@@ -1,3 +1,9 @@
+# Purpose: Spot archive enablement, Pebble storage path, writer backpressure, and retention.
+# Ownership: deployment/runtime settings.
+# Runtime behavior: Required merged runtime config loaded from the active config directory at startup.
+# Safe edits: Tune archive paths, retention, and bounded writer limits for local storage capacity.
+# Source: data/config/README.md.
+
 archive:
   # Enable or disable Pebble spot archival.
   enabled: true

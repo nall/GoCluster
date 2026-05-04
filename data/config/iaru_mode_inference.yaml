@@ -1,6 +1,8 @@
-# Final region-aware frequency classification used only after:
-# Ownership: reference table / algorithm calibration; frequency-only inference
-# is a final fallback policy, not proof of a spot's mode.
+# Purpose: Final region-aware frequency classification fallback after stronger mode evidence is unavailable.
+# Ownership: reference table / algorithm calibration; frequency-only inference is a final fallback policy, not proof of a spot's mode.
+# Runtime behavior: Required reference table loaded from the active config directory at startup.
+# Safe edits: Correct regional frequency policy only with domain evidence; deploy with the matching binary/config directory.
+# Source: data/config/README.md.
 #
 #   1. explicit mode on the spot,
 #   2. recent trusted DX+frequency-bucket evidence,
@@ -11,12 +13,16 @@
 #   voice_default: frequency-only inference may emit the configured USB/LSB
 #   mixed: do not infer mode from frequency
 #
+# Repeated range field guide:
+# - from_khz/to_khz: inclusive frequency range in kHz.
+# - class: one of cw_safe, voice_default, or mixed.
+#
 # Product policy overrides:
 # - 60m stays mixed in all regions.
 # - 6m stays mixed in all regions.
 # - Unknown region never emits voice_default; it may only use the conservative
 #   cross-region CW-safe intersections below.
-voice_mode_by_band:
+voice_mode_by_band: # Default voice mode emitted by voice_default ranges.
   "160m": LSB
   "80m": LSB
   "40m": LSB
@@ -26,7 +32,7 @@ voice_mode_by_band:
   "12m": USB
   "10m": USB
 
-unknown_region_cw_safe:
+unknown_region_cw_safe: # Conservative CW-only ranges used when region is unknown.
   "160m":
     - {from_khz: 1810.0, to_khz: 1830.0, class: cw_safe}
   "80m":
@@ -46,7 +52,7 @@ unknown_region_cw_safe:
   "10m":
     - {from_khz: 28000.0, to_khz: 28070.0, class: cw_safe}
 
-regions:
+regions: # Region-specific fallback frequency policy.
   R1:
     "160m":
       - {from_khz: 1800.0, to_khz: 1810.0, class: mixed}

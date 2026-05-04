@@ -24,6 +24,15 @@ GoCluster behavior without creating a second maintained copy of the docs.
 - Distinguish operator guidance from developer workflow guidance.
 - For config-sensitive behavior, say that the effective YAML config controls
   the final answer and route to [data/config/README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/data/config/README.md).
+- Treat headers, key comments, and field guides in checked-in
+  `data/config/*.yaml` as local context for purpose, ownership, runtime
+  behavior, units, side effects, and safe edits. Do not treat those comments as
+  schema, defaults, or proof of current runtime behavior when code or docs
+  disagree.
+- Treat PowerShell script comment-based help as local context for purpose,
+  prerequisites, side effects, and safety boundaries. Inspect the script body
+  before claiming exact build, release, profiling, publish, process-launch, or
+  file-output behavior.
 - For logging questions, distinguish system logs, optional dropped-call logs,
   and file-only event logs. New login-attempt, reputation-drop, telnet
   lifecycle, ingest lifecycle, and peer lifecycle event streams are separate

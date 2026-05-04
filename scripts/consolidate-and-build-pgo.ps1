@@ -1,8 +1,20 @@
-# Consolidate CPU pprof profiles and build gocluster with PGO.
-# - Scans logs/ for cpu-*.pprof
-# - Merges them into logs/pgo-merged.pprof
-# - Builds gocluster_pgo.exe with -pgo=logs/pgo-merged.pprof
-# Usage: run from repo root or let the script set the working directory.
+<#
+.SYNOPSIS
+	Merge captured CPU profiles and build a PGO-enabled GoCluster binary.
+
+.DESCRIPTION
+	Scans the repo logs directory for cpu-*.pprof files, merges them into
+	logs/pgo-merged.pprof with go tool pprof, and builds gocluster_pgo.exe with
+	Go PGO enabled. The script sets its working directory to the configured repo
+	root before reading profiles or building.
+
+.NOTES
+	Prerequisites: Go toolchain, git, logs/cpu-*.pprof, and the matching
+	gocluster.exe used to capture those profiles.
+	Side effects: writes logs/pgo-merged.pprof and gocluster_pgo.exe.
+	Safety: verify profiles came from the same source binary before using the
+	PGO build for performance conclusions.
+#>
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest

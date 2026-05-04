@@ -1,3 +1,39 @@
+<#
+.SYNOPSIS
+	Build a Windows amd64 ready-to-run GoCluster release package.
+
+.DESCRIPTION
+	Creates the ready_to_run payload, renders release README content, builds the
+	Windows binary with stamped metadata, writes the release zip, and optionally
+	publishes a GitHub release when PackageOnly is not set.
+
+.PARAMETER PackageOnly
+	Create the local package without publishing a GitHub release.
+
+.PARAMETER AllowDirty
+	Allow local package creation from a dirty worktree. Publishing still requires
+	clean, intentional source.
+
+.PARAMETER OutputDir
+	Directory where the package output is written. Defaults to the current directory.
+
+.PARAMETER PackageName
+	Base name for the generated zip package.
+
+.PARAMETER PackageDirectoryName
+	Root directory name inside the generated package.
+
+.PARAMETER Remote
+	Git remote used to resolve the release repository. Defaults to origin.
+
+.NOTES
+	Prerequisites: Go toolchain, git, and GitHub CLI authentication for publishing.
+	Side effects: builds a binary, creates package directories/zips, and can
+	publish a GitHub release when PackageOnly is omitted.
+	Safety: do not publish from a dirty worktree; real secrets and private
+	operational state must not enter the release payload.
+#>
+
 param(
     [switch]$PackageOnly,
     [switch]$AllowDirty,
