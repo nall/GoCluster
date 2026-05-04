@@ -11,6 +11,8 @@ const EXTERNAL_AUTHORITIES_PATH = "customgpt/external-authorities.md";
 const MAX_FILE_CHARS = 140000;
 const MAX_BUNDLE_FILES = 12;
 const MAX_RELATED_PATHS = 80;
+const AUTH_SECRET_BINDING = "GOCLUSTER_DOCS_ACTION_TOKEN";
+const AUTH_MODE = "bearer";
 
 export default {
   async fetch(request, env, ctx) {
@@ -30,6 +32,10 @@ export default {
       );
     }
 
+    if (!isAuthenticated(request, env)) {
+      return unauthorizedResponse();
+    }
+
     try {
       if (url.pathname === "/version") {
         return jsonResponse({
@@ -39,9 +45,9 @@ export default {
           branch: BRANCH,
           backend: "raw-github-file-fetch",
           entrypoint: ENTRYPOINT_PATH,
-          auth: "disabled",
+          auth: AUTH_MODE,
           retrieved_at: new Date().toISOString(),
-          message: "Worker is reachable"
+          message: "Worker is reachable with authenticated access"
         });
       }
 
@@ -109,7 +115,7 @@ export default {
         return jsonResponse({
           repo: `${REPO_OWNER}/${REPO_NAME}`,
           branch: BRANCH,
-          auth: "disabled",
+          auth: AUTH_MODE,
           retrieved_at: new Date().toISOString(),
           requested_paths: requestedPaths,
           file_count: files.length,
@@ -172,7 +178,7 @@ async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
 
   const response = await fetch(sourceUrl, {
     headers: {
-      "user-agent": "gocluster-docs-action/4.1-noauth"
+      "user-agent": "gocluster-docs-action/4.3-bearer"
     }
   });
 
@@ -200,7 +206,7 @@ async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
     branch: BRANCH,
     path,
     source_url: sourceUrl,
-    auth: "disabled",
+    auth: AUTH_MODE,
     retrieved_at: new Date().toISOString(),
     kind: classifyPath(path),
     header,
@@ -715,6 +721,46 @@ function dedupeStrings(values) {
   return out;
 }
 
+function isAuthenticated(request, env) {
+  const expectedToken = env && env[AUTH_SECRET_BINDING];
+  if (!expectedToken) {
+    return false;
+  }
+
+  const header = request.headers.get("authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return false;
+  }
+
+  return constantTimeEquals(match[1].trim(), String(expectedToken));
+}
+
+function constantTimeEquals(actual, expected) {
+  const actualText = String(actual || "");
+  const expectedText = String(expected || "");
+  const maxLength = Math.max(actualText.length, expectedText.length);
+  let mismatch = actualText.length ^ expectedText.length;
+
+  for (let i = 0; i < maxLength; i++) {
+    const actualCode = i < actualText.length ? actualText.charCodeAt(i) : 0;
+    const expectedCode = i < expectedText.length ? expectedText.charCodeAt(i) : 0;
+    mismatch |= actualCode ^ expectedCode;
+  }
+
+  return mismatch === 0;
+}
+
+function unauthorizedResponse() {
+  return jsonResponse(
+    {
+      error: "unauthorized",
+      message: "Missing or invalid bearer token"
+    },
+    401
+  );
+}
+
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
     status,
@@ -808,8 +854,8 @@ function privacyPolicyResponse() {
 
   <h2>Security</h2>
   <p>
-    Repository retrieval endpoints are temporarily public while authentication is disabled for testing.
-    Authentication may be re-enabled after the retrieval flow is validated.
+    Repository retrieval endpoints require a bearer token configured by the GPT owner.
+    This privacy page remains public so users can review the policy before using the action.
   </p>
 
   <h2>Changes</h2>

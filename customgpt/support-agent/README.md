@@ -38,5 +38,22 @@ Do not document or require action operations that are not present in both
 - Keep structured routing derived from repo docs only.
 - Keep `/bundle` all-or-error so the GPT never receives mixed file and error
   objects in a successful bundle response.
-- Authentication is intentionally out of scope while the retrieval flow is being
-  validated.
+- Keep `/privacy` public.
+
+## Authentication
+
+All repository retrieval endpoints require:
+
+```text
+Authorization: Bearer <token>
+```
+
+Set the Worker secret binding with:
+
+```powershell
+wrangler secret put GOCLUSTER_DOCS_ACTION_TOKEN
+```
+
+Configure the GPT action authentication as a bearer/API key using the same
+value. Do not commit the real token, paste it into docs, or print it in test
+output. Local smoke tests should use dummy values only.

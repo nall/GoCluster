@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: GoCluster Repository Retrieval Action
   description: Read-only authenticated API for retrieving current public GoCluster repository files by source map, troubleshooting index, repo-relative path, bundle, or approved raw GitHub URL. The GPT routes through repo-derived routes, symptom_routes, and related_paths, then retrieves authoritative files before answering.
-  version: 4.2.0
+  version: 4.3.0
 
 servers:
   - url: https://gocluster-docs-action.n2wq-api.workers.dev
@@ -219,6 +219,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+      description: Configure the GPT action with the same bearer token stored in the Worker secret binding GOCLUSTER_DOCS_ACTION_TOKEN.
 
   schemas:
     VersionResponse:
@@ -264,6 +265,8 @@ components:
           type: string
         source_url:
           type: string
+        auth:
+          type: string
         retrieved_at:
           type: string
         kind:
@@ -293,6 +296,7 @@ components:
         - branch
         - path
         - source_url
+        - auth
         - retrieved_at
         - kind
         - header
@@ -376,6 +380,8 @@ components:
           type: string
         branch:
           type: string
+        auth:
+          type: string
         retrieved_at:
           type: string
         requested_paths:
@@ -391,6 +397,7 @@ components:
       required:
         - repo
         - branch
+        - auth
         - retrieved_at
         - requested_paths
         - file_count
