@@ -156,30 +156,32 @@ func TestIngestValidatorReportsCTYUnknownDrop(t *testing.T) {
 	}
 }
 
-func TestIngestValidatorReportsLeadingLetterDrop(t *testing.T) {
-	db := loadIngestCTY(t)
-	var got struct {
-		role   string
-		reason string
-		call   string
-		detail string
-	}
-	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
-	v.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
-		got.role = role
-		got.reason = reason
-		got.call = call
-		got.detail = detail
-	})
-	v.isLicensedUS = func(call string) bool { return true }
+func TestIngestValidatorReportsInvalidCallsignDrop(t *testing.T) {
+	for _, call := range []string{"ABC1D", "SET", "SET/NOFT8"} {
+		db := loadIngestCTY(t)
+		var got struct {
+			role   string
+			reason string
+			call   string
+			detail string
+		}
+		v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
+		v.SetBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+			got.role = role
+			got.reason = reason
+			got.call = call
+			got.detail = detail
+		})
+		v.isLicensedUS = func(call string) bool { return true }
 
-	s := spot.NewSpotNormalized("ABC1D", "K1ABC", 14074.0, "FT8")
-	s.SourceNode = "RBN"
-	if v.validateSpot(s) {
-		t.Fatalf("expected leading-letter DX to be dropped")
-	}
-	if got.role != "DX" || got.reason != "leading_letters" || got.call != "ABC1D" || got.detail != "cty_prefilter" {
-		t.Fatalf("unexpected bad-call report: %+v", got)
+		s := spot.NewSpotNormalized(call, "K1ABC", 14074.0, "FT8")
+		s.SourceNode = "RBN"
+		if v.validateSpot(s) {
+			t.Fatalf("expected invalid DX %q to be dropped", call)
+		}
+		if got.role != "DX" || got.reason != "invalid_callsign" || got.call != call || got.detail != "cty_prefilter" {
+			t.Fatalf("unexpected bad-call report for %q: %+v", call, got)
+		}
 	}
 }
 
@@ -276,14 +278,16 @@ func TestIngestValidatorUsesBaseCallForLicenseJurisdiction(t *testing.T) {
 	}
 }
 
-func TestIngestValidatorDropsInvalidLeadingLetters(t *testing.T) {
+func TestIngestValidatorDropsInvalidCallsignShape(t *testing.T) {
 	db := loadIngestCTY(t)
 	v := newIngestValidator(func() *cty.CTYDatabase { return db }, nil, nil, nil, make(chan *spot.Spot, 1), nil, nil, true)
 	v.isLicensedUS = func(call string) bool { return true }
 
-	s := spot.NewSpotNormalized("ABC1", "K1ABC", 14074.0, "FT8")
-	if v.validateSpot(s) {
-		t.Fatalf("expected invalid leading letters to be dropped")
+	for _, call := range []string{"ABC1", "SET/FT8", "NOFT8"} {
+		s := spot.NewSpotNormalized(call, "K1ABC", 14074.0, "FT8")
+		if v.validateSpot(s) {
+			t.Fatalf("expected invalid callsign shape %q to be dropped", call)
+		}
 	}
 }
 

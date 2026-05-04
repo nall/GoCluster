@@ -108,6 +108,11 @@ func TestHandleClientRejectsNonCallsignLoginTokens(t *testing.T) {
 		"ABC",
 		"N0@",
 		"N0CALL-#",
+		"SET/NOFT8",
+		"SET/FT8",
+		"FT8",
+		"NOFT8",
+		"PSK31",
 	}
 	for _, input := range cases {
 		t.Run(input, func(t *testing.T) {
@@ -232,7 +237,7 @@ func TestValidateLoginCallsignTestCallBypassesUSLicense(t *testing.T) {
 		t.Fatalf("expected TEST call to bypass US license check, got %d calls", calls)
 	}
 
-	got = s.validateLoginCallsign("ZZTEST-1")
+	got = s.validateLoginCallsign("Z9TEST-1")
 	if got.valid || got.reason != loginValidationReasonCTYUnknown {
 		t.Fatalf("expected CTY-unknown TEST call rejection, got %+v", got)
 	}

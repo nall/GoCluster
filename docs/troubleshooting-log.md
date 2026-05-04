@@ -12,6 +12,7 @@ This index tracks troubleshooting records (`TSR-XXXX`) that can lead to ADRs.
 | TSR | Title | Status | Date | Area | Led To ADR | Links |
 |---|---|---|---|---|---|---|
 | TSR-0001 | <title> | Open | YYYY-MM-DD | <area> | - | `docs/troubleshooting/TSR-0001-<slug>.md` |
+| TSR-0021 | Command-Like Login CTY Admission | Resolved | 2026-05-04 | spot, CTY, telnet, ingest, peer, replay | ADR-0110 | `docs/troubleshooting/TSR-0021-command-like-login-cty-admission.md` |
 | TSR-0002 | Per-Spot Call Correction Split-Evidence Ambiguity and Quality Penalty Reinforcement | Resolved | 2026-02-23 | spot/correction, main/telnet fan-out | ADR-0021 | `docs/troubleshooting/TSR-0002-call-correction-ambiguity-and-quality-penalty.md` |
 | TSR-0003 | Phase 2 Signal Resolver Shadow-Mode Design and Validation Plan | Open | 2026-02-23 | spot/correction, main output pipeline | ADR-0022 | `docs/troubleshooting/TSR-0003-phase2-signal-resolver-shadow-design.md` |
 | TSR-0004 | Resolver Primary Switchover Mode and Rollback Contract | Resolved | 2026-02-25 | main output pipeline, spot/correction, config | ADR-0026 | `docs/troubleshooting/TSR-0004-resolver-primary-switchover-mode.md` |

@@ -54,3 +54,58 @@ func TestIsValidCallsignLengthBounds(t *testing.T) {
 		t.Fatalf("IsValidCallsign should reject overlong callsign %q", invalid)
 	}
 }
+
+func TestIsValidCallsignRequiresIdentitySegment(t *testing.T) {
+	valid := []string{
+		"K1ABC",
+		"DL6LD",
+		"4U1UN",
+		"P5/N1K",
+		"K1ABC/B",
+		"W6TEST-1",
+		"W1AW/5",
+		"JA1CTC.P",
+	}
+	for _, call := range valid {
+		if !IsValidCallsign(call) {
+			t.Fatalf("IsValidCallsign should accept call-like identity %q", call)
+		}
+	}
+
+	invalid := []string{
+		"SET",
+		"FT8",
+		"FT4",
+		"NOFT8",
+		"PSK31",
+		"SET/FT8",
+		"SET/NOFT8",
+		"K1/FT8",
+	}
+	for _, call := range invalid {
+		if IsValidCallsign(call) {
+			t.Fatalf("IsValidCallsign should reject command/mode token %q", call)
+		}
+	}
+}
+
+var benchmarkCallsignValidSink bool
+
+func BenchmarkIsValidNormalizedCallsign(b *testing.B) {
+	calls := []string{
+		"K1ABC",
+		"DL6LD",
+		"4U1UN",
+		"P5/N1K",
+		"K1ABC/B",
+		"W6TEST-1",
+		"SET/NOFT8",
+		"PSK31",
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		for _, call := range calls {
+			benchmarkCallsignValidSink = IsValidNormalizedCallsign(call)
+		}
+	}
+}

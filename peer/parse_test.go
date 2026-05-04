@@ -44,8 +44,8 @@ func TestParseSpotterStripsOnlyTerminalSkimmerMarker(t *testing.T) {
 		},
 		{
 			name: "pc26 delegates marker stripping through pc11 parser",
-			line: "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SPOT1-#^ORIGIN^ ^H5^",
-			want: "SPOT1",
+			line: "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SP1OT-#^ORIGIN^ ^H5^",
+			want: "SP1OT",
 		},
 		{
 			name: "numeric ssid without marker preserved",
@@ -71,7 +71,7 @@ func TestParseSpotterStripsOnlyTerminalSkimmerMarker(t *testing.T) {
 }
 
 func TestParsePC26UsesCorrectFieldsAndIgnoresPlaceholder(t *testing.T) {
-	line := "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SPOT1^ORIGIN^ ^H5^"
+	line := "PC26^7074.0^DX1ABC^24-Dec-2025^1501Z^TEST COMMENT^SP1OT^ORIGIN^ ^H5^"
 	frame, err := ParseFrame(line)
 	if err != nil {
 		t.Fatalf("ParseFrame error: %v", err)
@@ -80,7 +80,7 @@ func TestParsePC26UsesCorrectFieldsAndIgnoresPlaceholder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSpotFromFrame error: %v", err)
 	}
-	if spotEntry.DXCall != "DX1ABC" || spotEntry.DECall != "SPOT1" {
+	if spotEntry.DXCall != "DX1ABC" || spotEntry.DECall != "SP1OT" {
 		t.Fatalf("unexpected calls: dx=%s de=%s", spotEntry.DXCall, spotEntry.DECall)
 	}
 	if got := spotEntry.Time.UTC().Format("1504Z"); got != "1501Z" {

@@ -1,3 +1,5 @@
+// File role: Normalizes and validates callsign tokens shared by parsers,
+// telnet login, ingest admission, and correction tooling.
 package spot
 
 import (
@@ -7,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 var callsignPattern = regexp.MustCompile(`^[A-Z0-9]+(?:[/-][A-Z0-9#]+)*$`)
@@ -164,7 +165,8 @@ func NormalizeCallsign(call string) string {
 }
 
 // Purpose: Validate a normalized callsign for basic format rules.
-// Key aspects: Length bounds (3..15), digit presence, and regex match.
+// Key aspects: Length bounds (3..15), allowed characters, and at least one
+// call-like identity segment so mode/command tokens cannot pass prefix CTY gates.
 // Upstream: IsValidCallsign.
 // Downstream: callsignPattern and unicode checks.
 func validateNormalizedCallsign(call string) bool {
@@ -174,10 +176,43 @@ func validateNormalizedCallsign(call string) bool {
 	if len(call) < minCallsignLength || len(call) > maxCallsignLength {
 		return false
 	}
-	if strings.IndexFunc(call, unicode.IsDigit) < 0 {
+	if !callsignPattern.MatchString(call) {
 		return false
 	}
-	return callsignPattern.MatchString(call)
+	return hasCallsignIdentitySegment(call)
+}
+
+// hasCallsignIdentitySegment rejects command/mode-like tokens that only happen
+// to begin with a CTY prefix. A qualifying segment must look like a concrete
+// station identity, not just a bare location prefix such as W6 or a mode like FT8.
+func hasCallsignIdentitySegment(call string) bool {
+	leadingLetters := 0
+	sawDigit := false
+	sawLetterAfterDigit := false
+	for i := 0; i <= len(call); i++ {
+		if i == len(call) || call[i] == '/' || call[i] == '-' {
+			if sawDigit && sawLetterAfterDigit && leadingLetters <= 2 {
+				return true
+			}
+			leadingLetters = 0
+			sawDigit = false
+			sawLetterAfterDigit = false
+			continue
+		}
+		ch := call[i]
+		if ch >= '0' && ch <= '9' {
+			sawDigit = true
+			continue
+		}
+		if ch >= 'A' && ch <= 'Z' {
+			if sawDigit {
+				sawLetterAfterDigit = true
+			} else {
+				leadingLetters++
+			}
+		}
+	}
+	return false
 }
 
 // MaxCallsignLength returns the maximum allowed callsign length.

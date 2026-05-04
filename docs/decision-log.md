@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0110 | Call-Like CTY Admission | Accepted | 2026-05-04 | spot, CTY, telnet, ingest, peer, replay | ADR-0090 | - | `docs/decisions/ADR-0110-call-like-cty-admission.md` |
 | ADR-0109 | Support-Agent Bearer Authentication | Accepted | 2026-05-04 | customgpt, supportability, actions, security | - | - | `docs/decisions/ADR-0109-support-agent-bearer-auth.md` |
 | ADR-0108 | Repo-Derived Support-Agent Routes | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0108-repo-derived-support-agent-routes.md` |
 | ADR-0107 | Support-Agent Action Contract Alignment | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0107-support-agent-action-contract-alignment.md` |
@@ -30,7 +31,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR-0093 | File-Only Connection and Gate Event Logs | Accepted | 2026-04-30 | logging, telnet, ingest, peer, reputation | - | - | `docs/decisions/ADR-0093-file-only-connection-and-gate-event-logs.md` |
 | ADR-0092 | Codex Token-Efficient Strict Workflow | Accepted | 2026-04-30 | workflow, Codex | - | - | `docs/decisions/ADR-0092-codex-token-efficient-strict-workflow.md` |
 | ADR-0091 | Peer and DXSummit Skimmer Marker Stripping | Accepted | 2026-04-30 | peer, dxsummit, parser | - | - | `docs/decisions/ADR-0091-peer-dxsummit-skimmer-marker-stripping.md` |
-| ADR-0090 | Local Telnet Login Call Validation | Accepted | 2026-04-30 | telnet, CTY, FCC ULS | - | - | `docs/decisions/ADR-0090-local-telnet-login-call-validation.md` |
+| ADR-0090 | Local Telnet Login Call Validation | Superseded | 2026-04-30 | telnet, CTY, FCC ULS | - | ADR-0110 | `docs/decisions/ADR-0090-local-telnet-login-call-validation.md` |
 | ADR-0089 | SET SOLAR Help Routing | Accepted | 2026-04-30 | commands, docs, customgpt | - | - | `docs/decisions/ADR-0089-set-solar-help-routing.md` |
 | ADR-0088 | FT2 Ingest-Rate Dashboard Counter | Accepted | 2026-04-26 | stats, ui, dashboard | - | - | `docs/decisions/ADR-0088-ft2-ingest-rate-dashboard-counter.md` |
 | ADR-0087 | RBN Spot-Class Admission | Accepted | 2026-04-26 | rbn, parser, replay, call correction | - | - | `docs/decisions/ADR-0087-rbn-spot-class-admission.md` |

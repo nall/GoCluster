@@ -5,8 +5,11 @@ This directory owns the telnet session layer: login flow, prompt handling, filte
 ## Login And Session Behavior
 
 - Clients log in with a callsign before commands are accepted.
-- Login rejects non-callsign tokens such as numeric-only port strings or
-  all-letter words before any per-user state is loaded.
+- Login rejects command-like and mode-like tokens such as numeric-only port
+  strings, all-letter words, `FT8`, `NOFT8`, or `SET/NOFT8` before any
+  per-user state is loaded.
+- Valid login tokens must include a concrete call-like identity segment such as
+  `K1ABC`, `DL6LD`, `4U1UN`, `P5/N1K`, or `W6TEST-1`.
 - When CTY data is loaded, login calls must resolve to a known CTY prefix.
 - US calls (ADIF 291) must pass FCC ULS validation when ULS is available.
 - Local TEST calls with CTY-valid US prefixes, such as `W6TEST` or `W6TEST-1`,

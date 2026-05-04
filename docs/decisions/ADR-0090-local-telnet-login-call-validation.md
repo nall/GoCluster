@@ -1,6 +1,6 @@
 # ADR-0090: Local Telnet Login Call Validation
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-04-30
 - Decision Origin: Design
 
@@ -68,4 +68,4 @@ segments, a base ending in `TEST`, and an optional numeric SSID.
 - Related tests: `telnet/handshake_transcript_test.go`
 - Related docs: `telnet/README.md`
 - Related TSRs: none
-- Supersedes / superseded by: none
+- Supersedes / superseded by: superseded by ADR-0110

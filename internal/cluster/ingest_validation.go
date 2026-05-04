@@ -1,3 +1,5 @@
+// File role: Validates incoming spot identity, source, license, and CTY
+// admission before spots can enter runtime cluster state.
 package cluster
 
 import (
@@ -310,8 +312,8 @@ func (v *ingestValidator) logInvalidDrop(role, call string, s *spot.Spot) {
 		counter = &v.invalidDropDE
 	}
 	if count, ok := counter.Inc(); ok {
-		line := fmt.Sprintf("CTY drop: invalid %s %s (>=3 leading letters) at %.1f kHz (source=%s total=%d)", role, call, s.Frequency, ingestSourceLabel(s), count)
-		v.reportBadCall(role, "leading_letters", call, s, "cty_prefilter")
+		line := fmt.Sprintf("CTY drop: invalid %s %s (malformed callsign) at %.1f kHz (source=%s total=%d)", role, call, s.Frequency, ingestSourceLabel(s), count)
+		v.reportBadCall(role, "invalid_callsign", call, s, "cty_prefilter")
 		if v.dropReporter != nil {
 			v.dropReporter(line)
 			return

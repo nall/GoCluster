@@ -282,6 +282,28 @@ func TestDXCommandReportsBadDXCall(t *testing.T) {
 	}
 }
 
+func TestDXCommandRejectsModeShortcutAsDXCall(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	var got struct {
+		role   string
+		reason string
+		call   string
+	}
+	p := NewProcessor(nil, nil, input, func() *cty.CTYDatabase { return loadTestCTY(t) }, nil, nil, WithBadCallReporter(func(source, role, reason, call, deCall, dxCall, mode, detail string) {
+		got.role = role
+		got.reason = reason
+		got.call = call
+	}))
+
+	resp := p.ProcessCommandForClient("DX 7001 SET/NOFT8 FT8", "N2WQ", "", nil, "classic")
+	if !strings.Contains(resp, "Invalid DX callsign") {
+		t.Fatalf("expected invalid DX response, got %q", resp)
+	}
+	if got.role != "DX" || got.reason != "invalid_callsign" || got.call != "SET/NOFT8" {
+		t.Fatalf("unexpected bad-call report: %+v", got)
+	}
+}
+
 func TestDXCommandReportsCTYUnknownDXCall(t *testing.T) {
 	ctyDB := loadTestCTY(t)
 	ctyLookup := func() *cty.CTYDatabase { return ctyDB }
@@ -350,7 +372,7 @@ func TestDXCommandRejectsTestSpotWhenCTYInvalid(t *testing.T) {
 	input := make(chan *spot.Spot, 1)
 	p := NewProcessor(nil, nil, input, ctyLookup, nil, nil)
 
-	resp := p.ProcessCommandForClient("DX 7001 K8ZB Test", "ZZTEST-1", "", nil, "classic")
+	resp := p.ProcessCommandForClient("DX 7001 K8ZB Test", "Z9TEST-1", "", nil, "classic")
 	if resp != testCallCTYInvalidMsg {
 		t.Fatalf("expected CTY invalid message, got %q", resp)
 	}
