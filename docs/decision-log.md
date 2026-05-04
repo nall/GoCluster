@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0111 | Support-Agent Large-File Recovery | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0111-support-agent-large-file-recovery.md` |
 | ADR-0110 | Call-Like CTY Admission | Accepted | 2026-05-04 | spot, CTY, telnet, ingest, peer, replay | ADR-0090 | - | `docs/decisions/ADR-0110-call-like-cty-admission.md` |
 | ADR-0109 | Support-Agent Bearer Authentication | Accepted | 2026-05-04 | customgpt, supportability, actions, security | - | - | `docs/decisions/ADR-0109-support-agent-bearer-auth.md` |
 | ADR-0108 | Repo-Derived Support-Agent Routes | Accepted | 2026-05-04 | customgpt, supportability, actions | - | - | `docs/decisions/ADR-0108-repo-derived-support-agent-routes.md` |

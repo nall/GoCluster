@@ -3,6 +3,7 @@ const REPO_NAME = "GoCluster";
 const BRANCH = "main";
 
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}`;
+const GITHUB_API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 
 const ENTRYPOINT_PATH = "customgpt/source-map.md";
 const TROUBLESHOOTING_PATH = "customgpt/troubleshooting-index.md";
@@ -11,6 +12,11 @@ const EXTERNAL_AUTHORITIES_PATH = "customgpt/external-authorities.md";
 const MAX_FILE_CHARS = 140000;
 const MAX_BUNDLE_FILES = 12;
 const MAX_RELATED_PATHS = 80;
+const DEFAULT_LINE_WINDOW_LINES = 200;
+const MAX_LINE_WINDOW_LINES = 400;
+const MAX_DIR_ENTRIES = 80;
+const MAX_FIND_RESULTS = 80;
+const MAX_FIND_QUERY_CHARS = 64;
 const AUTH_SECRET_BINDING = "GOCLUSTER_DOCS_ACTION_TOKEN";
 const AUTH_MODE = "bearer";
 
@@ -63,9 +69,48 @@ export default {
         return await fetchRepoFileResponse(EXTERNAL_AUTHORITIES_PATH, "");
       }
 
+      if (url.pathname === "/list-dir") {
+        const dirPath = resolveRepoDirPath(url.searchParams.get("path") || "");
+        if (dirPath === null) {
+          return jsonResponse(
+            {
+              error: "path_not_allowed",
+              message: "Requested directory path is not safe for discovery"
+            },
+            403
+          );
+        }
+        return await fetchDirectoryResponse(dirPath);
+      }
+
+      if (url.pathname === "/find-files") {
+        const query = normalizeFindQuery(url.searchParams.get("query") || url.searchParams.get("q") || "");
+        if (!query) {
+          return jsonResponse(
+            {
+              error: "missing_query",
+              message: "Provide a filename substring using ?query="
+            },
+            400
+          );
+        }
+        const prefix = resolveRepoDirPath(url.searchParams.get("path") || "");
+        if (prefix === null) {
+          return jsonResponse(
+            {
+              error: "path_not_allowed",
+              message: "Requested directory prefix is not safe for discovery"
+            },
+            403
+          );
+        }
+        return await findFilesResponse(query, prefix);
+      }
+
       if (url.pathname === "/doc" || url.pathname === "/file") {
         const requested = url.searchParams.get("path") || url.searchParams.get("url");
         const base = url.searchParams.get("base") || "";
+        const lineWindow = parseLineWindow(url);
 
         if (!requested) {
           return jsonResponse(
@@ -77,7 +122,11 @@ export default {
           );
         }
 
-        return await fetchRepoFileResponse(requested, base);
+        if (lineWindow.error) {
+          return jsonResponse(lineWindow, 400);
+        }
+
+        return await fetchRepoFileResponse(requested, base, lineWindow);
       }
 
       if (url.pathname === "/bundle") {
@@ -126,7 +175,7 @@ export default {
       return jsonResponse(
         {
           error: "not_found",
-          message: "Use /version, /entrypoint, /source-map, /troubleshooting-index, /external-authorities, /doc?path=, /file?path=, /bundle, or /privacy"
+          message: "Use /version, /entrypoint, /source-map, /troubleshooting-index, /external-authorities, /list-dir?path=, /find-files?query=, /doc?path=, /file?path=, /bundle, or /privacy"
         },
         404
       );
@@ -142,8 +191,128 @@ export default {
   }
 };
 
-async function fetchRepoFileResponse(requestedPathOrUrl, basePath) {
-  const payload = await fetchRepoFilePayload(requestedPathOrUrl, basePath);
+async function fetchDirectoryResponse(dirPath) {
+  const apiUrl = contentsApiUrl(dirPath);
+  const response = await fetch(apiUrl, githubApiFetchOptions());
+
+  if (!response.ok) {
+    return jsonResponse(
+      {
+        status: response.status === 404 ? 404 : 502,
+        error: response.status === 404 ? "path_not_found" : "github_fetch_failed",
+        message: response.status === 404
+          ? "Requested directory was not found in the GoCluster repository"
+          : "Could not retrieve the requested directory from GitHub",
+        path: dirPath,
+        api_url: apiUrl,
+        upstream_status: response.status
+      },
+      response.status === 404 ? 404 : 502
+    );
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload)) {
+    return jsonResponse(
+      {
+        error: "not_a_directory",
+        message: "Requested path is not a directory",
+        path: dirPath
+      },
+      400
+    );
+  }
+
+  const entries = [];
+  for (const item of payload) {
+    const entry = directoryEntry(item);
+    if (entry) {
+      entries.push(entry);
+    }
+  }
+
+  entries.sort((a, b) => `${a.type}:${a.path}`.localeCompare(`${b.type}:${b.path}`));
+  const limited = entries.slice(0, MAX_DIR_ENTRIES);
+
+  return jsonResponse({
+    repo: `${REPO_OWNER}/${REPO_NAME}`,
+    branch: BRANCH,
+    auth: AUTH_MODE,
+    retrieved_at: new Date().toISOString(),
+    path: dirPath,
+    api_url: apiUrl,
+    entry_count: limited.length,
+    truncated: entries.length > limited.length,
+    limits: discoveryLimits(),
+    entries: limited
+  });
+}
+
+async function findFilesResponse(query, prefix) {
+  const apiUrl = `${GITHUB_API_BASE}/git/trees/${encodeURIComponent(BRANCH)}?recursive=1`;
+  const response = await fetch(apiUrl, githubApiFetchOptions());
+
+  if (!response.ok) {
+    return jsonResponse(
+      {
+        status: response.status === 404 ? 404 : 502,
+        error: response.status === 404 ? "tree_not_found" : "github_fetch_failed",
+        message: "Could not retrieve the repository tree from GitHub",
+        api_url: apiUrl,
+        upstream_status: response.status
+      },
+      response.status === 404 ? 404 : 502
+    );
+  }
+
+  const payload = await response.json();
+  const tree = Array.isArray(payload.tree) ? payload.tree : [];
+  const prefixText = prefix ? `${prefix}/` : "";
+  const queryText = query.toLowerCase();
+  const matches = [];
+
+  for (const item of tree) {
+    if (item.type !== "blob") {
+      continue;
+    }
+    const path = normalizePath(item.path || "");
+    if (prefixText && !path.startsWith(prefixText)) {
+      continue;
+    }
+    if (!isSafeRepoPath(path)) {
+      continue;
+    }
+    if (!path.toLowerCase().includes(queryText)) {
+      continue;
+    }
+    matches.push({
+      path,
+      source_url: toRawUrl(path),
+      kind: classifyPath(path),
+      size: Number.isFinite(item.size) ? item.size : null
+    });
+  }
+
+  matches.sort((a, b) => a.path.localeCompare(b.path));
+  const limited = matches.slice(0, MAX_FIND_RESULTS);
+
+  return jsonResponse({
+    repo: `${REPO_OWNER}/${REPO_NAME}`,
+    branch: BRANCH,
+    auth: AUTH_MODE,
+    retrieved_at: new Date().toISOString(),
+    query,
+    path: prefix,
+    api_url: apiUrl,
+    result_count: limited.length,
+    truncated: matches.length > limited.length,
+    limits: discoveryLimits(),
+    files: limited
+  });
+}
+
+async function fetchRepoFileResponse(requestedPathOrUrl, basePath, lineWindow) {
+  const payload = await fetchRepoFilePayload(requestedPathOrUrl, basePath, lineWindow);
 
   if (payload.error) {
     return jsonResponse(payload, payload.status || 500);
@@ -152,7 +321,7 @@ async function fetchRepoFileResponse(requestedPathOrUrl, basePath) {
   return jsonResponse(payload);
 }
 
-async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
+async function fetchRepoFilePayload(requestedPathOrUrl, basePath, lineWindow) {
   const path = resolveRepoPath(requestedPathOrUrl, basePath);
 
   if (!path) {
@@ -178,7 +347,7 @@ async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
 
   const response = await fetch(sourceUrl, {
     headers: {
-      "user-agent": "gocluster-docs-action/4.3-bearer"
+      "user-agent": "gocluster-docs-action/4.5-discovery"
     }
   });
 
@@ -196,7 +365,19 @@ async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
   }
 
   const rawContent = await response.text();
-  const trimmed = trimContent(rawContent, MAX_FILE_CHARS);
+  const windowed = applyLineWindow(rawContent, lineWindow);
+
+  if (windowed.error) {
+    return {
+      status: 400,
+      ...windowed,
+      path,
+      source_url: sourceUrl
+    };
+  }
+
+  const trimmed = trimContent(windowed.content, MAX_FILE_CHARS);
+  const returnedRange = returnedLineRange(windowed, trimmed);
   const header = extractHeader(rawContent);
   const related = extractRelatedPaths(rawContent, path).slice(0, MAX_RELATED_PATHS);
   const structured = structuredRoutesForPath(path, rawContent);
@@ -212,8 +393,141 @@ async function fetchRepoFilePayload(requestedPathOrUrl, basePath) {
     header,
     related_paths: related,
     truncated: trimmed.truncated,
+    source_truncated: rawContent.length > MAX_FILE_CHARS,
+    sliced: windowed.sliced,
+    line_start: returnedRange.line_start,
+    line_end: returnedRange.line_end,
+    line_count: returnedRange.line_count,
+    total_lines: windowed.total_lines,
+    limits: {
+      max_file_chars: MAX_FILE_CHARS,
+      max_bundle_files: MAX_BUNDLE_FILES,
+      max_related_paths: MAX_RELATED_PATHS,
+      default_line_window_lines: DEFAULT_LINE_WINDOW_LINES,
+      max_line_window_lines: MAX_LINE_WINDOW_LINES
+    },
     content: trimmed.content,
     ...structured
+  };
+}
+
+function returnedLineRange(windowed, trimmed) {
+  if (!trimmed.truncated) {
+    return {
+      line_start: windowed.line_start,
+      line_end: windowed.line_end,
+      line_count: windowed.line_count
+    };
+  }
+
+  const returnedPrefix = String(windowed.content || "").slice(0, MAX_FILE_CHARS);
+  const returnedLineCount = Math.max(1, returnedPrefix.split(/\r?\n/).length);
+  const lineStart = windowed.line_start || 1;
+
+  return {
+    line_start: lineStart,
+    line_end: lineStart + returnedLineCount - 1,
+    line_count: returnedLineCount
+  };
+}
+
+function parseLineWindow(url) {
+  const startRaw = url.searchParams.get("start_line");
+  const countRaw = url.searchParams.get("line_count");
+
+  if (startRaw === null && countRaw === null) {
+    return {
+      sliced: false
+    };
+  }
+
+  const start = parsePositiveInt(startRaw || "1");
+  if (!start.ok) {
+    return {
+      error: "invalid_line_window",
+      message: "start_line must be a positive integer"
+    };
+  }
+
+  const count = parsePositiveInt(countRaw || String(DEFAULT_LINE_WINDOW_LINES));
+  if (!count.ok) {
+    return {
+      error: "invalid_line_window",
+      message: "line_count must be a positive integer"
+    };
+  }
+
+  if (count.value > MAX_LINE_WINDOW_LINES) {
+    return {
+      error: "invalid_line_window",
+      message: `line_count must be ${MAX_LINE_WINDOW_LINES} or less`,
+      max_line_window_lines: MAX_LINE_WINDOW_LINES
+    };
+  }
+
+  return {
+    sliced: true,
+    start_line: start.value,
+    line_count: count.value
+  };
+}
+
+function parsePositiveInt(value) {
+  const text = String(value || "").trim();
+  if (!/^[1-9][0-9]*$/.test(text)) {
+    return {
+      ok: false
+    };
+  }
+
+  const parsed = Number(text);
+  if (!Number.isSafeInteger(parsed)) {
+    return {
+      ok: false
+    };
+  }
+
+  return {
+    ok: true,
+    value: parsed
+  };
+}
+
+function applyLineWindow(content, lineWindow) {
+  const lines = String(content || "").split(/\r?\n/);
+  const totalLines = lines.length;
+
+  if (!lineWindow || !lineWindow.sliced) {
+    return {
+      content,
+      sliced: false,
+      line_start: 1,
+      line_end: totalLines,
+      line_count: totalLines,
+      total_lines: totalLines
+    };
+  }
+
+  if (lineWindow.start_line > totalLines) {
+    return {
+      error: "line_window_out_of_range",
+      message: "start_line is beyond the end of the file",
+      start_line: lineWindow.start_line,
+      total_lines: totalLines
+    };
+  }
+
+  const startIndex = lineWindow.start_line - 1;
+  const endIndexExclusive = Math.min(totalLines, startIndex + lineWindow.line_count);
+  const selected = lines.slice(startIndex, endIndexExclusive);
+
+  return {
+    content: selected.join("\n"),
+    sliced: true,
+    line_start: lineWindow.start_line,
+    line_end: endIndexExclusive,
+    line_count: selected.length,
+    total_lines: totalLines
   };
 }
 
@@ -236,6 +550,115 @@ function collectBundlePaths(url) {
   }
 
   return paths;
+}
+
+function directoryEntry(item) {
+  const path = normalizePath(item && item.path ? item.path : "");
+  if (!path) {
+    return null;
+  }
+
+  if (item.type === "dir") {
+    if (!isSafeRepoDirPath(path)) {
+      return null;
+    }
+    return {
+      type: "dir",
+      path,
+      api_url: item.url || contentsApiUrl(path)
+    };
+  }
+
+  if (item.type === "file" && isSafeRepoPath(path)) {
+    return {
+      type: "file",
+      path,
+      source_url: toRawUrl(path),
+      kind: classifyPath(path),
+      size: Number.isFinite(item.size) ? item.size : null
+    };
+  }
+
+  return null;
+}
+
+function resolveRepoDirPath(value) {
+  const path = normalizePath(value || "");
+  if (!path) {
+    return "";
+  }
+  if (!isSafeRepoDirPath(path)) {
+    return null;
+  }
+  return path;
+}
+
+function isSafeRepoDirPath(path) {
+  if (path === "") {
+    return true;
+  }
+
+  if (path.includes("..") || path.startsWith("/") || path.endsWith("/")) {
+    return false;
+  }
+
+  const parts = path.split("/");
+  if (parts.some((part) => !part || part.startsWith("."))) {
+    return false;
+  }
+
+  const denyPrefixes = [
+    "vendor",
+    "vendor/",
+    "node_modules",
+    "node_modules/",
+    "dist",
+    "dist/",
+    "build",
+    "build/",
+    "coverage",
+    "coverage/",
+    "logs",
+    "logs/",
+    "data/logs",
+    "data/logs/"
+  ];
+
+  return !denyPrefixes.some((prefix) => path === prefix || path.startsWith(prefix));
+}
+
+function normalizeFindQuery(value) {
+  const query = String(value || "").trim().toLowerCase();
+  if (!query || query.length > MAX_FIND_QUERY_CHARS) {
+    return "";
+  }
+  if (!/^[a-z0-9._/-]+$/.test(query)) {
+    return "";
+  }
+  return query;
+}
+
+function githubApiFetchOptions() {
+  return {
+    headers: {
+      "accept": "application/vnd.github+json",
+      "user-agent": "gocluster-docs-action/4.5-discovery"
+    }
+  };
+}
+
+function contentsApiUrl(path) {
+  const encoded = encodeRepoPath(path);
+  const suffix = encoded ? `/contents/${encoded}` : "/contents";
+  return `${GITHUB_API_BASE}${suffix}?ref=${encodeURIComponent(BRANCH)}`;
+}
+
+function discoveryLimits() {
+  return {
+    max_dir_entries: MAX_DIR_ENTRIES,
+    max_find_results: MAX_FIND_RESULTS,
+    max_find_query_chars: MAX_FIND_QUERY_CHARS
+  };
 }
 
 function resolveRepoPath(value, basePath) {
@@ -657,6 +1080,14 @@ function toRawUrl(path) {
   return `${RAW_BASE}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+function encodeRepoPath(path) {
+  const normalized = normalizePath(path);
+  if (!normalized) {
+    return "";
+  }
+  return normalized.split("/").map(encodeURIComponent).join("/");
+}
+
 function normalizePath(path) {
   return String(path || "")
     .replace(/\\/g, "/")
@@ -810,7 +1241,7 @@ function privacyPolicyResponse() {
   <h2>What this action does</h2>
   <p>
     The action provides read-only access to selected public GoCluster repository files. It retrieves
-    individual files from the public GoCluster GitHub repository when requested by the custom GPT.
+    individual files and bounded directory metadata from the public GoCluster GitHub repository when requested by the custom GPT.
     Returned files may include related repository paths discovered from Markdown links, source headers,
     YAML comments, and repo-relative references.
   </p>

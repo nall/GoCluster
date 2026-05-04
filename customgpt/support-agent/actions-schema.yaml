@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: GoCluster Repository Retrieval Action
-  description: Read-only authenticated API for retrieving current public GoCluster repository files by source map, troubleshooting index, repo-relative path, bundle, or approved raw GitHub URL. The GPT routes through repo-derived routes, symptom_routes, and related_paths, then retrieves authoritative files before answering.
-  version: 4.3.0
+  description: Read-only authenticated API for retrieving current public GoCluster repository files by source map, troubleshooting index, repo-relative path, bundle, approved raw GitHub URL, bounded line window, directory listing, or bounded filename discovery. Full-file content is capped at 140000 characters, bundles are capped at 12 files, related_paths are capped at 80, line windows are capped at 400 lines, directory listings are capped at 80 entries, and filename discovery is capped at 80 results. The GPT routes through repo-derived routes, symptom_routes, and related_paths, then retrieves authoritative files before answering.
+  version: 4.5.0
 
 servers:
   - url: https://gocluster-docs-action.n2wq-api.workers.dev
@@ -94,6 +94,65 @@ paths:
         "404":
           description: External authorities document not found
 
+  /list-dir:
+    get:
+      operationId: listDir
+      summary: List one safe GoCluster repository directory
+      description: Lists safe retrievable files and subdirectories for bounded repo-driven discovery. Use after a package README or route points to a package neighborhood but not the exact source file.
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: Repo-relative directory path such as telnet, spot, rbn, or pathreliability. Empty path lists the repository root.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectoryResponse"
+        "401":
+          description: Missing or invalid bearer token
+        "403":
+          description: Path is not safe for discovery
+        "404":
+          description: Directory not found
+
+  /find-files:
+    get:
+      operationId: findFiles
+      summary: Find safe GoCluster repository files by filename substring
+      description: Searches repository file paths by bounded filename/path substring only. This is not full-text search. Use it to discover likely source or test files before retrieving them with getDoc.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Case-insensitive filename or path substring using letters, digits, dot, underscore, slash, or dash.
+          schema:
+            type: string
+            maxLength: 64
+        - name: path
+          in: query
+          required: false
+          description: Optional repo-relative directory prefix such as telnet or spot.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Filename discovery results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindFilesResponse"
+        "400":
+          description: Missing or invalid query
+        "401":
+          description: Missing or invalid bearer token
+        "403":
+          description: Path is not safe for discovery
+
   /doc:
     get:
       operationId: getDoc
@@ -118,6 +177,21 @@ paths:
           description: Optional base repo path used to resolve relative links such as ../spot/spot.go.
           schema:
             type: string
+        - name: start_line
+          in: query
+          required: false
+          description: Optional 1-based start line for bounded retrieval from large files. Defaults to 1 when line_count is provided without start_line.
+          schema:
+            type: integer
+            minimum: 1
+        - name: line_count
+          in: query
+          required: false
+          description: Optional number of lines to retrieve, maximum 400. Defaults to 200 when start_line is provided.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 400
       responses:
         "200":
           description: Retrieved file
@@ -158,6 +232,21 @@ paths:
           description: Optional base repo path used to resolve relative links such as ../spot/spot.go.
           schema:
             type: string
+        - name: start_line
+          in: query
+          required: false
+          description: Optional 1-based start line for bounded retrieval from large files. Defaults to 1 when line_count is provided without start_line.
+          schema:
+            type: integer
+            minimum: 1
+        - name: line_count
+          in: query
+          required: false
+          description: Optional number of lines to retrieve, maximum 400. Defaults to 200 when start_line is provided.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 400
       responses:
         "200":
           description: Retrieved file
@@ -289,6 +378,23 @@ components:
             $ref: "#/components/schemas/SymptomRoute"
         truncated:
           type: boolean
+          description: True when the returned content was capped by the 140000-character response limit.
+        source_truncated:
+          type: boolean
+          description: True when the original file is larger than the full-file response cap, even if a bounded line window was returned.
+        sliced:
+          type: boolean
+          description: True when start_line or line_count produced a bounded line window.
+        line_start:
+          type: integer
+        line_end:
+          type: integer
+        line_count:
+          type: integer
+        total_lines:
+          type: integer
+        limits:
+          $ref: "#/components/schemas/RetrievalLimits"
         content:
           type: string
       required:
@@ -302,7 +408,165 @@ components:
         - header
         - related_paths
         - truncated
+        - source_truncated
+        - sliced
+        - line_start
+        - line_end
+        - line_count
+        - total_lines
+        - limits
         - content
+
+    RetrievalLimits:
+      type: object
+      properties:
+        max_file_chars:
+          type: integer
+        max_bundle_files:
+          type: integer
+        max_related_paths:
+          type: integer
+        default_line_window_lines:
+          type: integer
+        max_line_window_lines:
+          type: integer
+      required:
+        - max_file_chars
+        - max_bundle_files
+        - max_related_paths
+        - default_line_window_lines
+        - max_line_window_lines
+
+    DiscoveryLimits:
+      type: object
+      properties:
+        max_dir_entries:
+          type: integer
+        max_find_results:
+          type: integer
+        max_find_query_chars:
+          type: integer
+      required:
+        - max_dir_entries
+        - max_find_results
+        - max_find_query_chars
+
+    DirectoryEntry:
+      type: object
+      properties:
+        type:
+          type: string
+        path:
+          type: string
+        source_url:
+          type: string
+        api_url:
+          type: string
+        kind:
+          type: string
+        size:
+          type:
+            - integer
+            - "null"
+      required:
+        - type
+        - path
+
+    DirectoryResponse:
+      type: object
+      properties:
+        repo:
+          type: string
+        branch:
+          type: string
+        auth:
+          type: string
+        retrieved_at:
+          type: string
+        path:
+          type: string
+        api_url:
+          type: string
+        entry_count:
+          type: integer
+        truncated:
+          type: boolean
+        limits:
+          $ref: "#/components/schemas/DiscoveryLimits"
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DirectoryEntry"
+      required:
+        - repo
+        - branch
+        - auth
+        - retrieved_at
+        - path
+        - api_url
+        - entry_count
+        - truncated
+        - limits
+        - entries
+
+    FindFileEntry:
+      type: object
+      properties:
+        path:
+          type: string
+        source_url:
+          type: string
+        kind:
+          type: string
+        size:
+          type:
+            - integer
+            - "null"
+      required:
+        - path
+        - source_url
+        - kind
+        - size
+
+    FindFilesResponse:
+      type: object
+      properties:
+        repo:
+          type: string
+        branch:
+          type: string
+        auth:
+          type: string
+        retrieved_at:
+          type: string
+        query:
+          type: string
+        path:
+          type: string
+        api_url:
+          type: string
+        result_count:
+          type: integer
+        truncated:
+          type: boolean
+        limits:
+          $ref: "#/components/schemas/DiscoveryLimits"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindFileEntry"
+      required:
+        - repo
+        - branch
+        - auth
+        - retrieved_at
+        - query
+        - path
+        - api_url
+        - result_count
+        - truncated
+        - limits
+        - files
 
     RelatedPath:
       type: object
