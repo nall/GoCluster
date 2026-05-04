@@ -1012,6 +1012,7 @@ function isSafeRepoPath(path) {
   const allowSuffixes = [
     ".go",
     ".md",
+    ".ps1",
     ".yaml",
     ".yml"
   ];
@@ -1044,6 +1045,10 @@ function classifyPath(path) {
 
   if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
     return "config";
+  }
+
+  if (lower.endsWith(".ps1")) {
+    return "script";
   }
 
   if (lower.includes("/decisions/") || lower.includes("decision")) {
