@@ -26,7 +26,7 @@ the implemented retrieval model:
 3. use `getBundle` only after concrete paths are known
 4. use `getExternalAuthorities` only for directly related external tool behavior
 
-Keep `agent-instructions.md` under the custom GPT 8000-character limit. Make
+Keep `agent-instructions.txt` under the custom GPT 8000-character limit. Make
 bundle retrieval all-or-error so the GPT does not receive mixed file payloads
 and error objects inside a successful bundle response.
 
@@ -66,9 +66,8 @@ and error objects inside a successful bundle response.
 - Related tests: instruction character-count check, stale operation text check,
   OpenAPI YAML parse, Worker syntax check, local Worker endpoint smoke test,
   deployed Worker smoke test
-- Related docs: `customgpt/support-agent/agent-instructions.md`,
+- Related docs: `customgpt/support-agent/agent-instructions.txt`,
   `customgpt/support-agent/actions-schema.yaml`,
-  `customgpt/support-agent/cloudflare-worker.js`,
-  `customgpt/support-agent/README.md`
+  `customgpt/support-agent/cloudflare-worker.js`
 - Related TSRs: none
 - Supersedes / superseded by: none

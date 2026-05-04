@@ -621,7 +621,9 @@ function isSafeRepoDirPath(path) {
     "logs",
     "logs/",
     "data/logs",
-    "data/logs/"
+    "data/logs/",
+    "customgpt/support-agent",
+    "customgpt/support-agent/"
   ];
 
   return !denyPrefixes.some((prefix) => path === prefix || path.startsWith(prefix));
@@ -968,7 +970,8 @@ function isSafeRepoPath(path) {
     "build/",
     "coverage/",
     "logs/",
-    "data/logs/"
+    "data/logs/",
+    "customgpt/support-agent/"
   ];
 
   if (denyPrefixes.some((prefix) => path.startsWith(prefix))) {

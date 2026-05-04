@@ -67,10 +67,9 @@ editing the repository routing docs.
 - Related tests: instruction character-count check, OpenAPI YAML parse, Worker
   syntax check, local Worker source-map/troubleshooting route smoke tests,
   stale operation text check
-- Related docs: `customgpt/support-agent/agent-instructions.md`,
+- Related docs: `customgpt/support-agent/agent-instructions.txt`,
   `customgpt/support-agent/actions-schema.yaml`,
   `customgpt/support-agent/cloudflare-worker.js`,
-  `customgpt/support-agent/README.md`,
   `customgpt/source-map.md`, `customgpt/troubleshooting-index.md`
 - Related TSRs: none
 - Supersedes / superseded by: extends ADR-0107

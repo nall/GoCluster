@@ -73,7 +73,7 @@ Keep the full-file cap, but make large-file recovery explicit:
 - Related tests: Worker syntax check, OpenAPI YAML parse, local Worker
   truncation, line-window, directory-listing, and filename-discovery smoke
   tests, instruction character-count check
-- Related docs: `customgpt/support-agent/agent-instructions.md`,
+- Related docs: `customgpt/support-agent/agent-instructions.txt`,
   `customgpt/support-agent/actions-schema.yaml`,
   `customgpt/support-agent/cloudflare-worker.js`,
   `customgpt/source-map.md`, `customgpt/troubleshooting-index.md`

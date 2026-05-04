@@ -64,8 +64,7 @@ diagnostics can detect the active contract.
 - Related issues/PRs/commits: none
 - Related tests: Worker syntax check, OpenAPI YAML parse, local Worker auth
   smoke test, instruction character-count check
-- Related docs: `customgpt/support-agent/README.md`,
-  `customgpt/support-agent/actions-schema.yaml`,
+- Related docs: `customgpt/support-agent/actions-schema.yaml`,
   `customgpt/support-agent/cloudflare-worker.js`
 - Related TSRs: none
 - Supersedes / superseded by: extends ADR-0107 and ADR-0108
