@@ -33,6 +33,9 @@ Review focus:
 - missing tests
 - documentation gaps
 - support-agent routing drift when operator docs or operator-visible behavior changed
+- new or materially changed support-critical Go entry/integration files have
+  crawler-entry comments where package/file ownership, related docs/tests, or
+  troubleshooting routes would otherwise be hard to discover
 - Go comments on support-critical code explain intent/why, ownership,
   invariants, resource bounds, lifecycle, and troubleshooting meaning
 - Go comments avoid mechanical restatement of obvious code, simple booleans, or

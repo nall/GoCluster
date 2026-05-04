@@ -1,3 +1,9 @@
+// File role: Owns path prediction orchestration and final glyph diagnostics.
+// Crawler notes: Start here for PATH class calculation, insufficient reasons,
+// receive/transmit merge policy, receiver-cap enforcement/shadow semantics, and
+// the observation-floor contract used by telnet display and filters.
+// Related docs: pathreliability/README.md, README.md, data/config/PATH_PREDICTIONS.md.
+// Related tests: pathreliability/*_test.go, telnet/*path*_test.go.
 package pathreliability
 
 import (

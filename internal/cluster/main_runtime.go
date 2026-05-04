@@ -1,3 +1,9 @@
+// File role: Owns live cluster runtime resources, startup wiring, and shutdown.
+// Crawler notes: Start here to understand which config-loaded services are
+// constructed for the production binary, how ingest/telnet/archive/peer paths
+// are connected, and which resources must close in signal-driven order.
+// Related docs: README.md, docs/domain-contract.md, docs/dev-runbook.md.
+// Related tests: internal/cluster/main_runtime_test.go, internal/cluster/main_test.go.
 package cluster
 
 import (

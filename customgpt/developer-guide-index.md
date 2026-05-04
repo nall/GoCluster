@@ -8,6 +8,9 @@ workflow rules.
 
 - Start with [README.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/README.md) for repo layout and package ownership.
 - Read the relevant package README before reading code.
+- When source files include crawler-entry comments, use them as local routing
+  hints for ownership, related docs/tests, and troubleshooting boundaries; then
+  verify behavior against current code and tests.
 - Use [AGENTS.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/AGENTS.md) and [docs/change-workflow.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/change-workflow.md) before planning changes.
 - Use [docs/decision-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/decision-log.md) and [docs/troubleshooting-log.md](https://raw.githubusercontent.com/N2WQ/GoCluster/main/docs/troubleshooting-log.md) before changing
   behavior with decision history.

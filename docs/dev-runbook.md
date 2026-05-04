@@ -41,6 +41,8 @@ Also required as applicable:
 - `scripts/check-yaml-doc-rigor.ps1` for checked-in first-party YAML additions
   or edits; add `-CommentOnlyCompare` when the intended YAML change is
   comment-only
+- `scripts/check-go-crawler-entry-comments.ps1 -ChangedOnly -FailOnMissing`
+  for additions or material changes to support-critical Go files
 - for comment-only Go changes: `gofmt`, targeted package tests when packages
   were touched, `git diff --check`, and a reviewer diff pass confirming the
   non-comment Go diff is empty

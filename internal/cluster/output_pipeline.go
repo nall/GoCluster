@@ -1,3 +1,9 @@
+// File role: Owns the live spot output integration boundary.
+// Crawler notes: Start here when a spot is delayed, mutated, dropped, archived,
+// peer-forwarded, broadcast to telnet clients, counted in stats, or converted
+// into path/correction/support diagnostics after primary dedupe.
+// Related docs: README.md, spot/README.md, pathreliability/README.md.
+// Related tests: internal/cluster/*output_pipeline*_test.go, internal/cluster/*stabilizer*_test.go.
 package cluster
 
 import (

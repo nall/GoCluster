@@ -226,6 +226,10 @@ goroutine lifecycle, hot paths, logging/metrics/diagnostics, replay/profiling
 tools, exported/shared APIs, or code the support agent is likely to inspect.
 
 Use `docs/code-quality.md` as the source of truth for Go comment intent. Verify:
+- new or materially changed support-critical package entry files, subsystem
+  integration files, replay/tool entry points, and support-critical leaf files
+  have a concise crawler-entry comment when package/file ownership is not
+  obvious from an existing package comment or README
 - comments explain intent/why, ownership, invariants, resource bounds, and
   troubleshooting meaning where those are not obvious from local code
 - drop, delay, overflow, fail-open/fail-closed, cleanup, and lifecycle paths are
@@ -237,9 +241,11 @@ Use `docs/code-quality.md` as the source of truth for Go comment intent. Verify:
 - comments do not drift from code, tests, config, docs, ADRs, or support-agent
   routing docs
 
-For comment-only Go changes, include a reviewer diff pass confirming the
-non-comment Go diff is empty. This is a mechanical scope check only; human
-review remains responsible for subjective intent quality.
+Run `scripts/check-go-crawler-entry-comments.ps1 -ChangedOnly -FailOnMissing`
+when adding or materially changing support-critical Go files. For comment-only
+Go changes, include a reviewer diff pass confirming the non-comment Go diff is
+empty. These are mechanical scope checks only; human review remains responsible
+for subjective intent quality.
 
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.

@@ -1,3 +1,9 @@
+// File role: Owns one deterministic archived RBN replay run.
+// Crawler notes: Start here for run phases, archive/download paths, replay
+// output files, manifest/runbook lifecycle, and cleanup ownership when replay
+// fails after partial initialization.
+// Related docs: docs/rbn_replay.md, docs/dev-runbook.md.
+// Related tests: cmd/rbn_replay/runner_test.go, cmd/rbn_replay/rbn_history_test.go.
 package main
 
 import (

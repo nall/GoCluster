@@ -1,3 +1,9 @@
+// File role: Owns retained path evidence storage for the predictor.
+// Crawler notes: Start here for bucket keys, decay, shard bounds, receiver-cap
+// slot retention, and the raw-vs-capped evidence that later becomes PATH
+// diagnostics. Prediction policy lives in predictor.go.
+// Related docs: pathreliability/README.md, data/config/path_reliability.yaml.
+// Related tests: pathreliability/*store*_test.go, pathreliability/*receiver*_test.go.
 package pathreliability
 
 import (

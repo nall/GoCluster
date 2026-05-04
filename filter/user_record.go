@@ -1,3 +1,9 @@
+// File role: Owns persisted per-callsign user state.
+// Crawler notes: Start here for filter persistence, dialect selection, recent
+// login IP tracking, grid/noise/PATHSAMPLES settings, and solar summary opt-in
+// values loaded by telnet sessions.
+// Related docs: telnet/README.md, data/config/README.md.
+// Related tests: filter/user_record_test.go, telnet/*filter*_test.go.
 package filter
 
 import (

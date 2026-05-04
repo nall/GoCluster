@@ -1,3 +1,9 @@
+// File role: Owns replay parity for the runtime correction pipeline.
+// Crawler notes: Start here for resolver evidence snapshots, stabilizer delay
+// decisions, confidence outcomes, and decision counters used to compare replay
+// artifacts against live output behavior.
+// Related docs: docs/rbn_replay.md, spot/README.md, docs/decision-log.md.
+// Related tests: cmd/rbn_replay/pipeline_test.go.
 package main
 
 import (

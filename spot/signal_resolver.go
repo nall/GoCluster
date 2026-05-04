@@ -1,3 +1,9 @@
+// File role: Owns the retained signal resolver used by call-correction support.
+// Crawler notes: Start here for resolver bucket keys, bounded candidate/report
+// retention, background evaluation cadence, hysteresis, and decision states
+// that feed runtime output and replay diagnostics.
+// Related docs: spot/README.md, docs/decision-log.md.
+// Related tests: spot/signal_resolver*_test.go, spot/*resolver*_bench_test.go.
 package spot
 
 import (

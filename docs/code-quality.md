@@ -31,6 +31,9 @@ operational questions from source: why this boundary exists, what it owns, and
 how to troubleshoot surprising behavior.
 
 Required intent coverage when touching relevant code:
+- crawler-entry comments on package entry files, subsystem integration files,
+  support-critical leaf files, and replay/tool entry points where a human or
+  agent must know why the file matters before reading implementation detail
 - ownership and lifetime for goroutines, timers, channels, queues, retained
   state, file handles, and background workers
 - resource bounds, eviction, expiry, drop, delay, overflow, or fail-open policy
@@ -43,6 +46,9 @@ Avoid comment noise:
 - do not restate obvious assignments, branches, or simple booleans
 - do not comment every repeated row/branch when the first meaningful occurrence
   or a field guide explains the schema
+- do not add file headers to every helper solely to satisfy a pattern; use them
+  where they improve discovery of ownership, boundaries, related docs/tests, or
+  troubleshooting routes
 - do not use comments as proof of behavior when code, tests, docs, or ADRs
   disagree
 - keep comments updated when behavior changes; stale comments are defects

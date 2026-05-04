@@ -1,3 +1,9 @@
+// File role: Owns passwordless reputation gating for telnet-originated spots.
+// Crawler notes: Start here for IP/ASN/country lookup policy, bounded retained
+// caller state, fail-open lookup behavior, and why suspicious self-spot traffic
+// may be delayed or dropped without blocking login.
+// Related docs: data/config/README.md, docs/OPERATOR_GUIDE.md.
+// Related tests: reputation/*gate*_test.go, config/reputation_config_test.go.
 package reputation
 
 import (

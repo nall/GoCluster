@@ -1,3 +1,9 @@
+// File role: Owns the user-facing telnet filter command engine.
+// Crawler notes: Start here for PASS/REJECT/SHOW FILTER/RESET FILTER parsing,
+// dialect alias mapping, filter-domain validation, NEARBY lockout behavior, and
+// per-client filter persistence side effects.
+// Related docs: telnet/README.md, commands/README.md, data/config/README.md.
+// Related tests: telnet/*filter*_test.go, telnet/path_settings_test.go.
 package telnet
 
 import (

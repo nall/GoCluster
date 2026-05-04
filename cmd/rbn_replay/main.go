@@ -1,3 +1,9 @@
+// File role: Owns the rbn_replay CLI entry point and optional model loading.
+// Crawler notes: Start here for replay flags, config path selection, reliability
+// file loading, and confusion-model enablement before the deterministic runner
+// processes an archived RBN day.
+// Related docs: docs/rbn_replay.md, spot/README.md.
+// Related tests: cmd/rbn_replay/*_test.go.
 package main
 
 import (

@@ -1,3 +1,9 @@
+// File role: Owns loading and scoring of offline call-confusion analytics.
+// Crawler notes: Start here for how resolver-primary call correction consumes
+// learned substitution/deletion/insertion probabilities by mode and SNR band.
+// Runtime wiring is in internal/cluster and replay parity wiring is in cmd/rbn_replay.
+// Related docs: spot/README.md, docs/decision-log.md.
+// Related tests: spot/confusion_model_test.go, cmd/rbn_replay/*_test.go.
 package spot
 
 import (

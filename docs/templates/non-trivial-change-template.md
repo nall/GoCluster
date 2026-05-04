@@ -69,6 +69,7 @@ that approval.
 - triggered audits: Config Contract Audit | Retained-State Audit | Performance evidence | none
 - YAML comment/header audit: PASS|FAIL|N/A - note
 - Go comment intent audit: PASS|FAIL|N/A - note
+- Go crawler-entry audit: PASS|FAIL|N/A - note
 - README impact: Required | Not required - <one sentence>
 - Support-agent docs impact: Required | Not required - <one sentence>
 - ADR/TSR pre-read: <relevant refs | No relevant ADR found; No relevant TSR found>
@@ -95,6 +96,7 @@ If no material findings:
 - Contract, config, and protocol correctness: PASS|FAIL|N/A - note
 - YAML comment/header audit: PASS|FAIL|N/A - note
 - Go comment intent audit: PASS|FAIL|N/A - note
+- Go crawler-entry audit: PASS|FAIL|N/A - note
 - Concurrency, backpressure, and resource bounds: PASS|FAIL|N/A - note
 - Verification and checker discipline: PASS|FAIL|N/A - note
 - Documentation, decision memory, and traceability: PASS|FAIL|N/A - note
