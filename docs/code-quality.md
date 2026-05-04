@@ -10,7 +10,8 @@ Commercial-grade from the first draft. Do not write simple code that needs harde
 - Correctness over speed. No races, leaks, unbounded resources, or silent contract drift.
 - Use context cancellation plus explicit deadlines and idle/stall timeouts on all long-lived network I/O.
 - For non-trivial changes, define architecture before code: concurrency model, backpressure strategy, failure/recovery modes, resource bounds, and shutdown sequencing.
-- Maintain comments on non-trivial code covering invariants, ownership/lifetime, concurrency contracts, drop policy, and why.
+- Maintain comments on non-trivial code covering invariants,
+  ownership/lifetime, concurrency contracts, drop policy, and why.
 - Be concise in responses. Skip ceremony for truly small edits; use the full workflow for non-trivial work.
 - No placeholders. Do not leave `TODO`, `...`, stubs, partial handlers, or omitted error paths in touched files.
 
@@ -23,6 +24,28 @@ Keep code reviewable in one sitting.
 - Files: soft review trigger > 500 lines for hand-written source files.
 - If a file grows past 500 lines, explain why splitting would reduce clarity or worsen cohesion.
 - Prefer cohesive helpers over monolithic routines, but do not fragment code so aggressively that control flow becomes harder to follow.
+
+## Go Comment Intent
+Go comments on support-critical code should help a human or agent answer
+operational questions from source: why this boundary exists, what it owns, and
+how to troubleshoot surprising behavior.
+
+Required intent coverage when touching relevant code:
+- ownership and lifetime for goroutines, timers, channels, queues, retained
+  state, file handles, and background workers
+- resource bounds, eviction, expiry, drop, delay, overflow, or fail-open policy
+- invariants that would not be obvious from local control flow
+- operator/support meaning of logs, metrics, replay artifacts, confidence
+  glyphs, filters, gates, or diagnostics
+- config, ADR, or runtime boundaries when nearby code depends on them
+
+Avoid comment noise:
+- do not restate obvious assignments, branches, or simple booleans
+- do not comment every repeated row/branch when the first meaningful occurrence
+  or a field guide explains the schema
+- do not use comments as proof of behavior when code, tests, docs, or ADRs
+  disagree
+- keep comments updated when behavior changes; stale comments are defects
 
 ## Hot Paths
 On hot paths, generic helper reuse is subordinate to runtime shape.

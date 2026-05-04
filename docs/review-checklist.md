@@ -33,6 +33,12 @@ Review focus:
 - missing tests
 - documentation gaps
 - support-agent routing drift when operator docs or operator-visible behavior changed
+- Go comments on support-critical code explain intent/why, ownership,
+  invariants, resource bounds, lifecycle, and troubleshooting meaning
+- Go comments avoid mechanical restatement of obvious code, simple booleans, or
+  every repeated branch after the pattern is explained
+- Go comment drift against code, tests, config, docs, ADRs, or support-agent
+  routing docs
 - YAML header consistency on new or changed first-party config files
 - YAML key-comment coverage for non-obvious units, sentinels, ownership,
   side effects, runtime consequences, and safe-edit boundaries
@@ -49,6 +55,7 @@ After the Review Pass, produce a Self-Audit with pass/fail for each category bel
 ### Required categories
 - Scope and dependency coverage
 - Contract, config, and protocol correctness
+- Go comment intent audit
 - Concurrency, backpressure, and resource bounds
 - Verification and checker discipline
 - Documentation, decision memory, and traceability

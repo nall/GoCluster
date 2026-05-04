@@ -41,6 +41,9 @@ Also required as applicable:
 - `scripts/check-yaml-doc-rigor.ps1` for checked-in first-party YAML additions
   or edits; add `-CommentOnlyCompare` when the intended YAML change is
   comment-only
+- for comment-only Go changes: `gofmt`, targeted package tests when packages
+  were touched, `git diff --check`, and a reviewer diff pass confirming the
+  non-comment Go diff is empty
 - `go test -race ./...` for concurrency, queues, timers, cancellation, lifecycle, shutdown, or long-lived connections
 - fuzzing for parser/protocol changes
 - benchmarks for hot-path changes

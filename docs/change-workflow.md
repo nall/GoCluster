@@ -219,6 +219,28 @@ Run `scripts/check-yaml-doc-rigor.ps1` for mechanical checks. Use
 script warnings as review prompts; human review remains responsible for
 subjective comment quality and drift against loaders/docs/code.
 
+### Go Comment Intent Rigor
+Required when a task adds or edits support-critical Go, including runtime
+pipelines, telnet/user-facing behavior, retained state, caches, queues, timers,
+goroutine lifecycle, hot paths, logging/metrics/diagnostics, replay/profiling
+tools, exported/shared APIs, or code the support agent is likely to inspect.
+
+Use `docs/code-quality.md` as the source of truth for Go comment intent. Verify:
+- comments explain intent/why, ownership, invariants, resource bounds, and
+  troubleshooting meaning where those are not obvious from local code
+- drop, delay, overflow, fail-open/fail-closed, cleanup, and lifecycle paths are
+  discoverable from nearby comments when they affect operators or support
+- retained-state comments identify the cap, expiry, cleanup coupling, or
+  bounded-lifetime proof required by the retained-state standard
+- comments do not mechanically restate assignments, simple booleans, or every
+  repeated branch once the pattern has been explained
+- comments do not drift from code, tests, config, docs, ADRs, or support-agent
+  routing docs
+
+For comment-only Go changes, include a reviewer diff pass confirming the
+non-comment Go diff is empty. This is a mechanical scope check only; human
+review remains responsible for subjective intent quality.
+
 ## Implementation Plan
 Distinct from the Scope Ledger. The ledger says what is approved. The plan says how to do it.
 
