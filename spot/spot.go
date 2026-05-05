@@ -30,6 +30,33 @@ const (
 	SourcePeer        SourceType = "PEER"        // From DXSpider peer sessions
 )
 
+// ToxicityStatus records the local/AI safety decision for a human comment.
+// Empty legacy spots are treated the same as UNKNOWN by filter and archive code.
+type ToxicityStatus string
+
+const (
+	ToxicityUnknown     ToxicityStatus = "UNKNOWN"
+	ToxicitySafe        ToxicityStatus = "SAFE"
+	ToxicitySafeLocal   ToxicityStatus = "SAFE_LOCAL"
+	ToxicityToxic       ToxicityStatus = "TOXIC"
+	ToxicityUnavailable ToxicityStatus = "UNAVAILABLE"
+)
+
+func NormalizeToxicityStatus(status string) ToxicityStatus {
+	switch ToxicityStatus(strings.ToUpper(strings.TrimSpace(status))) {
+	case ToxicitySafe:
+		return ToxicitySafe
+	case ToxicitySafeLocal:
+		return ToxicitySafeLocal
+	case ToxicityToxic:
+		return ToxicityToxic
+	case ToxicityUnavailable:
+		return ToxicityUnavailable
+	default:
+		return ToxicityUnknown
+	}
+}
+
 // Spot represents a DX spot in canonical form
 type Spot struct {
 	ID                  uint64         // Unique spot ID (monotonic counter)
@@ -57,6 +84,9 @@ type Spot struct {
 	Confidence          string         // Consensus confidence label (e.g., "P", "V", "?")
 	ConfidencePercent   int            // Pipeline-calculated confidence percent when ConfidencePercentOK is true
 	ConfidencePercentOK bool
+	ToxicityStatus      ToxicityStatus // Comment safety state for user filtering; UNKNOWN/UNAVAILABLE fail open.
+	ToxicityCategories  []string       // Opaque model category codes for support/debugging.
+	ToxicityModel       string         // Model identifier returned by the classifier.
 	ownedSnapshot       bool
 	formatted           string
 	formatOnce          sync.Once // ensures FormatDXCluster builds expensive string only once per spot
@@ -478,6 +508,9 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		Confidence:          s.Confidence,
 		ConfidencePercent:   s.ConfidencePercent,
 		ConfidencePercentOK: s.ConfidencePercentOK,
+		ToxicityStatus:      NormalizeToxicityStatus(string(s.ToxicityStatus)),
+		ToxicityCategories:  append([]string(nil), s.ToxicityCategories...),
+		ToxicityModel:       s.ToxicityModel,
 		ModeNorm:            s.ModeNorm,
 		BandNorm:            s.BandNorm,
 		DXCallNorm:          s.DXCallNorm,

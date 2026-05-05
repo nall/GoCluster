@@ -92,6 +92,7 @@ PASS WWV | REJECT WWV
 PASS WCY | REJECT WCY
 PASS ANNOUNCE | REJECT ANNOUNCE
 PASS SELF | REJECT SELF
+PASS TOXIC | REJECT TOXIC
 PASS NEARBY ON|OFF
 
 Confidence glyphs:
@@ -175,6 +176,30 @@ Useful commands:
 - `REJECT EVENT WWFF` hides WWFF-tagged spots.
 - `PASS EVENT ALL` disables EVENT filtering.
 - `REJECT EVENT ALL` hides all EVENT-tagged spots; spots with no event tag still pass this filter domain.
+
+## Toxic Comment Filtering
+
+`PASS TOXIC` and `REJECT TOXIC` control optional filtering for human-entered
+spot comments that the toxicity classifier has already evaluated.
+
+- `REJECT TOXIC` hides only spots marked `TOXIC`.
+- `UNKNOWN`, `SAFE`, `SAFE_LOCAL`, and `UNAVAILABLE` spots still pass.
+- Skimmer and other non-human spots bypass the classifier.
+- The classifier receives only the cleaned free-text comment, not mode, band,
+  callsigns, source, IP, session data, raw spot lines, or archive records.
+- `SHOW FILTER` shows the current `TOXIC` state.
+
+The feature is disabled by default. Operators enable it with
+[`data/config/toxicity.yaml`](data/config/toxicity.yaml), a private bearer-token
+environment variable, and a Cloudflare Worker that exposes `POST /classify`.
+[`data/config/toxicity_safe_gate.yaml`](data/config/toxicity_safe_gate.yaml)
+contains the conservative local safe gate for routine ham-radio shorthand.
+
+The safe gate is deliberately narrow: the whole comment must look routine to
+bypass AI. Mixed comments such as a normal ham token plus unrelated abusive or
+ordinary language are sent to the Worker, including common Western-language
+comments in English, Spanish, French, German, Italian, and Portuguese. There
+are no language-specific classifier goroutines or language detectors.
 
 ## MODE And EVENT Taxonomy
 

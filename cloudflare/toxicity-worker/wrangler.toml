@@ -1,0 +1,6 @@
+name = "gocluster-toxicity-classifier"
+main = "src/worker.js"
+compatibility_date = "2026-05-05"
+
+[ai]
+binding = "AI"

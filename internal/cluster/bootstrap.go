@@ -35,6 +35,7 @@ import (
 	"dxcluster/internal/pebbleresilience"
 	"dxcluster/internal/ratelimit"
 	"dxcluster/internal/schedule"
+	"dxcluster/internal/toxicity"
 	"dxcluster/pathreliability"
 	"dxcluster/peer"
 	"dxcluster/pskreporter"
@@ -584,6 +585,28 @@ func formatTemporalSummary(tracker *stats.Tracker) string {
 	)
 }
 
+func formatToxicitySummary(classifier *toxicity.Classifier) string {
+	if classifier == nil {
+		return "Toxicity: disabled"
+	}
+	stats := classifier.Snapshot()
+	return fmt.Sprintf(
+		"Toxicity: %s (AI) / %s (L) / %s (H) / %s (T) / %s (U) | q=%d rb=%d cache=%d evict=%s err %s (TO) / %s (M) / %s (Q)",
+		humanize.Comma(int64(stats.AICalls)),
+		humanize.Comma(int64(stats.SafeBypass)),
+		humanize.Comma(int64(stats.CacheHits)),
+		humanize.Comma(int64(stats.Toxic)),
+		humanize.Comma(int64(stats.Unavailable)),
+		stats.Pending,
+		stats.ResultBacklog,
+		stats.CacheEntries,
+		humanize.Comma(int64(stats.Evictions)),
+		humanize.Comma(int64(stats.Timeouts)),
+		humanize.Comma(int64(stats.Malformed)),
+		humanize.Comma(int64(stats.QueueFull)),
+	)
+}
+
 func formatFTBurstSummary(tracker *stats.Tracker) string {
 	if tracker == nil {
 		return "FT Burst: n/a"
@@ -650,7 +673,7 @@ func formatTopCounterSummary(counts map[string]uint64, limit int) string {
 // Key aspects: Uses a ticker, diff counters, and optional secondary dedupe stats.
 // Upstream: main stats goroutine.
 // Downstream: tracker accessors, loadFCCSnapshot, and UI/log output.
-func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, dxsummitClient *dxsummit.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string, ingestSourceCfg dashboardIngestSourceConfig) {
+func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestStats *ingestValidator, dedup *dedup.Deduplicator, secondaryFast *dedup.SecondaryDeduper, secondaryMed *dedup.SecondaryDeduper, secondarySlow *dedup.SecondaryDeduper, secondaryStage *atomic.Uint64, buf *buffer.RingBuffer, ctyLookup func() *cty.CTYDatabase, metaCache *callMetaCache, ctyState *ctyRefreshState, recentBandStore spot.RecentSupportStore, signalResolver *spot.SignalResolver, telnetSrv *telnet.Server, dash ui.Surface, gridStats *gridMetrics, gridDB *gridStoreHandle, fccDBPath string, pathPredictor *pathreliability.Predictor, modeAssigner *spot.ModeAssigner, toxicityClassifier *toxicity.Classifier, rbnClient *rbn.Client, rbnDigitalClient *rbn.Client, pskrClient *pskreporter.Client, dxsummitClient *dxsummit.Client, pskrPathOnly *pathOnlyStats, peerManager *peer.Manager, clusterCall string, skewPath string, ingestSourceCfg dashboardIngestSourceConfig) {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
@@ -716,6 +739,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 		resolverLine := formatResolverSummary(signalResolver)
 		resolverPressureLine := formatResolverPressureSummary(signalResolver)
 		temporalLine := formatTemporalSummary(tracker)
+		toxicityLine := formatToxicitySummary(toxicityClassifier)
 
 		ingestTotal := uint64(0)
 		if ingestStats != nil {
@@ -883,6 +907,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 			stabilizerGlyphLine,
 			"",
 			temporalLine,
+			toxicityLine,
 			pipelineLine, // 7
 			fmt.Sprintf("Telnet: %d clients. Drops: %d (Q) / %d (C) / %d (W). Bulletins: %d accepted / %d suppressed / %d evicted / %d tracked. Prelogin: %d active / rejects %d (G) %d (R) %d (C) / %d (T)", clientCount, queueDrops, clientDrops, senderFailures, bulletinDedupe.Accepted, bulletinDedupe.Suppressed, bulletinDedupe.Evicted, bulletinDedupe.Tracked, preloginActive, preloginRejectGlobal, preloginRejectRate, preloginRejectConcurrency, preloginTimeouts), // 8
 		)
@@ -929,6 +954,7 @@ func displayStatsWithFCC(interval time.Duration, tracker *stats.Tracker, ingestS
 					stabilizerGlyphLine,
 					"",
 					temporalLine,
+					toxicityLine,
 				},
 				NetworkLines: formatNetworkLines(telnetSrv, clientList),
 			}
@@ -1219,6 +1245,7 @@ func processOutputSpots(
 	pathPredictor *pathreliability.Predictor,
 	pathReport *pathReportMetrics,
 	allowedBands map[string]struct{},
+	toxicityClassifier *toxicity.Classifier,
 ) {
 	newOutputPipeline(
 		deduplicator,
@@ -1261,6 +1288,7 @@ func processOutputSpots(
 		pathPredictor,
 		pathReport,
 		allowedBands,
+		toxicityClassifier,
 	).run()
 }
 

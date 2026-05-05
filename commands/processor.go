@@ -731,6 +731,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"PASS WCY",
 			"PASS ANNOUNCE",
 			"PASS SELF",
+			"PASS TOXIC",
 		})
 		add("PASS", "PASS - Allow filter matches.", passLines)
 
@@ -752,6 +753,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"REJECT WCY",
 			"REJECT ANNOUNCE",
 			"REJECT SELF",
+			"REJECT TOXIC",
 		})
 		add("REJECT", "REJECT - Block filter matches.", rejectLines)
 
@@ -1065,6 +1067,7 @@ func filterHelpLines(dialect string) []string {
 		"PASS WCY | REJECT WCY",
 		"PASS ANNOUNCE | REJECT ANNOUNCE",
 		"PASS SELF | REJECT SELF",
+		"PASS TOXIC | REJECT TOXIC",
 		"PASS NEARBY ON|OFF",
 	}
 	lines = append(lines, "", "Confidence glyphs:")

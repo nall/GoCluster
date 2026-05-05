@@ -75,6 +75,8 @@ Configuration is split by concern so you only edit the relevant file:
 - `pipeline.yaml` - algorithm calibration for call correction, harmonics, mode inference, and spot-quality policy; not a normal operator tuning surface.
 - `path_reliability.yaml` - operator policy for enable/display/sample-floor/receiver-cap mode, plus algorithm calibration for decay, weights, thresholds, offsets, and noise tables.
 - `solarweather.yaml` - operator policy for enable/fetch/reporting controls, plus algorithm calibration for daylight/high-latitude/level thresholds and override glyph behavior.
+- `toxicity.yaml` - optional deployment/runtime settings for the Cloudflare Worker human-comment toxicity classifier.
+- `toxicity_safe_gate.yaml` - optional reference table for routine ham-radio comments that may bypass the classifier when the Worker is enabled.
 
 Normal operator edits:
 - identity, ports, source credentials, source enablement, peer details, paths,
@@ -98,6 +100,7 @@ Loader behavior:
 - Documented zero values are meaningful. For example, `telnet.broadcast_batch_interval_ms: 0` means immediate delivery, and `*_keepalive_seconds: 0` means the keepalive is disabled.
 - `go_runtime.memory_limit_mib` and `go_runtime.gc_percent` apply the same process-wide Go runtime controls as `GOMEMLIMIT` and `GOGC` without requiring a wrapper script. Set either value to `0` to leave the Go runtime or environment-provided value unchanged.
 - `openai.yaml` is optional for server startup and `prop_report -no-llm`. When propagation-report LLM generation is enabled, the file is required and validated at that tool boundary. Secret values must not be logged or committed.
+- `toxicity.yaml` is optional for server startup. When enabled, it requires a Worker endpoint, bearer token environment variable, bounded worker/queue/cache settings, and `toxicity_safe_gate.yaml`; secret bearer token values must stay in the environment or private config, not checked-in YAML.
 - `peering.yaml` in the public example uses disabled `.example.invalid` peers, blank passwords, and placeholder callsigns. Put real peer connection details only in a private config directory.
 - `reputation.yaml` in the public example disables IPinfo download/API usage and uses a placeholder download token so the strict loader still sees the required key. Put real IPinfo tokens only in a private config directory.
 - Use `prop_report -config-dir <dir>` to point report generation at an alternate config directory. The older `-path-config` flag accepts either a directory or `path_reliability.yaml` path for compatibility.

@@ -28,6 +28,7 @@ import (
 	"dxcluster/filter"
 	"dxcluster/floodcontrol"
 	"dxcluster/gridstore"
+	"dxcluster/internal/toxicity"
 	"dxcluster/pathreliability"
 	"dxcluster/peer"
 	"dxcluster/pskreporter"
@@ -123,7 +124,8 @@ type clusterRuntime struct {
 	secondarySlow           *dedup.SecondaryDeduper
 	archivePeerSecondaryMed *dedup.SecondaryDeduper
 
-	modeAssigner *spot.ModeAssigner
+	modeAssigner       *spot.ModeAssigner
+	toxicityClassifier *toxicity.Classifier
 
 	peerManager   *peer.Manager
 	archiveWriter *archive.Writer
@@ -893,7 +895,46 @@ func (r *clusterRuntime) initializeServices() bool {
 	if !r.initializeTelnetServer() {
 		return false
 	}
+	if !r.initializeToxicityClassifier() {
+		return false
+	}
 	r.startOutputPipeline()
+	return true
+}
+
+func (r *clusterRuntime) initializeToxicityClassifier() bool {
+	cfgPath := filepath.Join(r.configSource, "toxicity.yaml")
+	toxicityCfg, present, err := toxicity.LoadConfig(cfgPath)
+	if err != nil {
+		log.Printf("Failed to load toxicity classifier config: %v", err)
+		return false
+	}
+	if !present || !toxicityCfg.Enabled {
+		log.Printf("Toxicity classifier disabled")
+		return true
+	}
+	safeGatePath := toxicityCfg.SafeGateFile
+	if !filepath.IsAbs(safeGatePath) {
+		safeGatePath = filepath.Join(r.configSource, safeGatePath)
+	}
+	gate, err := toxicity.LoadSafeGate(safeGatePath)
+	if err != nil {
+		log.Printf("Failed to load toxicity safe gate: %v", err)
+		return false
+	}
+	classifier := toxicity.NewClassifier(toxicityCfg, gate, toxicity.NewClient(toxicityCfg, nil))
+	if classifier == nil {
+		log.Printf("Toxicity classifier disabled by zero workers or queue")
+		return true
+	}
+	classifier.Start()
+	r.toxicityClassifier = classifier
+	log.Printf("Toxicity classifier: enabled workers=%d queue=%d cache=%d ttl=%ds max_comment_bytes=%d",
+		toxicityCfg.Workers,
+		toxicityCfg.QueueSize,
+		toxicityCfg.CacheMaxEntries,
+		toxicityCfg.CacheTTLSeconds,
+		toxicityCfg.MaxCommentBytes)
 	return true
 }
 
@@ -1083,6 +1124,7 @@ func (r *clusterRuntime) startOutputPipeline() {
 		r.pathPredictor,
 		r.pathReport,
 		r.allowedBandSet,
+		r.toxicityClassifier,
 	)
 	startPipelineHealthMonitor(r.ctx, r.deduplicator, &r.lastOutput, r.peerManager)
 }
@@ -1274,6 +1316,7 @@ func (r *clusterRuntime) startMonitors() {
 		r.cfg.FCCULS.DBPath,
 		r.pathPredictor,
 		r.modeAssigner,
+		r.toxicityClassifier,
 		r.rbnClient,
 		r.rbnDigitalClient,
 		r.pskrClient,

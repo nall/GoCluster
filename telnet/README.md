@@ -56,8 +56,20 @@ Path and confidence filters are operator-visible here:
 - `PASS/REJECT PATH` works with `HIGH`, `MEDIUM`, `LOW`, `UNLIKELY`, `INSUFFICIENT`
 - `PASS/REJECT MODE` and `PASS/REJECT EVENT` validate against the active `spot_taxonomy.yaml`
 - the shipped `PASS/REJECT EVENT` families are `LLOTA`, `IOTA`, `POTA`, `SOTA`, `WWFF`, or `ALL`
+- `PASS TOXIC` shows spots classified as toxic; `REJECT TOXIC` hides only spots with the classifier status `TOXIC`
 
 EVENT filters are family-level. Standalone tokens such as `POTA` and acronym-prefixed references such as `POTA-1234` both match `POTA`; the reference stays in the comment and is not separately filterable. Spots with no recognized EVENT tag are not affected by EVENT filters, including `REJECT EVENT ALL`.
+
+Toxic comment filtering is optional and fail-open. When the classifier is
+disabled, unavailable, timed out, or has not seen a human comment yet, the spot
+passes `REJECT TOXIC`. Routine comments that match the local ham-radio safe
+gate are marked `SAFE_LOCAL` and also pass. The classifier receives only the
+cleaned free-text comment, not callsigns, band, mode, source, IP, session data,
+or archive records.
+
+`SHOW FILTER` reports the current `TOXIC` toggle. The toggle applies to live
+spots and archive-backed history queries. Local self-spot bypasses still honor
+`REJECT TOXIC` once a spot is classified as `TOXIC`.
 
 ## Dedupe Policies
 

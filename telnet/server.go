@@ -2343,7 +2343,7 @@ func (s *Server) DeliverSelfSpotOwned(dxCall string, snapshot *spot.Spot) {
 	}
 
 	client.filterMu.RLock()
-	allowSelf := client.filter.SelfEnabled()
+	allowSelf := client.filter.SelfEnabled() && client.filter.AllowsToxicity(snapshot)
 	client.filterMu.RUnlock()
 	if !allowSelf {
 		return
@@ -2740,7 +2740,7 @@ func (s *Server) deliverJob(job *broadcastJob) {
 				continue
 			}
 			client.filterMu.RLock()
-			allowSelf := client.filter.SelfEnabled()
+			allowSelf := client.filter.SelfEnabled() && client.filter.AllowsToxicity(job.spot)
 			client.filterMu.RUnlock()
 			if !allowSelf {
 				continue
@@ -2749,7 +2749,7 @@ func (s *Server) deliverJob(job *broadcastJob) {
 			// Self-match spots can bypass filters when SELF is enabled.
 			if isSelfMatch(job.spot, client.callsign) {
 				client.filterMu.RLock()
-				allowSelf := client.filter.SelfEnabled()
+				allowSelf := client.filter.SelfEnabled() && client.filter.AllowsToxicity(job.spot)
 				client.filterMu.RUnlock()
 				if !allowSelf {
 					continue
@@ -3318,7 +3318,10 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 				return false
 			}
 			if strings.EqualFold(spotEntry.DXCall, client.callsign) {
-				return true
+				client.filterMu.RLock()
+				allowed := client.filter.AllowsToxicity(spotEntry)
+				client.filterMu.RUnlock()
+				return allowed
 			}
 			pathClass := filter.PathClassInsufficient
 			client.filterMu.RLock()

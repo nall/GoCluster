@@ -1,0 +1,8 @@
+{
+  "name": "gocluster-toxicity-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

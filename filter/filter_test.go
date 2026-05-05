@@ -414,6 +414,24 @@ func TestSourceFilters(t *testing.T) {
 	}
 }
 
+func TestToxicFilterBlocksOnlyClassifiedToxic(t *testing.T) {
+	f := NewFilter()
+	f.SetToxicEnabled(false)
+
+	toxic := &spot.Spot{Mode: "CW", Band: "20m", ToxicityStatus: spot.ToxicityToxic}
+	if f.Matches(toxic) {
+		t.Fatalf("expected REJECT TOXIC to block classified toxic spot")
+	}
+	unknown := &spot.Spot{Mode: "CW", Band: "20m", ToxicityStatus: spot.ToxicityUnknown}
+	if !f.Matches(unknown) {
+		t.Fatalf("expected UNKNOWN toxicity to pass")
+	}
+	unavailable := &spot.Spot{Mode: "CW", Band: "20m", ToxicityStatus: spot.ToxicityUnavailable}
+	if !f.Matches(unavailable) {
+		t.Fatalf("expected UNAVAILABLE toxicity to pass")
+	}
+}
+
 func TestEventAllowListFiltersOnlyTaggedSpots(t *testing.T) {
 	f := NewFilter()
 	f.SetEvent("POTA", true)

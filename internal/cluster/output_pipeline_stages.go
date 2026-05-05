@@ -1,3 +1,10 @@
+// File role: Hosts the ordered live output pipeline stages after primary
+// dedupe and before archive, peer, and telnet delivery.
+// Crawler notes: Start here when a spot is classified, mode-hydrated,
+// resolver-mutated, aged out, path-tagged, confidence-stamped, or prepared for
+// fan-out after it leaves primary dedupe.
+// Related docs: README.md, spot/README.md, pathreliability/README.md.
+// Related tests: internal/cluster/*output_pipeline*_test.go.
 package cluster
 
 import (
@@ -49,6 +56,18 @@ func (p *outputPipeline) prepareSpotContext(s *spot.Spot) (outputSpotContext, bo
 		ctyDB:     ctyDB,
 		modeUpper: s.ModeNorm,
 	}, true
+}
+
+// applyToxicityStage classifies human comments before any fanout-visible work.
+// AI misses are queued to bounded workers; the output loop keeps processing
+// unrelated non-human spots and resumes this spot when the result returns.
+func (p *outputPipeline) applyToxicityStage(s *spot.Spot) bool {
+	if p == nil || p.toxicityClassifier == nil || s == nil {
+		return true
+	}
+	s.EnsureNormalized()
+	spot.ApplySourceHumanFlag(s)
+	return p.toxicityClassifier.ClassifyOrEnqueue(s, time.Now().UTC())
 }
 
 // applyResolverStage owns resolver and temporal-decoder mutation for non-FT

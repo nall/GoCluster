@@ -15,6 +15,8 @@ const (
 	iaruModeInferenceFile     = "iaru_mode_inference.yaml"
 	spotTaxonomyConfigFile    = "spot_taxonomy.yaml"
 	openAIConfigFile          = "openai.yaml"
+	toxicityConfigFile        = "toxicity.yaml"
+	toxicitySafeGateFile      = "toxicity_safe_gate.yaml"
 )
 
 type configFileClass string
@@ -53,6 +55,8 @@ var configFileRegistry = map[string]configFileSpec{
 	iaruModeInferenceFile:     {class: configFileReference, required: true},
 	spotTaxonomyConfigFile:    {class: configFileReference, required: true},
 	openAIConfigFile:          {class: configFileOptionalTool, required: false},
+	toxicityConfigFile:        {class: configFileOptionalTool, required: false},
+	toxicitySafeGateFile:      {class: configFileReference, required: false},
 }
 
 type loadedConfigDir struct {

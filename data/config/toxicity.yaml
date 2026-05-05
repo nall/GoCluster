@@ -1,0 +1,20 @@
+# Purpose: Optional human-comment toxicity classifier Worker settings.
+# Ownership: deployment/runtime
+# Runtime behavior: Optional tool-boundary config; when disabled or absent, the cluster does not call the Worker.
+# Safe edits: Enable only with a private Worker endpoint and bearer token environment variable; never commit real bearer tokens.
+# Source: data/config/README.md.
+
+enabled: false
+endpoint: "https://toxicity-worker.example.invalid/classify"
+bearer_token_env: "DXC_TOXICITY_WORKER_TOKEN"
+# timeout_ms caps one Worker call; failures mark the spot UNAVAILABLE and pass filters.
+timeout_ms: 1200
+# workers and queue_size bound concurrent AI work after primary dedupe.
+workers: 2
+queue_size: 128
+# cache_* bounds the memory-only normalized-comment decision cache.
+cache_max_entries: 4096
+cache_ttl_seconds: 86400
+# max_comment_bytes truncates only the Worker/cache payload, preserving UTF-8 boundaries.
+max_comment_bytes: 512
+safe_gate_file: "toxicity_safe_gate.yaml"

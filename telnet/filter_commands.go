@@ -145,6 +145,7 @@ func (e *filterCommandEngine) registerDomains() {
 		newFeatureToggleHandler("WCY", func(f *filter.Filter, enabled bool) { f.SetWCYEnabled(enabled) }),
 		newFeatureToggleHandler("ANNOUNCE", func(f *filter.Filter, enabled bool) { f.SetAnnounceEnabled(enabled) }, "PC93"),
 		newFeatureToggleHandler("SELF", func(f *filter.Filter, enabled bool) { f.SetSelfEnabled(enabled) }),
+		newFeatureToggleHandler("TOXIC", func(f *filter.Filter, enabled bool) { f.SetToxicEnabled(enabled) }),
 	}
 	for _, h := range handlers {
 		e.registerDomain(h)
@@ -1490,6 +1491,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	wcySummary, wcyLine := toggleSnapshot("WCY", f.WCYEnabled(), f.AllowWCY)
 	announceSummary, announceLine := toggleSnapshot("ANNOUNCE", f.AnnounceEnabled(), f.AllowAnnounce)
 	selfSummary, selfLine := toggleSnapshot("SELF", f.SelfEnabled(), f.AllowSelf)
+	toxicSummary, toxicLine := toggleSnapshot("TOXIC", f.ToxicEnabled(), f.AllowToxic)
 	nearbySummary := "NEARBY=OFF"
 	nearbyLine := "NEARBY: OFF\n"
 	if f.NearbyActive() {
@@ -1528,6 +1530,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 		clampSummaryField(wcySummary, maxFieldLen),
 		clampSummaryField(announceSummary, maxFieldLen),
 		clampSummaryField(selfSummary, maxFieldLen),
+		clampSummaryField(toxicSummary, maxFieldLen),
 	}
 	for _, line := range wrapSummaryLines(summaryPrefix, summaryIndent, summaryParts, summaryMaxWidth) {
 		b.WriteString(line)
@@ -1558,6 +1561,7 @@ func formatFilterSnapshot(f *filter.Filter, ctyLookup func() *cty.CTYDatabase) s
 	b.WriteString(wcyLine)
 	b.WriteString(announceLine)
 	b.WriteString(selfLine)
+	b.WriteString(toxicLine)
 	return b.String()
 }
 
@@ -2265,6 +2269,8 @@ func featureLabels(name string) (enable string, disable string, status string) {
 		return "Announcements", "Announcements", "Announcements"
 	case "SELF":
 		return "Self spots", "Self spots", "Self spots"
+	case "TOXIC":
+		return "Toxic spots", "Toxic spots", "Toxic spots"
 	default:
 		tc := titleCase(name)
 		return tc, tc, tc

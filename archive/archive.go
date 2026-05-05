@@ -41,7 +41,8 @@ var (
 const (
 	recordVersionV2         = 2
 	recordVersionV3         = 3
-	recordVersion           = 4
+	recordVersionV4         = 4
+	recordVersion           = 5
 	recordFixedHeaderSizeV2 = 28
 	recordFixedHeaderSize   = 36
 )
@@ -61,13 +62,18 @@ const (
 	fieldDXCont
 	fieldDECont
 	fieldEvents
+	fieldToxicityStatus
+	fieldToxicityCategories
+	fieldToxicityModel
 	fieldCount
 )
 
 const (
 	fieldCountV3         = fieldEvents
+	fieldCountV4         = fieldEvents + 1
 	recordHeaderSizeV2   = recordFixedHeaderSizeV2 + fieldCountV3*2
 	recordHeaderSizeV3   = recordFixedHeaderSize + fieldCountV3*2
+	recordHeaderSizeV4   = recordFixedHeaderSize + fieldCountV4*2
 	recordHeaderSize     = recordFixedHeaderSize + fieldCount*2
 	recentScanMultiplier = 20
 	recentScanGrowth     = 4
@@ -94,6 +100,8 @@ func recordLayout(version byte) (fixedHeaderSize int, headerSize int, fieldN int
 		return recordFixedHeaderSizeV2, recordHeaderSizeV2, fieldCountV3, true
 	case recordVersionV3:
 		return recordFixedHeaderSize, recordHeaderSizeV3, fieldCountV3, true
+	case recordVersionV4:
+		return recordFixedHeaderSize, recordHeaderSizeV4, fieldCountV4, true
 	case recordVersion:
 		return recordFixedHeaderSize, recordHeaderSize, fieldCount, true
 	default:
@@ -619,32 +627,35 @@ func (w *Writer) RecentFiltered(limit int, match func(*spot.Spot) bool) ([]*spot
 }
 
 type archiveRecord struct {
-	dxCall         string
-	deCall         string
-	deCallStripped string
-	mode           string
-	comment        string
-	source         string
-	sourceNode     string
-	confidence     string
-	band           string
-	dxGrid         string
-	deGrid         string
-	dxGridDerived  bool
-	deGridDerived  bool
-	dxCont         string
-	deCont         string
-	events         spot.EventMask
-	freq           float64
-	observedFreq   float64
-	report         int
-	hasReport      bool
-	isHuman        bool
-	ttl            uint8
-	dxCQZone       int
-	deCQZone       int
-	dxADIF         int
-	deADIF         int
+	dxCall             string
+	deCall             string
+	deCallStripped     string
+	mode               string
+	comment            string
+	source             string
+	sourceNode         string
+	confidence         string
+	band               string
+	dxGrid             string
+	deGrid             string
+	dxGridDerived      bool
+	deGridDerived      bool
+	dxCont             string
+	deCont             string
+	events             spot.EventMask
+	freq               float64
+	observedFreq       float64
+	report             int
+	hasReport          bool
+	isHuman            bool
+	ttl                uint8
+	dxCQZone           int
+	deCQZone           int
+	dxADIF             int
+	deADIF             int
+	toxicityStatus     string
+	toxicityCategories string
+	toxicityModel      string
 }
 
 func encodeRecord(s *spot.Spot) []byte {
@@ -684,6 +695,9 @@ func encodeRecord(s *spot.Spot) []byte {
 	dxCont := strutil.NormalizeUpper(s.DXMetadata.Continent)
 	deCont := strutil.NormalizeUpper(s.DEMetadata.Continent)
 	events := spot.EventString(s.Events)
+	toxicityStatus := string(spot.NormalizeToxicityStatus(string(s.ToxicityStatus)))
+	toxicityCategories := strings.Join(s.ToxicityCategories, ",")
+	toxicityModel := strings.TrimSpace(s.ToxicityModel)
 
 	lengths := [fieldCount]int{
 		len(dxCall),
@@ -700,6 +714,9 @@ func encodeRecord(s *spot.Spot) []byte {
 		len(dxCont),
 		len(deCont),
 		len(events),
+		len(toxicityStatus),
+		len(toxicityCategories),
+		len(toxicityModel),
 	}
 	total := recordHeaderSize
 	for _, l := range lengths {
@@ -758,6 +775,9 @@ func encodeRecord(s *spot.Spot) []byte {
 	writeString(dxCont)
 	writeString(deCont)
 	writeString(events)
+	writeString(toxicityStatus)
+	writeString(toxicityCategories)
+	writeString(toxicityModel)
 	return buf
 }
 
@@ -778,7 +798,7 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	dxADIF := int(binary.BigEndian.Uint32(raw[20:]))
 	deADIF := int(binary.BigEndian.Uint32(raw[24:]))
 	observedFreq := freq
-	if raw[0] == recordVersionV3 || raw[0] == recordVersion {
+	if raw[0] == recordVersionV3 || raw[0] == recordVersionV4 || raw[0] == recordVersion {
 		observedFreq = math.Float64frombits(binary.BigEndian.Uint64(raw[28:]))
 	}
 
@@ -811,34 +831,49 @@ func decodeRecord(raw []byte) (archiveRecord, error) {
 	if events == 0 {
 		events = spot.ParseSpotEvents(fields[fieldComment])
 	}
+	toxicityStatus := string(spot.ToxicityUnknown)
+	toxicityCategories := ""
+	toxicityModel := ""
+	if fieldN > fieldToxicityStatus {
+		toxicityStatus = string(spot.NormalizeToxicityStatus(fields[fieldToxicityStatus]))
+	}
+	if fieldN > fieldToxicityCategories {
+		toxicityCategories = fields[fieldToxicityCategories]
+	}
+	if fieldN > fieldToxicityModel {
+		toxicityModel = fields[fieldToxicityModel]
+	}
 
 	return archiveRecord{
-		dxCall:         fields[fieldDXCall],
-		deCall:         fields[fieldDECall],
-		deCallStripped: fields[fieldDECallStripped],
-		mode:           fields[fieldMode],
-		comment:        fields[fieldComment],
-		source:         fields[fieldSource],
-		sourceNode:     fields[fieldSourceNode],
-		confidence:     fields[fieldConfidence],
-		band:           fields[fieldBand],
-		dxGrid:         fields[fieldDXGrid],
-		deGrid:         fields[fieldDEGrid],
-		dxGridDerived:  flags&flagDXGridDerived != 0,
-		deGridDerived:  flags&flagDEGridDerived != 0,
-		dxCont:         fields[fieldDXCont],
-		deCont:         fields[fieldDECont],
-		events:         events,
-		freq:           freq,
-		observedFreq:   observedFreq,
-		report:         int(report),
-		hasReport:      flags&flagHasReport != 0,
-		isHuman:        flags&flagIsHuman != 0,
-		ttl:            ttl,
-		dxCQZone:       dxCQ,
-		deCQZone:       deCQ,
-		dxADIF:         dxADIF,
-		deADIF:         deADIF,
+		dxCall:             fields[fieldDXCall],
+		deCall:             fields[fieldDECall],
+		deCallStripped:     fields[fieldDECallStripped],
+		mode:               fields[fieldMode],
+		comment:            fields[fieldComment],
+		source:             fields[fieldSource],
+		sourceNode:         fields[fieldSourceNode],
+		confidence:         fields[fieldConfidence],
+		band:               fields[fieldBand],
+		dxGrid:             fields[fieldDXGrid],
+		deGrid:             fields[fieldDEGrid],
+		dxGridDerived:      flags&flagDXGridDerived != 0,
+		deGridDerived:      flags&flagDEGridDerived != 0,
+		dxCont:             fields[fieldDXCont],
+		deCont:             fields[fieldDECont],
+		events:             events,
+		freq:               freq,
+		observedFreq:       observedFreq,
+		report:             int(report),
+		hasReport:          flags&flagHasReport != 0,
+		isHuman:            flags&flagIsHuman != 0,
+		ttl:                ttl,
+		dxCQZone:           dxCQ,
+		deCQZone:           deCQ,
+		dxADIF:             dxADIF,
+		deADIF:             deADIF,
+		toxicityStatus:     toxicityStatus,
+		toxicityCategories: toxicityCategories,
+		toxicityModel:      toxicityModel,
 	}, nil
 }
 
@@ -887,23 +922,26 @@ func decodeSpot(ts int64, raw []byte) (*spot.Spot, error) {
 		band = spot.FreqToBand(rec.freq)
 	}
 	s := &spot.Spot{
-		DXCall:            rec.dxCall,
-		DECall:            rec.deCall,
-		DECallStripped:    rec.deCallStripped,
-		Frequency:         rec.freq,
-		ObservedFrequency: rec.observedFreq,
-		Mode:              rec.mode,
-		Report:            rec.report,
-		Time:              time.Unix(0, ts).UTC(),
-		Comment:           rec.comment,
-		Events:            rec.events,
-		SourceType:        spot.SourceType(rec.source),
-		SourceNode:        rec.sourceNode,
-		TTL:               rec.ttl,
-		IsHuman:           rec.isHuman,
-		HasReport:         rec.hasReport,
-		Confidence:        rec.confidence,
-		Band:              band,
+		DXCall:             rec.dxCall,
+		DECall:             rec.deCall,
+		DECallStripped:     rec.deCallStripped,
+		Frequency:          rec.freq,
+		ObservedFrequency:  rec.observedFreq,
+		Mode:               rec.mode,
+		Report:             rec.report,
+		Time:               time.Unix(0, ts).UTC(),
+		Comment:            rec.comment,
+		Events:             rec.events,
+		SourceType:         spot.SourceType(rec.source),
+		SourceNode:         rec.sourceNode,
+		TTL:                rec.ttl,
+		IsHuman:            rec.isHuman,
+		HasReport:          rec.hasReport,
+		Confidence:         rec.confidence,
+		Band:               band,
+		ToxicityStatus:     spot.NormalizeToxicityStatus(rec.toxicityStatus),
+		ToxicityCategories: splitArchiveCSV(rec.toxicityCategories),
+		ToxicityModel:      rec.toxicityModel,
 	}
 	if rec.deCallStripped != "" {
 		s.DECallNormStripped = rec.deCallStripped
@@ -925,6 +963,21 @@ func decodeSpot(ts int64, raw []byte) (*spot.Spot, error) {
 	s.EnsureNormalized()
 	s.RefreshBeaconFlag()
 	return s, nil
+}
+
+func splitArchiveCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func spotKeyBytes(ts int64, seq uint32) []byte {

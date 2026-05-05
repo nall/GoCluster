@@ -410,6 +410,18 @@ func TestPassCommands(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "pass toxic enables",
+			cmd:  "PASS TOXIC",
+			setup: func(c *Client) {
+				c.filter.SetToxicEnabled(false)
+			},
+			check: func(t *testing.T, f *filter.Filter) {
+				if !f.ToxicEnabled() {
+					t.Fatalf("expected toxic spot delivery to be enabled")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -862,6 +874,15 @@ func TestRejectCommands(t *testing.T) {
 			check: func(t *testing.T, f *filter.Filter) {
 				if f.SelfEnabled() {
 					t.Fatalf("expected self delivery to be disabled")
+				}
+			},
+		},
+		{
+			name: "reject toxic disables",
+			cmd:  "REJECT TOXIC",
+			check: func(t *testing.T, f *filter.Filter) {
+				if f.ToxicEnabled() {
+					t.Fatalf("expected toxic spot delivery to be disabled")
 				}
 			},
 		},

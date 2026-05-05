@@ -17,6 +17,7 @@ import (
 	"dxcluster/config"
 	"dxcluster/cty"
 	"dxcluster/dedup"
+	"dxcluster/internal/toxicity"
 	"dxcluster/pathreliability"
 	"dxcluster/peer"
 	"dxcluster/spot"
@@ -82,6 +83,7 @@ type outputPipeline struct {
 	ftRecentBandStore       *spot.RecentBandStore
 	ftTimer                 *time.Timer
 	ftTimerCh               <-chan time.Time
+	toxicityClassifier      *toxicity.Classifier
 }
 
 // outputSpotContext carries mutable spot state and resolver context through the
@@ -141,6 +143,7 @@ func newOutputPipeline(
 	pathPredictor *pathreliability.Predictor,
 	pathReport *pathReportMetrics,
 	allowedBands map[string]struct{},
+	toxicityClassifier *toxicity.Classifier,
 ) *outputPipeline {
 	pipeline := &outputPipeline{
 		outputChan:              deduplicator.GetOutputChannel(),
@@ -183,6 +186,7 @@ func newOutputPipeline(
 		pathPredictor:           pathPredictor,
 		pathReport:              pathReport,
 		allowedBands:            allowedBands,
+		toxicityClassifier:      toxicityClassifier,
 		secondaryActive:         secondaryFast != nil || secondaryMed != nil || secondarySlow != nil,
 		temporal:                newRuntimeTemporalController(correctionCfg),
 		ftConfidence:            newFTConfidenceController(correctionCfg, tracker),
@@ -224,6 +228,9 @@ func (p *outputPipeline) run() {
 	}
 	defer p.stopTemporalTimer()
 	defer p.stopFTTimer()
+	if p.toxicityClassifier != nil {
+		defer p.toxicityClassifier.Stop()
+	}
 
 	for {
 		now := time.Now().UTC()
@@ -237,15 +244,53 @@ func (p *outputPipeline) run() {
 			if !ok {
 				p.releaseDueTemporal(time.Now().UTC().Add(24*time.Hour), true)
 				p.releaseDueFT(time.Now().UTC().Add(24*time.Hour), true)
+				p.drainToxicityPending(time.Now().UTC().Add(p.toxicityClassifier.DrainTimeout()))
 				return
 			}
 			p.processSpot(s, nil)
+		case result := <-p.toxicityResults():
+			toxicity.ApplyResult(result)
+			p.processSpot(result.Spot, nil)
 		case <-p.temporalTimerCh:
 			// Timer-driven wakeup for lag/max-wait release when ingest is idle.
 		case <-p.ftTimerCh:
 			// Timer-driven wakeup for bounded FT corroboration release when ingest is idle.
 		}
 	}
+}
+
+func (p *outputPipeline) drainToxicityPending(deadline time.Time) {
+	if p == nil || p.toxicityClassifier == nil {
+		return
+	}
+	for p.toxicityClassifier.Pending() > 0 || p.toxicityClassifier.ResultBacklog() > 0 {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			log.Printf("toxicity classifier shutdown drain timed out with pending=%d result_backlog=%d",
+				p.toxicityClassifier.Pending(),
+				p.toxicityClassifier.ResultBacklog(),
+			)
+			return
+		}
+		select {
+		case result := <-p.toxicityResults():
+			toxicity.ApplyResult(result)
+			p.processSpot(result.Spot, nil)
+		case <-time.After(remaining):
+			log.Printf("toxicity classifier shutdown drain timed out with pending=%d result_backlog=%d",
+				p.toxicityClassifier.Pending(),
+				p.toxicityClassifier.ResultBacklog(),
+			)
+			return
+		}
+	}
+}
+
+func (p *outputPipeline) toxicityResults() <-chan toxicity.Result {
+	if p == nil || p.toxicityClassifier == nil {
+		return nil
+	}
+	return p.toxicityClassifier.Results()
 }
 
 // processSpot shields the long-lived output loop from one malformed spot or
@@ -263,6 +308,9 @@ func (p *outputPipeline) processSpot(s *spot.Spot, temporalRelease *runtimeTempo
 // processSpotBody is intentionally a linear stage list: each stage answers one
 // support question about how a spot changed before fanout.
 func (p *outputPipeline) processSpotBody(s *spot.Spot, temporalRelease *runtimeTemporalRelease) {
+	if !p.applyToxicityStage(s) {
+		return
+	}
 	ctx, ok := p.prepareSpotContext(s)
 	if !ok {
 		return

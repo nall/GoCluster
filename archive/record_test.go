@@ -112,6 +112,52 @@ func encodeRecordV3ForTest(s *spot.Spot) []byte {
 	return out
 }
 
+func encodeRecordV4ForTest(s *spot.Spot) []byte {
+	raw := encodeRecord(s)
+	rec, err := decodeRecord(raw)
+	if err != nil {
+		panic(err)
+	}
+	lengths := [fieldCountV4]int{
+		len(rec.dxCall),
+		len(rec.deCall),
+		len(rec.deCallStripped),
+		len(rec.mode),
+		len(rec.comment),
+		len(rec.source),
+		len(rec.sourceNode),
+		len(rec.confidence),
+		len(rec.band),
+		len(rec.dxGrid),
+		len(rec.deGrid),
+		len(rec.dxCont),
+		len(rec.deCont),
+		len(spot.EventString(s.Events)),
+	}
+	total := recordHeaderSizeV4
+	for _, l := range lengths {
+		total += l
+	}
+	out := make([]byte, total)
+	copy(out[:recordFixedHeaderSize], raw[:recordFixedHeaderSize])
+	out[0] = recordVersionV4
+	offset := recordFixedHeaderSize
+	for i := 0; i < fieldCountV4; i++ {
+		binary.BigEndian.PutUint16(out[offset:], uint16(lengths[i]))
+		offset += 2
+	}
+	writeOffset := recordHeaderSizeV4
+	for _, value := range []string{
+		rec.dxCall, rec.deCall, rec.deCallStripped, rec.mode, rec.comment,
+		rec.source, rec.sourceNode, rec.confidence, rec.band, rec.dxGrid,
+		rec.deGrid, rec.dxCont, rec.deCont, spot.EventString(s.Events),
+	} {
+		copy(out[writeOffset:], value)
+		writeOffset += len(value)
+	}
+	return out
+}
+
 func TestArchiveRecordStoresStrippedDECall(t *testing.T) {
 	s := spot.NewSpot("K1ABC", "W1XYZ-1", 14074.0, "FT8")
 	s.DECallStripped = "W1XYZ"
@@ -216,6 +262,30 @@ func TestArchiveRecordPreservesEvents(t *testing.T) {
 	}
 }
 
+func TestArchiveRecordPreservesToxicity(t *testing.T) {
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	s.ToxicityStatus = spot.ToxicityToxic
+	s.ToxicityCategories = []string{"S10", "S11"}
+	s.ToxicityModel = "@cf/meta/llama-guard-3-8b"
+
+	raw := encodeRecord(s)
+	rec, err := decodeRecord(raw)
+	if err != nil {
+		t.Fatalf("decodeRecord failed: %v", err)
+	}
+	if rec.toxicityStatus != string(spot.ToxicityToxic) || rec.toxicityCategories != "S10,S11" {
+		t.Fatalf("unexpected record toxicity: %+v", rec)
+	}
+
+	decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
+	if err != nil {
+		t.Fatalf("decodeSpot failed: %v", err)
+	}
+	if decoded.ToxicityStatus != spot.ToxicityToxic || strings.Join(decoded.ToxicityCategories, ",") != "S10,S11" {
+		t.Fatalf("expected decoded toxicity, got status=%q categories=%v", decoded.ToxicityStatus, decoded.ToxicityCategories)
+	}
+}
+
 func TestArchiveLegacyRecordsDeriveEventsFromComment(t *testing.T) {
 	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
 	s.Comment = "POTA-1234 WWFF-5678"
@@ -224,6 +294,7 @@ func TestArchiveLegacyRecordsDeriveEventsFromComment(t *testing.T) {
 	for name, raw := range map[string][]byte{
 		"v2": encodeRecordV2ForTest(s),
 		"v3": encodeRecordV3ForTest(s),
+		"v4": encodeRecordV4ForTest(s),
 	} {
 		decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
 		if err != nil {
@@ -231,6 +302,23 @@ func TestArchiveLegacyRecordsDeriveEventsFromComment(t *testing.T) {
 		}
 		if decoded.Events != want {
 			t.Fatalf("%s expected derived events %q, got %q", name, spot.EventString(want), spot.EventString(decoded.Events))
+		}
+	}
+}
+
+func TestArchiveLegacyRecordsDecodeUnknownToxicity(t *testing.T) {
+	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
+	for name, raw := range map[string][]byte{
+		"v2": encodeRecordV2ForTest(s),
+		"v3": encodeRecordV3ForTest(s),
+		"v4": encodeRecordV4ForTest(s),
+	} {
+		decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
+		if err != nil {
+			t.Fatalf("%s decodeSpot failed: %v", name, err)
+		}
+		if decoded.ToxicityStatus != spot.ToxicityUnknown {
+			t.Fatalf("%s expected UNKNOWN toxicity, got %q", name, decoded.ToxicityStatus)
 		}
 	}
 }

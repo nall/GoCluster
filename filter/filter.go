@@ -7,6 +7,7 @@
 //   - Source category (HUMAN vs SKIMMER/automated)
 //   - Event family (LLOTA/IOTA/POTA/SOTA/WWFF)
 //   - Path reliability class (HIGH/MEDIUM/LOW/UNLIKELY/INSUFFICIENT)
+//   - Toxic-comment classification state
 //
 // Filter Logic:
 //   - Multiple filters use AND logic (all must match)
@@ -380,6 +381,7 @@ func EnsureUserDataDir() error {
 //   - AllPathClasses=true: accept every path class until specific ones are enabled
 //   - IncludeBeacons=true: beacon spots are delivered unless explicitly disabled
 //   - AllSources=true: accept both HUMAN and SKIMMER spots (unless overridden for new users)
+//   - AllowToxic=true: classified toxic comments are delivered unless explicitly disabled
 //
 // Thread Safety:
 //   - Each client has their own Filter instance (no sharing)
@@ -418,6 +420,7 @@ type Filter struct {
 	AllowWCY             *bool           `yaml:"allow_wcy,omitempty"`       // nil/true delivers WCY bulletins; false suppresses
 	AllowAnnounce        *bool           `yaml:"allow_announce,omitempty"`  // nil/true delivers PC93 announcements; false suppresses
 	AllowSelf            *bool           `yaml:"allow_self,omitempty"`      // nil/true delivers self DX-call spots; false suppresses
+	AllowToxic           *bool           `yaml:"allow_toxic,omitempty"`     // nil/true delivers classified toxic spots; false suppresses
 	DXContinents         map[string]bool // Allowed DX continents
 	BlockDXContinents    map[string]bool // Blocked DX continents
 	DEContinents         map[string]bool // Allowed DE continents
@@ -556,6 +559,7 @@ func NewFilter() *Filter {
 		AllowWCY:             boolPtr(true),
 		AllowAnnounce:        boolPtr(true),
 		AllowSelf:            boolPtr(true),
+		AllowToxic:           boolPtr(true),
 		AllConfidence:        true, // Accept every confidence glyph until user sets one
 		BlockAllConfidence:   false,
 		AllPathClasses:       true, // Accept every path class until user sets one
@@ -980,6 +984,15 @@ func (f *Filter) SetSelfEnabled(enabled bool) {
 	f.AllowSelf = boolPtr(enabled)
 }
 
+// SetToxicEnabled sets whether spots classified as TOXIC are delivered.
+// UNKNOWN and UNAVAILABLE states fail open and are not blocked by this toggle.
+func (f *Filter) SetToxicEnabled(enabled bool) {
+	if f == nil {
+		return
+	}
+	f.AllowToxic = boolPtr(enabled)
+}
+
 // WWVEnabled reports whether WWV bulletins are allowed.
 // Key aspects: Defaults to true when unset.
 // Upstream: AllowsBulletin.
@@ -1022,6 +1035,22 @@ func (f *Filter) SelfEnabled() bool {
 		return true
 	}
 	return *f.AllowSelf
+}
+
+// ToxicEnabled reports whether classified toxic spots are allowed.
+func (f *Filter) ToxicEnabled() bool {
+	if f == nil || f.AllowToxic == nil {
+		return true
+	}
+	return *f.AllowToxic
+}
+
+// AllowsToxicity reports whether a spot passes the toxicity toggle.
+func (f *Filter) AllowsToxicity(s *spot.Spot) bool {
+	if s == nil {
+		return false
+	}
+	return spot.NormalizeToxicityStatus(string(s.ToxicityStatus)) != spot.ToxicityToxic || f.ToxicEnabled()
 }
 
 // AllowsBulletin reports whether a bulletin kind should be delivered.
@@ -1107,6 +1136,7 @@ func (f *Filter) Reset() {
 	f.SetWCYEnabled(true)
 	f.SetAnnounceEnabled(true)
 	f.SetSelfEnabled(true)
+	f.SetToxicEnabled(true)
 	f.DisableNearby()
 }
 
@@ -1390,6 +1420,9 @@ func (f *Filter) MatchesWithPath(s *spot.Spot, pathClass string) bool {
 func (f *Filter) matchesWithPath(s *spot.Spot, pathClass string) bool {
 	// Spot must be normalized upstream; this function treats the spot as immutable.
 	if s != nil && s.IsBeacon && !f.BeaconsEnabled() {
+		return false
+	}
+	if !f.AllowsToxicity(s) {
 		return false
 	}
 
@@ -2457,6 +2490,9 @@ func (f *Filter) normalizeDefaults() {
 	}
 	if f.AllowSelf == nil {
 		f.AllowSelf = boolPtr(true)
+	}
+	if f.AllowToxic == nil {
+		f.AllowToxic = boolPtr(true)
 	}
 
 	if len(f.Bands) == 0 {
