@@ -2,7 +2,7 @@ package spot
 
 import "strings"
 
-var beaconCommentKeywords = []string{"NCDXF", "BEACON"}
+var beaconCommentKeywords = []string{"NCDXF", "BEACON", "BCN"}
 
 // Purpose: Detect beacon markers in a comment string.
 // Key aspects: Case-insensitive substring match against known keywords.
