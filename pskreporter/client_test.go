@@ -68,6 +68,33 @@ func TestConvertToSpotOmitsCommentAndCarriesGrids(t *testing.T) {
 	}
 }
 
+func TestConvertToSpotCanonicalizesSenderNumericSSID(t *testing.T) {
+	client := NewClient("localhost", 1883, nil, "", 1, 0, 0, 0, nil, nil, false, 16, 0)
+	msg := &PSKRMessage{
+		SequenceNumber:  1,
+		Frequency:       14074000,
+		Mode:            "FT8",
+		Report:          intPtr(10),
+		Timestamp:       time.Now().Add(-time.Minute).Unix(),
+		SenderCall:      "K1ABC-2",
+		SenderLocator:   "fn42",
+		ReceiverCall:    "N0CALL",
+		ReceiverLocator: "em10",
+	}
+
+	modeInfo, ok := parseModeInfo(msg.Mode)
+	if !ok {
+		t.Fatalf("expected valid mode info for %q", msg.Mode)
+	}
+	spotEntry := client.convertToSpot(msg, modeInfo)
+	if spotEntry == nil {
+		t.Fatalf("expected spot, got nil")
+	}
+	if spotEntry.DXCall != "K1ABC" || spotEntry.DXCallNorm != "K1ABC" {
+		t.Fatalf("expected canonical DX K1ABC, got DXCall=%q DXCallNorm=%q", spotEntry.DXCall, spotEntry.DXCallNorm)
+	}
+}
+
 func TestConvertToSpotCanonicalizesFTFrequencyAndPreservesObserved(t *testing.T) {
 	registry := spot.NewFTDialRegistry([]spot.ModeSeed{
 		{FrequencyKHz: 14074, Mode: "FT8"},

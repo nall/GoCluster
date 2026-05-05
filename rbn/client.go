@@ -30,12 +30,6 @@ const (
 	rbnWriteDeadline       = 10 * time.Second
 )
 
-var (
-	rbnCallCacheSize  = 4096
-	rbnCallCacheTTL   = 10 * time.Minute
-	rbnNormalizeCache = spot.NewCallCache(rbnCallCacheSize, rbnCallCacheTTL)
-)
-
 // BadCallReporter receives parse-time callsign drops. Implementations must be
 // short and non-blocking because it runs on the telnet read loop.
 type BadCallReporter func(source, role, reason, call, deCall, dxCall, mode, detail string)
@@ -164,21 +158,11 @@ func equalFoldASCII(a, b string) bool {
 	return true
 }
 
-// ConfigureCallCache configures the callsign normalization cache for RBN spotters.
-// Key aspects: Applies defaults and rebuilds the shared cache.
+// ConfigureCallCache keeps the RBN startup contract aligned with other sources.
+// Key aspects: RBN now uses spot-level DX/spotter normalization caches directly.
 // Upstream: Config load or tests.
-// Downstream: spot.NewCallCache.
-func ConfigureCallCache(size int, ttl time.Duration) {
-	if size <= 0 {
-		size = 4096
-	}
-	if ttl <= 0 {
-		ttl = 10 * time.Minute
-	}
-	rbnCallCacheSize = size
-	rbnCallCacheTTL = ttl
-	rbnNormalizeCache = spot.NewCallCache(rbnCallCacheSize, rbnCallCacheTTL)
-}
+// Downstream: None.
+func ConfigureCallCache(int, time.Duration) {}
 
 // NewClient constructs an RBN telnet client.
 // Key aspects: Initializes channels and caches; bufferSize absorbs bursty ingest.
@@ -561,38 +545,6 @@ func (c *Client) readLoop() {
 	}
 }
 
-// Purpose: Normalize RBN skimmer callsigns while preserving the -# suffix.
-// Key aspects: Strips SSIDs from skimmer calls like "W3LPL-1-#".
-// Upstream: parseSpot spotter normalization.
-// Downstream: rbnNormalizeCache, spot.NormalizeCallsign.
-func normalizeRBNCallsign(call string) string {
-	if cached, ok := rbnNormalizeCache.Get(call); ok {
-		return cached
-	}
-	// Check if it ends with -# (RBN skimmer indicator)
-	if !strings.HasSuffix(call, "-#") {
-		normalized := spot.NormalizeCallsign(call)
-		rbnNormalizeCache.Add(call, normalized)
-		return normalized
-	}
-
-	// Remove the -# suffix temporarily
-	withoutHash := strings.TrimSuffix(call, "-#")
-
-	// If there are multiple hyphens, remove the last one (the SSID).
-	// W3LPL-1 becomes W3LPL.
-	if lastDash := strings.LastIndexByte(withoutHash, '-'); lastDash > 0 {
-		basecall := withoutHash[:lastDash]
-		normalized := basecall + "-#"
-		rbnNormalizeCache.Add(call, normalized)
-		return normalized
-	}
-
-	// If no SSID, return as-is with -# back
-	rbnNormalizeCache.Add(call, call)
-	return call
-}
-
 // Purpose: Normalize the spotter callsign while preserving SSIDs.
 // Key aspects: Leaves SSID in place so dedup/history keep per-skimmer identity.
 // Upstream: parseSpot.
@@ -805,7 +757,7 @@ func (c *Client) parseSpot(line string) {
 		}
 
 		if hasFreq && dxCall == "" && spot.IsValidCallsign(clean) {
-			dxCall = normalizeRBNCallsign(clean)
+			dxCall = spot.NormalizeSpotDXCallsign(clean)
 			consumed[idx] = true
 			continue
 		}

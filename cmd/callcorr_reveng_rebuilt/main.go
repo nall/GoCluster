@@ -614,7 +614,7 @@ func evaluateResolverPrimaryDecision(
 		return resolverDecision{Reason: "resolver_non_candidate_mode"}
 	}
 
-	preCall := spot.NormalizeCallsign(preCorrectionCall)
+	preCall := spot.NormalizeSpotDXCallsign(preCorrectionCall)
 	if preCall == "" {
 		st.counters.Rejected++
 		st.counters.RejectedPrecallMissing++
@@ -675,7 +675,7 @@ func evaluateResolverPrimaryDecision(
 		return resolverDecision{Reason: "resolver_state_unknown"}
 	}
 
-	winnerCall := spot.NormalizeCallsign(snapshot.Winner)
+	winnerCall := spot.NormalizeSpotDXCallsign(snapshot.Winner)
 	if winnerCall == "" {
 		st.counters.Rejected++
 		st.counters.RejectedWinnerMissing++
@@ -1216,7 +1216,7 @@ func parseRBNRecord(record []string, h rbnHeader) (rbnRow, rbnRecordStatus) {
 	if err != nil || freqKHz <= 0 {
 		return rbnRow{}, rbnRecordInvalid
 	}
-	dxCall := spot.NormalizeCallsign(get(h.dx))
+	dxCall := spot.NormalizeSpotDXCallsign(get(h.dx))
 	spotter := spot.NormalizeCallsign(get(h.callsign))
 	if dxCall == "" || spotter == "" {
 		return rbnRow{}, rbnRecordInvalid

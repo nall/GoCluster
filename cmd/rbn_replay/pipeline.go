@@ -266,7 +266,7 @@ func maybeApplyResolverCorrectionReplayWithSelectionOverride(
 		return outcome
 	}
 
-	winnerCall := spot.NormalizeCallsign(snapshot.Winner)
+	winnerCall := snapshot.Winner
 	if winnerCall == "" {
 		observeResolverPrimaryDecision(tracker, "rejected", resolverDecisionWinnerMissing, 1)
 		return outcome
@@ -351,7 +351,7 @@ func evaluateResolverPrimaryGateReplay(
 	if spotEntry == nil {
 		return spot.ResolverPrimaryGateResult{}, false
 	}
-	preCall := spot.NormalizeCallsign(preCorrectionCall)
+	preCall := spot.NormalizeSpotDXCallsign(preCorrectionCall)
 	if preCall == "" {
 		return spot.ResolverPrimaryGateResult{}, false
 	}
@@ -362,8 +362,8 @@ func evaluateResolverPrimaryGateReplay(
 	if snap.State != spot.ResolverStateConfident && snap.State != spot.ResolverStateProbable {
 		return spot.ResolverPrimaryGateResult{}, false
 	}
-	winner := spot.NormalizeCallsign(snap.Winner)
-	if winner == "" || strings.EqualFold(winner, preCall) {
+	winner := snap.Winner
+	if winner == "" || winner == preCall {
 		return spot.ResolverPrimaryGateResult{}, false
 	}
 

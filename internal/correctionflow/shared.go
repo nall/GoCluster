@@ -73,22 +73,22 @@ func FormatConfidence(percent int, totalReporters int) string {
 // It prefers candidate rank support and falls back to winner/runner fields when
 // rank lists are unavailable in synthetic snapshots.
 func ResolverSupportForCall(snapshot spot.ResolverSnapshot, call string) int {
-	call = spot.NormalizeCallsign(call)
+	call = spot.NormalizeSpotDXCallsign(call)
 	if call == "" {
 		return 0
 	}
 	for _, candidate := range snapshot.CandidateRanks {
-		if strings.EqualFold(candidate.Call, call) {
+		if candidate.Call == call {
 			if candidate.Support > 0 {
 				return candidate.Support
 			}
 			return 0
 		}
 	}
-	if snapshot.WinnerSupport > 0 && strings.EqualFold(snapshot.Winner, call) {
+	if snapshot.WinnerSupport > 0 && snapshot.Winner == call {
 		return snapshot.WinnerSupport
 	}
-	if snapshot.RunnerSupport > 0 && strings.EqualFold(snapshot.RunnerUp, call) {
+	if snapshot.RunnerSupport > 0 && snapshot.RunnerUp == call {
 		return snapshot.RunnerSupport
 	}
 	return 0
@@ -97,22 +97,22 @@ func ResolverSupportForCall(snapshot spot.ResolverSnapshot, call string) int {
 // ResolverWeightedSupportForCall returns weighted support (milli-units) for one
 // call in snapshot. It mirrors ResolverSupportForCall fallback behavior.
 func ResolverWeightedSupportForCall(snapshot spot.ResolverSnapshot, call string) int {
-	call = spot.NormalizeCallsign(call)
+	call = spot.NormalizeSpotDXCallsign(call)
 	if call == "" {
 		return 0
 	}
 	for _, candidate := range snapshot.CandidateRanks {
-		if strings.EqualFold(candidate.Call, call) {
+		if candidate.Call == call {
 			if candidate.WeightedSupportMilli > 0 {
 				return candidate.WeightedSupportMilli
 			}
 			return 0
 		}
 	}
-	if snapshot.WinnerWeightedSupportMilli > 0 && strings.EqualFold(snapshot.Winner, call) {
+	if snapshot.WinnerWeightedSupportMilli > 0 && snapshot.Winner == call {
 		return snapshot.WinnerWeightedSupportMilli
 	}
-	if snapshot.RunnerWeightedSupportMilli > 0 && strings.EqualFold(snapshot.RunnerUp, call) {
+	if snapshot.RunnerWeightedSupportMilli > 0 && snapshot.RunnerUp == call {
 		return snapshot.RunnerWeightedSupportMilli
 	}
 	return 0
@@ -194,9 +194,9 @@ func SelectResolverPrimarySnapshotForCall(resolver *spot.SignalResolver, key spo
 	if !cfg.ResolverNeighborhoodEnabled {
 		return selection
 	}
-	anchor := spot.NormalizeCallsign(anchorCall)
+	anchor := spot.NormalizeSpotDXCallsign(anchorCall)
 	if anchor == "" && exactOK {
-		anchor = spot.NormalizeCallsign(exact.Winner)
+		anchor = spot.NormalizeSpotDXCallsign(exact.Winner)
 	}
 	if anchor == "" {
 		selection.NeighborhoodExcludedAnchorMissing = 1
@@ -231,7 +231,7 @@ func SelectResolverPrimarySnapshotForCall(resolver *spot.SignalResolver, key spo
 		if snap.State != spot.ResolverStateConfident && snap.State != spot.ResolverStateProbable {
 			continue
 		}
-		winner := spot.NormalizeCallsign(snap.Winner)
+		winner := snap.Winner
 		if winner == "" {
 			continue
 		}
@@ -378,9 +378,9 @@ func SelectResolverPrimarySnapshotForCall(resolver *spot.SignalResolver, key spo
 	if !selection.NeighborhoodSplit {
 		exactWinner := ""
 		if exactOK {
-			exactWinner = spot.NormalizeCallsign(exact.Winner)
+			exactWinner = spot.NormalizeSpotDXCallsign(exact.Winner)
 		}
-		if exactWinner != "" && !strings.EqualFold(exactWinner, synth.Winner) {
+		if exactWinner != "" && exactWinner != synth.Winner {
 			comparable, rejectReason := resolverNeighborhoodComparable(exactWinner, synth.Winner, key.Mode, cfg)
 			if !comparable {
 				switch rejectReason {
@@ -663,7 +663,7 @@ func NormalizedDXCall(s *spot.Spot) string {
 	if call == "" {
 		call = s.DXCall
 	}
-	return spot.NormalizeCallsign(call)
+	return spot.NormalizeSpotDXCallsign(call)
 }
 
 // BuildResolverEvidenceSnapshot creates immutable resolver evidence from one spot.

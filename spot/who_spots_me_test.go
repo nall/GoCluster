@@ -44,6 +44,27 @@ func TestWhoSpotsMeStoreGroupsByContinentAndExpires(t *testing.T) {
 	}
 }
 
+func TestWhoSpotsMeStoreIgnoresNumericSSIDForDXKey(t *testing.T) {
+	store := NewWhoSpotsMeStoreWithOptions(WhoSpotsMeOptions{
+		Window:               10 * time.Second,
+		Shards:               1,
+		MaxEntries:           8,
+		MaxCountriesPerEntry: 4,
+		CleanupInterval:      time.Hour,
+	})
+	now := time.Unix(150, 0).UTC()
+
+	store.Record("W1AW-2", "20m", 291, "NA", now)
+
+	got := store.CountryCountsByContinent("W1AW-7", "20m", now)
+	want := map[string][]WhoSpotsMeCountryCount{
+		"NA": {{ADIF: 291, Count: 1}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SSID baseline key mismatch: got %#v want %#v", got, want)
+	}
+}
+
 func TestWhoSpotsMeStoreSkipsInvalidCountryMetadata(t *testing.T) {
 	store := NewWhoSpotsMeStoreWithOptions(WhoSpotsMeOptions{
 		Window:               10 * time.Second,

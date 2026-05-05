@@ -1,3 +1,9 @@
+// File role: Maintains replay A/B counters derived from resolver, temporal,
+// confidence, and correction outcomes.
+// Crawler notes: Start here when replay JSON metrics disagree with live
+// resolver behavior or when adding/removing replay comparison counters.
+// Related docs: docs/rbn_replay.md, docs/decision-log.md.
+// Related tests: cmd/rbn_replay/pipeline_test.go.
 package main
 
 import (
@@ -368,7 +374,7 @@ func projectedResolverConfidenceOutcome(snap spot.ResolverSnapshot) replayConfid
 	if snap.State != spot.ResolverStateConfident && snap.State != spot.ResolverStateProbable {
 		return replayConfidenceOutcome{Final: "?"}
 	}
-	winner := spot.NormalizeCallsign(snap.Winner)
+	winner := snap.Winner
 	if winner == "" || snap.TotalReporters <= 0 {
 		return replayConfidenceOutcome{Final: "?"}
 	}

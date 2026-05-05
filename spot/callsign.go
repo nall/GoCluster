@@ -164,6 +164,39 @@ func NormalizeCallsign(call string) string {
 	return normalized
 }
 
+// NormalizeSpotDXCallsign normalizes the station being spotted. DX-side numeric
+// SSIDs identify transport/session variants, not distinct spotted stations, so
+// only trailing numeric hyphen suffixes are removed here. Generic callsign
+// normalization is deliberately unchanged for login, DE, CTY, and ULS paths.
+func NormalizeSpotDXCallsign(call string) string {
+	normalized := NormalizeCallsign(call)
+	stripped := stripTrailingNumericSSID(normalized)
+	if stripped == normalized {
+		return normalized
+	}
+	return NormalizeCallsign(stripped)
+}
+
+func stripTrailingNumericSSID(call string) string {
+	lastDash := strings.LastIndexByte(call, '-')
+	if lastDash < 0 || lastDash == len(call)-1 {
+		return call
+	}
+	for i := lastDash + 1; i < len(call); i++ {
+		if call[i] < '0' || call[i] > '9' {
+			return call
+		}
+	}
+	return call[:lastDash]
+}
+
+// NormalizeOwnCallsign normalizes the baseline call used by own-call features.
+// Login identity stays separate; this intentionally ignores numeric SSIDs only
+// for self/own matching, manual telnet sender display, and WHOSPOTSME lookups.
+func NormalizeOwnCallsign(call string) string {
+	return NormalizeSpotDXCallsign(call)
+}
+
 // Purpose: Validate a normalized callsign for basic format rules.
 // Key aspects: Length bounds (3..15), allowed characters, and at least one
 // call-like identity segment so mode/command tokens cannot pass prefix CTY gates.

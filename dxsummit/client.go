@@ -414,7 +414,7 @@ func parseRecordWithReporter(record rawSpot, badCallReporter BadCallReporter) (*
 		return nil, fmt.Errorf("dxsummit: unsupported frequency %.1f", freq)
 	}
 	mode := parseRecordMode(record.Info, freq)
-	dxCall := spot.NormalizeCallsign(record.DXCall)
+	dxCall := spot.NormalizeSpotDXCallsign(record.DXCall)
 	if !spot.IsValidNormalizedCallsign(dxCall) {
 		reportDXSummitBadCall(badCallReporter, "DX", "invalid_callsign", record.DXCall, record.DECall, record.DXCall, mode)
 		return nil, fmt.Errorf("dxsummit: invalid DX call %q", record.DXCall)

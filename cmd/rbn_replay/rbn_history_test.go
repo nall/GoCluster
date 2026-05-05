@@ -29,6 +29,24 @@ func TestRBNHistoryCSVSeparatesSpotClassFromTXMode(t *testing.T) {
 	}
 }
 
+func TestRBNHistoryCSVCanonicalizesDXNumericSSID(t *testing.T) {
+	parser := newTestRBNHistoryCSV(t, strings.Join([]string{
+		"callsign,freq,band,dx,db,date,mode,tx_mode",
+		"K1ABC,3547.0,80m,OZ4ADX-2,5,2026-04-26 03:18:00,CQ,CW",
+	}, "\n"))
+
+	row, ok, err := parser.Read()
+	if err != nil {
+		t.Fatalf("Read error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected row to parse")
+	}
+	if row.DXCall != "OZ4ADX" {
+		t.Fatalf("expected canonical DX OZ4ADX, got %q", row.DXCall)
+	}
+}
+
 func TestRBNHistoryCSVReadsDXSpotClassAsSkippedClass(t *testing.T) {
 	parser := newTestRBNHistoryCSV(t, strings.Join([]string{
 		"callsign,freq,band,dx,db,date,mode,tx_mode",

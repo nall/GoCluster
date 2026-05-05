@@ -26,6 +26,20 @@ func TestParsePC11IgnoresCommentTimeToken(t *testing.T) {
 	}
 }
 
+func TestParseSpotCanonicalizesDXNumericSSID(t *testing.T) {
+	frame, err := ParseFrame("PC11^14074.0^K1ABC-2^23-Dec-2025^2001Z^CQ TEST^W1XYZ^ORIGIN")
+	if err != nil {
+		t.Fatalf("ParseFrame error: %v", err)
+	}
+	spotEntry, err := parseSpotFromFrame(frame, "FALLBACK")
+	if err != nil {
+		t.Fatalf("parseSpotFromFrame error: %v", err)
+	}
+	if spotEntry.DXCall != "K1ABC" || spotEntry.DXCallNorm != "K1ABC" {
+		t.Fatalf("expected canonical DX K1ABC, got DXCall=%q DXCallNorm=%q", spotEntry.DXCall, spotEntry.DXCallNorm)
+	}
+}
+
 func TestParseSpotterStripsOnlyTerminalSkimmerMarker(t *testing.T) {
 	tests := []struct {
 		name string

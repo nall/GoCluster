@@ -8,6 +8,7 @@ This directory is the source of truth for telnet command help. The public `HELP`
 - per-dialect HELP catalogs
 - build, dedupe, and path-glyph HELP notes injected from runtime snapshots
 - history, DXCC, and build-info read paths used by `SHOW DX`, `SHOW MYDX`, `SHOW DXCC`, and `SHOW BUILD`
+- own-call identity display used by `SHOW OWN`
 
 ## HELP Source Of Truth
 
@@ -39,6 +40,8 @@ The operator-facing commands handled here are:
 - `SHOW MYDX`
 - `SHOW DXCC`
 - `SHOW BUILD`
+- `SHOW OWN`
+- `WHOSPOTSME [band]`
 - `SHOW DEDUPE`
 - `SET DEDUPE`
 - `SET DIAG`
@@ -55,6 +58,9 @@ Filter mutation itself is handled in the telnet layer. This package documents th
 ## Notes For Documentation
 
 - If HELP text changes here, the main README HELP block must change too.
+- Numeric SSIDs on DX calls are stripped at spot construction boundaries; login
+  calls remain distinct session identities while `SHOW OWN` and `WHOSPOTSME`
+  use the baseline own call.
 - Path-glyph notes should match the shipped glyph symbols from `data/config/path_reliability.yaml`.
 - Dedupe HELP should match the effective secondary dedupe windows from `data/config`.
 

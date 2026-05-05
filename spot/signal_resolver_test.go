@@ -42,6 +42,38 @@ func TestSignalResolverQueueSaturationIsNonBlocking(t *testing.T) {
 	}
 }
 
+func TestSignalResolverCanonicalizesDXNumericSSIDAtEvidenceIngress(t *testing.T) {
+	resolver := NewSignalResolver(SignalResolverConfig{
+		QueueSize:           8,
+		MaxActiveKeys:       4,
+		MaxCandidatesPerKey: 4,
+		MaxReportersPerCand: 4,
+		EvalMinInterval:     5 * time.Millisecond,
+		SweepInterval:       5 * time.Millisecond,
+	})
+	resolver.Start()
+	t.Cleanup(resolver.Stop)
+
+	key := NewResolverSignalKey(7010.0, "40m", "CW", 500)
+	now := time.Now().UTC()
+	events := []ResolverEvidence{
+		{ObservedAt: now, Key: key, DXCall: "K1ABC-2", Spotter: "K1AAA", FrequencyKHz: 7010.0, RecencyWindow: time.Minute},
+		{ObservedAt: now, Key: key, DXCall: "K1ABC", Spotter: "K1AAB", FrequencyKHz: 7010.0, RecencyWindow: time.Minute},
+	}
+	for _, ev := range events {
+		if ok := resolver.Enqueue(ev); !ok {
+			t.Fatalf("expected evidence enqueue for %q to succeed", ev.DXCall)
+		}
+	}
+
+	waitForResolverSnapshotState(t, resolver, key, time.Second, func(s ResolverSnapshot) bool {
+		if s.Winner != "K1ABC" || s.WinnerSupport != 2 || len(s.CandidateRanks) != 1 {
+			return false
+		}
+		return s.CandidateRanks[0].Call == "K1ABC" && s.CandidateRanks[0].Support == 2
+	})
+}
+
 func TestSignalResolverSnapshotCellsSupportLookupAndMetrics(t *testing.T) {
 	resolver := NewSignalResolver(SignalResolverConfig{})
 	key := NewResolverSignalKey(7010.0, "40m", "CW", 500)
@@ -512,7 +544,6 @@ func TestRunnerForResolverCallDeterministicRanking(t *testing.T) {
 	}
 }
 
-//nolint:unparam // Timeout stays explicit for resolver tests that may need different async wait budgets.
 func waitForResolverSnapshotState(t *testing.T, resolver *SignalResolver, key ResolverSignalKey, timeout time.Duration, predicate func(ResolverSnapshot) bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

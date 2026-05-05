@@ -22,6 +22,19 @@ func TestParseRBNRecordSeparatesSpotClassFromTXMode(t *testing.T) {
 	}
 }
 
+func TestParseRBNRecordCanonicalizesDXNumericSSID(t *testing.T) {
+	header := mustParseTestRBNHeader(t)
+	record := []string{"K1ABC", "3547.0", "80m", "OZ4ADX-2", "5", "2026-04-26 03:18:00", "CQ", "CW"}
+
+	row, status := parseRBNRecord(record, header)
+	if status != rbnRecordAccepted {
+		t.Fatalf("expected accepted row, got status %d", status)
+	}
+	if row.DXCall != "OZ4ADX" {
+		t.Fatalf("expected canonical DX OZ4ADX, got %q", row.DXCall)
+	}
+}
+
 func TestParseRBNRecordSkipsDXSpotClass(t *testing.T) {
 	header := mustParseTestRBNHeader(t)
 	record := []string{"K1ABC", "3547.0", "80m", "OZ4ADX", "5", "2026-04-26 03:18:00", "DX", "CW"}

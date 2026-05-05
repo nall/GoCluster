@@ -180,7 +180,7 @@ func (d *TemporalDecoder) Observe(obs TemporalObservation) (bool, string) {
 	if obs.ID == 0 {
 		return false, "invalid_id"
 	}
-	subject := spot.NormalizeCallsign(obs.SubjectCall)
+	subject := spot.NormalizeSpotDXCallsign(obs.SubjectCall)
 	if subject == "" {
 		return false, "missing_subject"
 	}
@@ -314,7 +314,7 @@ func (d *TemporalDecoder) Evaluate(id uint64, now time.Time, force bool) Tempora
 		decision.Action = TemporalDecisionActionApply
 		decision.Reason = "committed"
 		last := strings.TrimSpace(d.lastCommitted[req.key])
-		if last != "" && !strings.EqualFold(last, winner) {
+		if last != "" && last != winner {
 			decision.PathSwitched = true
 		}
 		d.lastCommitted[req.key] = winner
@@ -407,7 +407,6 @@ func selectionForTemporalWinner(base ResolverPrimarySelection, winner string) Re
 	if !base.SnapshotOK {
 		return base
 	}
-	winner = spot.NormalizeCallsign(winner)
 	if winner == "" {
 		return base
 	}
@@ -433,8 +432,8 @@ func runnerForTemporalSnapshot(snap spot.ResolverSnapshot, winner string) (strin
 	bestSupport := 0
 	bestWeighted := 0
 	for _, candidate := range snap.CandidateRanks {
-		call := spot.NormalizeCallsign(candidate.Call)
-		if call == "" || strings.EqualFold(call, winner) {
+		call := candidate.Call
+		if call == "" || call == winner {
 			continue
 		}
 		if candidate.WeightedSupportMilli > bestWeighted {
@@ -547,8 +546,7 @@ func (d *TemporalDecoder) candidatesForEvent(event temporalEvent, fallbackSubjec
 	set := make(map[string]struct{}, d.cfg.MaxObsCandidates+2)
 	out := make([]string, 0, d.cfg.MaxObsCandidates+2)
 
-	appendCall := func(value string) {
-		call := spot.NormalizeCallsign(value)
+	appendStoredCall := func(call string) {
 		if call == "" {
 			return
 		}
@@ -558,23 +556,25 @@ func (d *TemporalDecoder) candidatesForEvent(event temporalEvent, fallbackSubjec
 		set[call] = struct{}{}
 		out = append(out, call)
 	}
+	appendInputCall := func(value string) {
+		appendStoredCall(spot.NormalizeSpotDXCallsign(value))
+	}
 
 	if event.selection.SnapshotOK {
 		for idx, candidate := range event.selection.Snapshot.CandidateRanks {
 			if idx >= d.cfg.MaxObsCandidates {
 				break
 			}
-			appendCall(candidate.Call)
+			appendStoredCall(candidate.Call)
 		}
-		appendCall(event.selection.Snapshot.Winner)
+		appendStoredCall(event.selection.Snapshot.Winner)
 	}
-	appendCall(event.subject)
-	appendCall(fallbackSubject)
+	appendStoredCall(event.subject)
+	appendInputCall(fallbackSubject)
 	return out
 }
 
 func (d *TemporalDecoder) emissionScore(event temporalEvent, call string, candidateCount int) int {
-	call = spot.NormalizeCallsign(call)
 	if call == "" {
 		return 0
 	}
@@ -600,25 +600,23 @@ func (d *TemporalDecoder) emissionScore(event temporalEvent, call string, candid
 			return (support + 1) * temporalEmissionScale / denom
 		}
 	}
-	if strings.EqualFold(call, event.subject) {
+	if call == event.subject {
 		return 1
 	}
 	return 0
 }
 
 func (d *TemporalDecoder) transitionScore(prevCall, nextCall, mode string) int {
-	prev := spot.NormalizeCallsign(prevCall)
-	next := spot.NormalizeCallsign(nextCall)
-	if prev == "" || next == "" {
+	if prevCall == "" || nextCall == "" {
 		return -d.cfg.SwitchPenalty
 	}
-	if strings.EqualFold(prev, next) {
+	if prevCall == nextCall {
 		return d.cfg.StayBonus
 	}
 	penalty := d.cfg.SwitchPenalty
-	if relatedByTemporalFamily(prev, next, d.familyPolicy) {
+	if relatedByTemporalFamily(prevCall, nextCall, d.familyPolicy) {
 		penalty = d.cfg.FamilySwitchPenalty
-	} else if spot.CallDistance(prev, next, mode, d.distanceModelCW, d.distanceModelRTTY) <= 1 {
+	} else if spot.CallDistance(prevCall, nextCall, mode, d.distanceModelCW, d.distanceModelRTTY) <= 1 {
 		penalty = d.cfg.Edit1SwitchPenalty
 	}
 	return -penalty
@@ -645,8 +643,7 @@ type temporalScore struct {
 func temporalUniverse(observed []string, prev map[string]int) []string {
 	set := make(map[string]struct{}, len(observed)+len(prev))
 	out := make([]string, 0, len(observed)+len(prev))
-	appendCall := func(value string) {
-		call := spot.NormalizeCallsign(value)
+	appendCall := func(call string) {
 		if call == "" {
 			return
 		}

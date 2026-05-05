@@ -43,7 +43,7 @@ func parsePC11(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 		return nil, fmt.Errorf("pc11: freq parse: %w", err)
 	}
 	dxRaw := strings.TrimSpace(fields[1])
-	dx := spot.NormalizeCallsign(dxRaw)
+	dx := spot.NormalizeSpotDXCallsign(dxRaw)
 	date := strings.TrimSpace(fields[2])
 	timeStr := strings.TrimSpace(fields[3])
 	comment := fields[4]
@@ -94,7 +94,7 @@ func parsePC61(fields []string, hop int, fallbackOrigin string) (*spot.Spot, err
 		return nil, fmt.Errorf("pc61: freq parse: %w", err)
 	}
 	dxRaw := strings.TrimSpace(fields[1])
-	dx := spot.NormalizeCallsign(dxRaw)
+	dx := spot.NormalizeSpotDXCallsign(dxRaw)
 	date := strings.TrimSpace(fields[2])
 	timeStr := strings.TrimSpace(fields[3])
 	comment := fields[4]

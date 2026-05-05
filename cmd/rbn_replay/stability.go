@@ -1,3 +1,7 @@
+// File role: Computes follow-on stability metrics for RBN replay predictions.
+// Crawler notes: Start here for replay stability windows, bucket selection,
+// DX canonicalization in stability inputs, and follow-on evidence thresholds.
+// Related docs: README.md, docs/decisions/ADR-0115-dx-numeric-ssid-canonicalization.md.
 package main
 
 import (
@@ -64,7 +68,7 @@ func (c *replayStabilityCollector) ObserveRaw(row rbnHistoryRow) {
 	if c == nil {
 		return
 	}
-	call := spot.NormalizeCallsign(row.DXCall)
+	call := spot.NormalizeSpotDXCallsign(row.DXCall)
 	if call == "" || row.Time.IsZero() {
 		return
 	}

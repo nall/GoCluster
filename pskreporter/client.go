@@ -771,7 +771,7 @@ func (c *Client) normalizeMessage(msg *PSKRMessage, modeInfo pskModeInfo) (norma
 		freqKHz = canonicalFreqKHz
 		ftCanonicalized = canonicalFreqKHz != observedFreqKHz
 	}
-	dxCall := spot.NormalizeCallsign(msg.SenderCall)
+	dxCall := spot.NormalizeSpotDXCallsign(msg.SenderCall)
 	deCall := c.decorateSpotterCall(msg.ReceiverCall)
 	dxGrid := strutil.NormalizeUpper(msg.SenderLocator)
 	deGrid := strutil.NormalizeUpper(msg.ReceiverLocator)

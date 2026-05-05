@@ -1985,7 +1985,7 @@ func TestBroadcastAnnouncementRespectsFilter(t *testing.T) {
 func TestBroadcastSelfRespectsSelfToggle(t *testing.T) {
 	server := &Server{}
 	client := &Client{
-		callsign: "K1ABC",
+		callsign: "K1ABC-2",
 		spotChan: make(chan *spotEnvelope, 1),
 		filter:   filter.NewFilter(),
 	}
@@ -2017,11 +2017,11 @@ func TestDeliverSelfSpotRespectsSelfToggle(t *testing.T) {
 		clients: make(map[string]*Client),
 	}
 	client := &Client{
-		callsign: "K1ABC",
+		callsign: "K1ABC-2",
 		spotChan: make(chan *spotEnvelope, 1),
 		filter:   filter.NewFilter(),
 	}
-	server.clients["K1ABC"] = client
+	server.clients["K1ABC-2"] = client
 
 	spotMatch := spot.NewSpot("K1ABC/P", "W1XYZ", 14074.0, "FT8")
 	client.filter.SetSelfEnabled(false)

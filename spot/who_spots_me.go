@@ -1,3 +1,8 @@
+// File role: Owns the bounded rolling recent-heard store behind WHOSPOTSME.
+// Crawler notes: Start here for WHOSPOTSME key normalization, window expiry,
+// per-key country caps, shard ownership, and cleanup/eviction coupling.
+// Related docs: README.md, commands/README.md,
+// docs/decisions/ADR-0071-whospotsme-rolling-country-summary.md.
 package spot
 
 import (
@@ -414,7 +419,7 @@ func (s *WhoSpotsMeStore) scrubKeyFromBucketsLocked(key whoSpotsMeKey) {
 }
 
 func (s *WhoSpotsMeStore) normalizeKey(call, band string) (whoSpotsMeKey, bool) {
-	call = NormalizeCallsign(call)
+	call = NormalizeSpotDXCallsign(call)
 	band = NormalizeBand(band)
 	if call == "" || band == "" || band == "???" || !IsValidBand(band) {
 		return whoSpotsMeKey{}, false

@@ -170,7 +170,8 @@ Log in with your callsign. Useful first commands:
 - `HELP <command>`: show command-specific help.
 - `SHOW MYDX` or `SHOW DX`: show filtered spot history.
 - `SHOW DXCC <call>`: look up DXCC/ADIF and zones.
-- `WHOSPOTSME [band]`: show recent spotter countries for your call.
+- `SHOW OWN`: show your login call and baseline own call.
+- `WHOSPOTSME [band]`: show recent spotter countries for your baseline call.
 - `SET GRID <grid>`: set your 4-6 character Maidenhead grid.
 - `SET NOISE QUIET|RURAL|SUBURBAN|URBAN|INDUSTRIAL`: set receive noise class.
 - `SET PATHSAMPLES <count|DEFAULT>`: require more path samples than the cluster default, or clear your personal override.
@@ -189,6 +190,13 @@ Log in with your callsign. Useful first commands:
 
 The top-level repository README contains the generated default `HELP` output.
 That block is checked against the command processor in tests.
+
+Numeric SSIDs on the spotted DX call are removed regardless of ingest source.
+For example, a new DX call of `K1ABC-2` is materialized and displayed as
+`K1ABC`. Telnet login identity remains the full login call, while manual spots,
+`SHOW OWN`, self-spot matching, and `WHOSPOTSME` use the baseline call when a
+login has a numeric SSID. Existing archive files are not rewritten; old stored
+rows can still contain a numeric SSID.
 
 `SET DIAG MODE` is useful when the displayed mode is surprising. It shows
 `<mode>|<provenance>`, where blank modes are shown as `--`. Provenance tokens

@@ -29,6 +29,35 @@ func TestNewSpotIsHumanByDefault(t *testing.T) {
 	}
 }
 
+func TestSpotConstructorsCanonicalizeDXNumericSSID(t *testing.T) {
+	newSpot := NewSpot("K1ABC-2", "W1XYZ-1", 14074.0, "FT8")
+	if newSpot.DXCall != "K1ABC" || newSpot.DXCallNorm != "K1ABC" {
+		t.Fatalf("NewSpot DX not canonicalized: DXCall=%q DXCallNorm=%q", newSpot.DXCall, newSpot.DXCallNorm)
+	}
+	if newSpot.DECall != "W1XYZ-1" || newSpot.DECallNorm != "W1XYZ-1" {
+		t.Fatalf("NewSpot should preserve DE numeric SSID: DECall=%q DECallNorm=%q", newSpot.DECall, newSpot.DECallNorm)
+	}
+
+	normalized := NewSpotNormalized("K1ABC-7", "W1XYZ-1", 14074.0, "FT8")
+	if normalized.DXCall != "K1ABC" || normalized.DXCallNorm != "K1ABC" {
+		t.Fatalf("NewSpotNormalized DX not canonicalized: DXCall=%q DXCallNorm=%q", normalized.DXCall, normalized.DXCallNorm)
+	}
+	if normalized.DECall != "W1XYZ-1" || normalized.DECallNorm != "W1XYZ-1" {
+		t.Fatalf("NewSpotNormalized should preserve DE numeric SSID: DECall=%q DECallNorm=%q", normalized.DECall, normalized.DECallNorm)
+	}
+}
+
+func TestEnsureNormalizedCanonicalizesDXNumericSSID(t *testing.T) {
+	s := &Spot{DXCall: "K1ABC-2", DECall: "W1XYZ-1", Frequency: 14074.0, Mode: "FT8"}
+	s.EnsureNormalized()
+	if s.DXCall != "K1ABC" || s.DXCallNorm != "K1ABC" {
+		t.Fatalf("EnsureNormalized DX not canonicalized: DXCall=%q DXCallNorm=%q", s.DXCall, s.DXCallNorm)
+	}
+	if s.DECall != "W1XYZ-1" || s.DECallNorm != "W1XYZ-1" {
+		t.Fatalf("EnsureNormalized should preserve DE numeric SSID: DECall=%q DECallNorm=%q", s.DECall, s.DECallNorm)
+	}
+}
+
 func TestNewSpotBeaconFlag(t *testing.T) {
 	s := NewSpot("W1ABC/B", "K1XYZ", 14074.5, "CW")
 	if !s.IsBeacon {

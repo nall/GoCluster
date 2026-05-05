@@ -26,6 +26,26 @@ func TestNormalizeCallsignStripsPortableSuffix(t *testing.T) {
 	}
 }
 
+func TestNormalizeSpotDXCallsignStripsOnlyTrailingNumericSSID(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "CALL-2", want: "CALL"},
+		{in: "CALL-15", want: "CALL"},
+		{in: "CALL-ABC", want: "CALL-ABC"},
+		{in: "CALL-2/P", want: "CALL"},
+		{in: "CALL/P-2", want: "CALL"},
+		{in: "W6/CALL-2", want: "W6/CALL"},
+		{in: "CALL/B", want: "CALL/B"},
+	}
+	for _, tt := range tests {
+		if got := NormalizeSpotDXCallsign(tt.in); got != tt.want {
+			t.Fatalf("NormalizeSpotDXCallsign(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestIsValidCallsignRejectsNonDigitWithSlash(t *testing.T) {
 	if IsValidCallsign("KWS/NM") {
 		t.Fatalf("IsValidCallsign should reject KWS/NM because it lacks digits")

@@ -1,3 +1,7 @@
+// File role: Parses RBN history CSV rows for replay and correction evaluation.
+// Crawler notes: Start here for CSV schema aliases, DX canonicalization,
+// spot-class parsing, and historical row admission before replay construction.
+// Related docs: README.md, docs/decisions/ADR-0115-dx-numeric-ssid-canonicalization.md.
 package main
 
 import (
@@ -233,7 +237,7 @@ func (c *rbnHistoryCSV) Read() (rbnHistoryRow, bool, error) {
 		return rbnHistoryRow{}, false, nil
 	}
 
-	dxCall := spot.NormalizeCallsign(get(c.col.dx))
+	dxCall := spot.NormalizeSpotDXCallsign(get(c.col.dx))
 	spotter := spot.NormalizeCallsign(get(c.col.callsign))
 	mode := strutil.NormalizeUpper(get(c.col.txMode))
 	spotClass, _ := rbnfeed.NormalizeSpotClass(get(c.col.spotMode))

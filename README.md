@@ -39,8 +39,14 @@ release, and service details are later in this file and in
   `SET DIAG OFF|DEDUPE|SOURCE|CONF|PATH|MODE`.
 - To understand path hints, use `SET GRID` and `SET NOISE`, then use `SET DIAG PATH`
   on spots whose path glyphs look surprising.
-- To see recent spotter countries for your own call, use `WHOSPOTSME [band]`.
+- To confirm the baseline call used for own-call features, use `SHOW OWN`.
+- To see recent spotter countries for your baseline call, use `WHOSPOTSME [band]`.
 - To receive periodic solar summaries, use `SET SOLAR 15|30|60|OFF`.
+
+New DX spots are materialized and displayed without trailing numeric SSIDs on
+the DX call. For example, `K1ABC-2` is treated as `K1ABC` when it is the station
+being spotted. Login calls keep their session identity, but local own-call
+features ignore numeric SSIDs.
 
 ## HELP
 
@@ -56,6 +62,7 @@ SH DX - Alias of SHOW DX.
 SHOW MYDX - Show filtered spot history.
 SHOW DXCC - Look up DXCC/ADIF and zones.
 SHOW BUILD - Show binary build metadata.
+SHOW OWN - Show own-call identity.
 WHOSPOTSME - Show recent spotter countries.
 SHOW DEDUPE - Show dedupe policy.
 SET DEDUPE - Select dedupe policy.

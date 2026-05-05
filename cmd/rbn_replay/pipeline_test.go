@@ -66,7 +66,7 @@ func TestMaybeApplyResolverCorrectionReplayAppliesWinner(t *testing.T) {
 	evidenceWinnerA := spot.ResolverEvidence{
 		ObservedAt:    now.Add(-2 * time.Second),
 		Key:           key,
-		DXCall:        "K1ABC",
+		DXCall:        "K1ABC-2",
 		Spotter:       "W1AAA",
 		FrequencyKHz:  7010.0,
 		RecencyWindow: 60 * time.Second,
@@ -74,7 +74,7 @@ func TestMaybeApplyResolverCorrectionReplayAppliesWinner(t *testing.T) {
 	evidenceWinnerB := spot.ResolverEvidence{
 		ObservedAt:    now.Add(-1 * time.Second),
 		Key:           key,
-		DXCall:        "K1ABC",
+		DXCall:        "K1ABC-2",
 		Spotter:       "W1BBB",
 		FrequencyKHz:  7010.0,
 		RecencyWindow: 60 * time.Second,

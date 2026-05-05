@@ -223,10 +223,10 @@ func (p *Processor) ProcessCommandForClient(cmd string, spotter string, spotterI
 	if dialect == "cc" {
 		switch command {
 		case "SHOW/DX", "SH/DX":
-			return p.handleShow(append([]string{"DX"}, parts[1:]...), filterFn, dialect)
+			return p.handleShow(append([]string{"DX"}, parts[1:]...), filterFn, dialect, spotter)
 		case "SHOW", "SH":
 			if len(parts) >= 2 && parts[1] == "DX" {
-				return p.handleShow(append([]string{"DX"}, parts[2:]...), filterFn, dialect)
+				return p.handleShow(append([]string{"DX"}, parts[2:]...), filterFn, dialect, spotter)
 			}
 		}
 	} else {
@@ -247,7 +247,7 @@ func (p *Processor) ProcessCommandForClient(cmd string, spotter string, spotterI
 		if len(parts) < 2 {
 			return showDXUsage(dialect)
 		}
-		return p.handleShow(parts[1:], filterFn, dialect)
+		return p.handleShow(parts[1:], filterFn, dialect, spotter)
 	case "BYE", "QUIT", "EXIT":
 		return "BYE"
 	default:
@@ -393,6 +393,16 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	)
 	add("SHOW BUILD", "SHOW BUILD - Show binary build metadata.", showBuildLines)
 
+	showOwnLines := helpEntryLines(
+		"SHOW OWN - Show your login and baseline own call.",
+		[]string{"SHOW OWN"},
+		nil,
+		[]string{
+			"Numeric SSIDs are ignored for own-call features.",
+		},
+	)
+	add("SHOW OWN", "SHOW OWN - Show own-call identity.", showOwnLines)
+
 	whoSpotsMeLines := helpEntryLines(
 		"WHOSPOTSME - Show recent spotter countries for your call.",
 		[]string{"WHOSPOTSME [band]"},
@@ -515,7 +525,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	if dialect == "cc" {
 		showLines := helpEntryLines(
 			"SHOW - See SHOW subcommands.",
-			[]string{"SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD"},
+			[]string{"SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD", "SHOW OWN"},
 			nil,
 			[]string{
 				"Use HELP SHOW/DX for the history alias.",
@@ -660,6 +670,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SHOW MYDX",
 			"SHOW DXCC",
 			"SHOW BUILD",
+			"SHOW OWN",
 			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
@@ -695,7 +706,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 	} else {
 		showLines := helpEntryLines(
 			"SHOW - See SHOW subcommands.",
-			[]string{"SHOW DX [count|selector]", "SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD"},
+			[]string{"SHOW DX [count|selector]", "SHOW MYDX [count|selector]", "SHOW DXCC <prefix|callsign>", "SHOW BUILD", "SHOW OWN"},
 			nil,
 			[]string{
 				"Use HELP SHOW DX for the history alias.",
@@ -791,6 +802,7 @@ func buildHelpCatalog(dialect string, dedupeHelp DedupeHelpConfig, whoSpotsMeHel
 			"SHOW MYDX",
 			"SHOW DXCC",
 			"SHOW BUILD",
+			"SHOW OWN",
 			"WHOSPOTSME",
 			"SHOW DEDUPE",
 			"SET DEDUPE",
@@ -824,6 +836,8 @@ func normalizeHelpTopic(dialect string, topic string) string {
 		return "PASS NEARBY"
 	case strings.HasPrefix(upper, "SHOW BUILD"):
 		return "SHOW BUILD"
+	case strings.HasPrefix(upper, "SHOW OWN"):
+		return "SHOW OWN"
 	case strings.HasPrefix(upper, "SHOW DXCC"):
 		return "SHOW DXCC"
 	case strings.HasPrefix(upper, "WHOSPOTSME"):
@@ -1427,7 +1441,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 	if spotterRaw == "" {
 		return "DX command requires a logged-in callsign.\n"
 	}
-	spotterNorm := spot.NormalizeCallsign(spotterRaw)
+	spotterNorm := spot.NormalizeOwnCallsign(spotterRaw)
 	if !spot.IsValidNormalizedCallsign(spotterNorm) {
 		p.reportBadCall("manual:"+spotterRaw, "DE", "invalid_callsign", spotterRaw, spotterRaw, "", "", "manual_dx")
 		return "DX command requires a valid callsign.\n"
@@ -1440,7 +1454,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 	if !ok {
 		return "Invalid frequency. Use a kHz value like 7001.0.\n"
 	}
-	dx := spot.NormalizeCallsign(dxRaw)
+	dx := spot.NormalizeSpotDXCallsign(dxRaw)
 	if !spot.IsValidNormalizedCallsign(dx) {
 		p.reportBadCall("manual:"+spotterNorm, "DX", "invalid_callsign", dxRaw, spotterNorm, dxRaw, manualDXMode(fields, freq), "manual_dx")
 		return "Invalid DX callsign.\n"
@@ -1528,7 +1542,7 @@ func (p *Processor) handleDX(fields []string, spotter string, spotterIP string) 
 // Key aspects: Supports SHOW/DX, SHOW/MYDX, and SHOW DXCC lookups.
 // Upstream: ProcessCommandForClient (SHOW/SH).
 // Downstream: handleShowMYDX, handleShowDXCC.
-func (p *Processor) handleShow(args []string, filterFn func(*spot.Spot) bool, dialect string) string {
+func (p *Processor) handleShow(args []string, filterFn func(*spot.Spot) bool, dialect string, spotter string) string {
 	if len(args) == 0 {
 		return showDXUsage(dialect)
 	}
@@ -1551,6 +1565,11 @@ func (p *Processor) handleShow(args []string, filterFn func(*spot.Spot) bool, di
 			return "Usage: SHOW BUILD\n"
 		}
 		return p.handleShowBuild()
+	case "OWN":
+		if len(args) != 1 {
+			return "Usage: SHOW OWN\n"
+		}
+		return p.handleShowOwn(spotter)
 	default:
 		return fmt.Sprintf("Unknown SHOW subcommand: %s\n", subCmd)
 	}
@@ -1583,6 +1602,15 @@ func (p *Processor) handleShowBuild() string {
 		lines = append(lines, "Go: "+info.GoVersion)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func (p *Processor) handleShowOwn(spotter string) string {
+	loginCall := strings.TrimSpace(spotter)
+	ownCall := spot.NormalizeOwnCallsign(loginCall)
+	if ownCall == "" {
+		return noLoggedUserMsg
+	}
+	return fmt.Sprintf("Own call: %s\nLogin call: %s\nSSID handling: numeric SSIDs are ignored for own-call features.\n", ownCall, loginCall)
 }
 
 // Purpose: Render recent stored spots filtered by client rules and optional DXCC selector.
@@ -1687,7 +1715,7 @@ func (p *Processor) handleWhoSpotsMe(args []string, spotter string) string {
 	if len(args) > 1 {
 		return whoSpotsMeUsage()
 	}
-	call := spot.NormalizeCallsign(strings.TrimSpace(spotter))
+	call := spot.NormalizeOwnCallsign(strings.TrimSpace(spotter))
 	if call == "" {
 		return noLoggedUserMsg
 	}
@@ -1932,7 +1960,7 @@ func whoSpotsMeHelpNotes(cfg WhoSpotsMeHelpConfig) []string {
 		"Omit band to show bands with rolling-window data.",
 		"Counts accepted observations before secondary broadcast dedupe.",
 		"Counts are totals, not unique spotters.",
-		"Shows up to 5 DXCC prefixes per continent for your logged-in callsign.",
+		"Shows up to 5 DXCC prefixes per continent for your baseline call.",
 	}
 }
 

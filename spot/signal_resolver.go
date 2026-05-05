@@ -881,7 +881,7 @@ func normalizeSignalResolverConfig(cfg SignalResolverConfig) SignalResolverConfi
 }
 
 func normalizeResolverEvidence(e ResolverEvidence) (ResolverEvidence, bool) {
-	call := NormalizeCallsign(e.DXCall)
+	call := NormalizeSpotDXCallsign(e.DXCall)
 	spotter := strutil.NormalizeUpper(e.Spotter)
 	if call == "" || spotter == "" {
 		return ResolverEvidence{}, false

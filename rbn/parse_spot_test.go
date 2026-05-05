@@ -39,6 +39,16 @@ func TestACParserExtractsModeSNRAndGrid(t *testing.T) {
 	}
 }
 
+func TestACParserCanonicalizesDXNumericSSID(t *testing.T) {
+	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
+	c.parseSpot("DX de K1ABC: 3547.0 OZ4ADX-2 CW 5 dB CQ 0318Z")
+
+	s := mustReadSpot(t, c)
+	if s.DXCall != "OZ4ADX" || s.DXCallNorm != "OZ4ADX" {
+		t.Fatalf("expected canonical DX OZ4ADX, got DXCall=%q DXCallNorm=%q", s.DXCall, s.DXCallNorm)
+	}
+}
+
 func TestACParserLeavesModeBlankWithoutExplicitToken(t *testing.T) {
 	c := NewClient("example.com", 0, "N0FT", "UPSTREAM", nil, false, 10)
 	line := "DX de K0DG: 28015.1 K7SS WA CQ 1912Z"

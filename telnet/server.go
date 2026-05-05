@@ -2335,22 +2335,32 @@ func (s *Server) DeliverSelfSpotOwned(dxCall string, snapshot *spot.Spot) {
 	if s == nil || snapshot == nil || dxCall == "" {
 		return
 	}
-	s.clientsMutex.RLock()
-	client := s.clients[dxCall]
-	s.clientsMutex.RUnlock()
-	if client == nil {
+	dxCall = spot.NormalizeSpotDXCallsign(dxCall)
+	if dxCall == "" {
 		return
 	}
-
-	client.filterMu.RLock()
-	allowSelf := client.filter.SelfEnabled() && client.filter.AllowsToxicity(snapshot)
-	client.filterMu.RUnlock()
-	if !allowSelf {
+	s.clientsMutex.RLock()
+	clients := make([]*Client, 0, 1)
+	for _, client := range s.clients {
+		if client != nil && normalizedOwnCall(client.callsign) == dxCall {
+			clients = append(clients, client)
+		}
+	}
+	s.clientsMutex.RUnlock()
+	if len(clients) == 0 {
 		return
 	}
 
 	enqueueAt := time.Now().UTC()
-	client.enqueueSpot(&spotEnvelope{spot: snapshot, enqueueAt: enqueueAt})
+	for _, client := range clients {
+		client.filterMu.RLock()
+		allowSelf := client.filter.SelfEnabled() && client.filter.AllowsToxicity(snapshot)
+		client.filterMu.RUnlock()
+		if !allowSelf {
+			continue
+		}
+		client.enqueueSpot(&spotEnvelope{spot: snapshot, enqueueAt: enqueueAt})
+	}
 }
 
 // BroadcastRaw sends a raw line to all connected clients without formatting.
@@ -2699,15 +2709,15 @@ func normalizedDXCall(s *spot.Spot) string {
 		return ""
 	}
 	if s.DXCallNorm != "" {
-		return strutil.NormalizeUpper(s.DXCallNorm)
+		return spot.NormalizeSpotDXCallsign(s.DXCallNorm)
 	}
-	return spot.NormalizeCallsign(s.DXCall)
+	return spot.NormalizeSpotDXCallsign(s.DXCall)
 }
 
 // isSelfMatch reports whether the spot DX call matches the provided callsign.
 // Both values are normalized for portable/SSID consistency.
 func isSelfMatch(s *spot.Spot, callsign string) bool {
-	callsign = strutil.NormalizeUpper(callsign)
+	callsign = normalizedOwnCall(callsign)
 	if callsign == "" {
 		return false
 	}
@@ -2716,6 +2726,10 @@ func isSelfMatch(s *spot.Spot, callsign string) bool {
 		return false
 	}
 	return dxCall == callsign
+}
+
+func normalizedOwnCall(callsign string) string {
+	return spot.NormalizeOwnCallsign(callsign)
 }
 
 func (s *Server) deliverJob(job *broadcastJob) {
@@ -3317,7 +3331,7 @@ func (s *Server) handleClient(conn net.Conn, ticket *preloginTicket) {
 			if spotEntry == nil {
 				return false
 			}
-			if strings.EqualFold(spotEntry.DXCall, client.callsign) {
+			if isSelfMatch(spotEntry, client.callsign) {
 				client.filterMu.RLock()
 				allowed := client.filter.AllowsToxicity(spotEntry)
 				client.filterMu.RUnlock()

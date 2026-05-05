@@ -2180,7 +2180,7 @@ func maybeApplyResolverCorrectionWithSelectionOverride(
 		return false
 	}
 
-	winnerCall := spot.NormalizeCallsign(snapshot.Winner)
+	winnerCall := spot.NormalizeSpotDXCallsign(snapshot.Winner)
 	if winnerCall == "" {
 		observeResolverPrimaryDecision(tracker, "rejected", resolverDecisionWinnerMissing, 1)
 		return false

@@ -1330,8 +1330,8 @@ func TestMaybeApplyResolverCorrectionAppliesWinner(t *testing.T) {
 	key := spot.NewResolverSignalKey(7010.0, "40m", "CW", 500)
 	now := time.Now().UTC()
 	evidence := []spot.ResolverEvidence{
-		{ObservedAt: now, Key: key, DXCall: "K1ABC", Spotter: "N0AAA", FrequencyKHz: 7010.0, RecencyWindow: 30 * time.Second},
-		{ObservedAt: now, Key: key, DXCall: "K1ABC", Spotter: "N0BBB", FrequencyKHz: 7010.0, RecencyWindow: 30 * time.Second},
+		{ObservedAt: now, Key: key, DXCall: "K1ABC-2", Spotter: "N0AAA", FrequencyKHz: 7010.0, RecencyWindow: 30 * time.Second},
+		{ObservedAt: now, Key: key, DXCall: "K1ABC-2", Spotter: "N0BBB", FrequencyKHz: 7010.0, RecencyWindow: 30 * time.Second},
 		{ObservedAt: now, Key: key, DXCall: "K1ABD", Spotter: "N0CCC", FrequencyKHz: 7010.0, RecencyWindow: 30 * time.Second},
 	}
 	for _, ev := range evidence {
@@ -1343,7 +1343,7 @@ func TestMaybeApplyResolverCorrectionAppliesWinner(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		snap, ok := resolver.Lookup(key)
-		if ok && snap.Winner == "K1ABC" && snap.WinnerSupport >= 2 && (snap.State == spot.ResolverStateConfident || snap.State == spot.ResolverStateProbable) {
+		if ok && spot.NormalizeSpotDXCallsign(snap.Winner) == "K1ABC" && snap.WinnerSupport >= 2 && (snap.State == spot.ResolverStateConfident || snap.State == spot.ResolverStateProbable) {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)

@@ -67,6 +67,22 @@ func TestParseRecordPreservesDXSummitMarkerAndCommentFields(t *testing.T) {
 	}
 }
 
+func TestParseRecordCanonicalizesDXNumericSSID(t *testing.T) {
+	sp, err := parseRecord(rawSpot{
+		ID:        66711549,
+		DECall:    "EA5JLX-@",
+		DXCall:    "K2GOD-2",
+		Frequency: 21074.4,
+		Time:      "2026-04-21T19:59:09",
+	})
+	if err != nil {
+		t.Fatalf("parseRecord error: %v", err)
+	}
+	if sp.DXCall != "K2GOD" || sp.DXCallNorm != "K2GOD" {
+		t.Fatalf("expected canonical DX K2GOD, got DXCall=%q DXCallNorm=%q", sp.DXCall, sp.DXCallNorm)
+	}
+}
+
 func TestParseRecordStripsOnlyTerminalSkimmerMarker(t *testing.T) {
 	tests := []struct {
 		name string

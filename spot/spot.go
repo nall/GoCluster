@@ -142,7 +142,7 @@ func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
 		modeNorm = canonical
 	}
 	band := FreqToBand(freq)
-	dxNorm := NormalizeCallsign(dxCall)
+	dxNorm := NormalizeSpotDXCallsign(dxCall)
 	deNorm := NormalizeCallsign(deCall)
 	spot := &Spot{
 		DXCall:     dxNorm,
@@ -181,7 +181,7 @@ func NewSpotNormalized(dxCallNorm, deCallNorm string, freq float64, mode string)
 		modeNorm = canonical
 	}
 	band := FreqToBand(freq)
-	dxCall := strings.TrimSpace(dxCallNorm)
+	dxCall := NormalizeSpotDXCallsign(dxCallNorm)
 	deCall := strings.TrimSpace(deCallNorm)
 	spot := &Spot{
 		DXCall:     dxCall,
@@ -438,7 +438,11 @@ func (s *Spot) EnsureNormalized() {
 		s.BandNorm = NormalizeBand(s.Band)
 	}
 	if s.DXCallNorm == "" && s.DXCall != "" {
-		s.DXCallNorm = NormalizeCallsign(s.DXCall)
+		s.DXCallNorm = NormalizeSpotDXCallsign(s.DXCall)
+	}
+	if s.DXCallNorm != "" {
+		s.DXCallNorm = NormalizeSpotDXCallsign(s.DXCallNorm)
+		s.DXCall = s.DXCallNorm
 	}
 	if s.DECallNorm == "" && s.DECall != "" {
 		s.DECallNorm = NormalizeCallsign(s.DECall)

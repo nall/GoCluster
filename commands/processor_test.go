@@ -73,7 +73,7 @@ func (f *fakeWhoSpotsMeQuerier) CountryCountsByContinent(call, band string, _ ti
 	if f == nil {
 		return nil
 	}
-	call = spot.NormalizeCallsign(call)
+	call = spot.NormalizeOwnCallsign(call)
 	band = spot.NormalizeBand(band)
 	if byBand, ok := f.counts[call]; ok {
 		return byBand[band]
@@ -143,6 +143,28 @@ func TestDXCommandQueuesLoggerStyleSpot(t *testing.T) {
 		}
 		if s.SpotterIP != "203.0.113.5" {
 			t.Fatalf("SpotterIP mismatch: %q", s.SpotterIP)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for spot")
+	}
+}
+
+func TestDXCommandUsesBaselineSenderAndCanonicalDX(t *testing.T) {
+	input := make(chan *spot.Spot, 1)
+	p := NewProcessor(nil, nil, input, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("DX 7001 K8ZB-2 Testing", "N2WQ-7", "203.0.113.5", nil, "classic")
+	if !strings.Contains(resp, "Spot queued") {
+		t.Fatalf("expected queue response, got %q", resp)
+	}
+
+	select {
+	case s := <-input:
+		if s.DXCall != "K8ZB" || s.DXCallNorm != "K8ZB" {
+			t.Fatalf("expected canonical DX K8ZB, got DXCall=%q DXCallNorm=%q", s.DXCall, s.DXCallNorm)
+		}
+		if s.DECall != "N2WQ" || s.DECallNorm != "N2WQ" || s.SourceNode != "N2WQ" {
+			t.Fatalf("expected baseline sender N2WQ, got DECall=%q DECallNorm=%q SourceNode=%q", s.DECall, s.DECallNorm, s.SourceNode)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("timed out waiting for spot")
@@ -751,6 +773,26 @@ func TestShowBuild(t *testing.T) {
 	}
 }
 
+func TestShowOwnReportsLoginAndBaselineCall(t *testing.T) {
+	p := NewProcessor(nil, nil, nil, nil, nil, nil)
+
+	resp := p.ProcessCommandForClient("SHOW OWN", "N2WQ-7", "", nil, "go")
+	for _, want := range []string{
+		"Own call: N2WQ\n",
+		"Login call: N2WQ-7\n",
+		"SSID handling: numeric SSIDs are ignored",
+	} {
+		if !strings.Contains(resp, want) {
+			t.Fatalf("SHOW OWN missing %q in %q", want, resp)
+		}
+	}
+
+	resp = p.ProcessCommandForClient("SHOW OWN EXTRA", "N2WQ-7", "", nil, "go")
+	if resp != "Usage: SHOW OWN\n" {
+		t.Fatalf("expected SHOW OWN usage for extra args, got %q", resp)
+	}
+}
+
 func TestShowBuildDefaults(t *testing.T) {
 	p := NewProcessor(nil, nil, nil, nil, nil, nil)
 
@@ -799,6 +841,7 @@ func TestHelpLineWidth(t *testing.T) {
 		p.ProcessCommandForClient("HELP DX", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP PASS", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP SHOW BUILD", "N2WQ", "", nil, "go"),
+		p.ProcessCommandForClient("HELP SHOW OWN", "N2WQ", "", nil, "go"),
 		p.ProcessCommandForClient("HELP SHOW/DX", "N2WQ", "", nil, "cc"),
 		p.ProcessCommandForClient("HELP SET/FILTER", "N2WQ", "", nil, "cc"),
 	}
@@ -842,6 +885,11 @@ func TestHelpTopicGoDialect(t *testing.T) {
 		t.Fatalf("expected SHOW BUILD usage, got %q", resp)
 	}
 
+	resp = p.ProcessCommandForClient("HELP SHOW OWN", "N2WQ", "", nil, "go")
+	if !strings.Contains(resp, "Usage: SHOW OWN") {
+		t.Fatalf("expected SHOW OWN usage, got %q", resp)
+	}
+
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "go")
 	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage, got %q", resp)
@@ -881,6 +929,11 @@ func TestHelpTopicCCDialect(t *testing.T) {
 		t.Fatalf("expected SHOW BUILD usage in cc, got %q", resp)
 	}
 
+	resp = p.ProcessCommandForClient("HELP SHOW OWN", "N2WQ", "", nil, "cc")
+	if !strings.Contains(resp, "Usage: SHOW OWN") {
+		t.Fatalf("expected SHOW OWN usage in cc, got %q", resp)
+	}
+
 	resp = p.ProcessCommandForClient("HELP WHOSPOTSME", "N2WQ", "", nil, "cc")
 	if !strings.Contains(resp, "Usage: WHOSPOTSME [band]") {
 		t.Fatalf("expected WHOSPOTSME usage in cc, got %q", resp)
@@ -900,6 +953,7 @@ func TestHelpEntriesGoDialect(t *testing.T) {
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
 		{"SHOW BUILD", []string{"SHOW BUILD - Show binary build metadata", "Usage: SHOW BUILD"}},
+		{"SHOW OWN", []string{"SHOW OWN - Show your login and baseline own call", "Usage: SHOW OWN"}},
 		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
@@ -933,6 +987,7 @@ func TestHelpEntriesCCDialect(t *testing.T) {
 		{"SHOW MYDX", []string{"SHOW MYDX - Show filtered spot history", "stored spots"}},
 		{"SHOW DXCC", []string{"SHOW DXCC - Look up DXCC/ADIF and zones", "other prefixes"}},
 		{"SHOW BUILD", []string{"SHOW BUILD - Show binary build metadata", "Usage: SHOW BUILD"}},
+		{"SHOW OWN", []string{"SHOW OWN - Show your login and baseline own call", "Usage: SHOW OWN"}},
 		{"WHOSPOTSME", []string{"WHOSPOTSME - Show recent spotter countries", "Usage: WHOSPOTSME [band]"}},
 		{"SHOW DEDUPE", []string{"SHOW DEDUPE - Show your broadcast dedupe policy", "FAST = short window", "CQ zones"}},
 		{"SET DEDUPE", []string{"SET DEDUPE - Select broadcast dedupe policy", "FAST = short window", "CQ zones"}},
@@ -1013,7 +1068,7 @@ func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
 		}),
 	)
 
-	resp := p.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW", "", nil, "go")
+	resp := p.ProcessCommandForClient("WHOSPOTSME 20M", "W1AW-7", "", nil, "go")
 	if !strings.Contains(resp, "WHOSPOTSME 20M (last 10m):") {
 		t.Fatalf("expected heading with window, got %q", resp)
 	}
@@ -1027,7 +1082,7 @@ func TestWhoSpotsMeCommandFormatsPerContinentCounts(t *testing.T) {
 		t.Fatalf("expected NA row, got %q", resp)
 	}
 
-	resp = p.ProcessCommandForClient("WHOSPOTSME", "W1AW", "", nil, "go")
+	resp = p.ProcessCommandForClient("WHOSPOTSME", "W1AW-7", "", nil, "go")
 	if !strings.Contains(resp, "WHOSPOTSME (last 10m):\n") {
 		t.Fatalf("expected all-band heading with window, got %q", resp)
 	}
