@@ -1992,7 +1992,7 @@ func TestBroadcastSelfRespectsSelfToggle(t *testing.T) {
 
 	blocked := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
 	client.filter.SetSelfEnabled(false)
-	server.deliverJob(&broadcastJob{spot: blocked, clients: []*Client{client}})
+	server.deliverJob(broadcastJob{spot: blocked, clients: []*Client{client}})
 
 	select {
 	case <-client.spotChan:
@@ -2003,7 +2003,7 @@ func TestBroadcastSelfRespectsSelfToggle(t *testing.T) {
 	client.filter.SetSelfEnabled(true)
 	client.filter.BlockAllBands = true
 	client.filter.AllBands = false
-	server.deliverJob(&broadcastJob{spot: blocked, clients: []*Client{client}})
+	server.deliverJob(broadcastJob{spot: blocked, clients: []*Client{client}})
 
 	select {
 	case <-client.spotChan:

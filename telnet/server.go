@@ -173,7 +173,7 @@ type Server struct {
 	stopOnce              sync.Once                                  // Ensures Stop is idempotent
 	broadcast             chan *broadcastPayload                     // Broadcast channel for spots (buffered, configurable)
 	broadcastWorkers      int                                        // Number of goroutines delivering spots
-	workerQueues          []chan *broadcastJob                       // Per-worker job queues
+	workerQueues          []chan broadcastJob                        // Per-worker job queues
 	workerQueueSize       int                                        // Capacity of each worker's queue
 	batchInterval         time.Duration                              // Broadcast batch interval; 0 means immediate
 	batchMax              int                                        // Max jobs per batch before flush
@@ -2509,9 +2509,9 @@ func (s *Server) startWorkerPool() {
 	if queueSize <= 0 {
 		queueSize = defaultWorkerQueueSize
 	}
-	s.workerQueues = make([]chan *broadcastJob, s.broadcastWorkers)
+	s.workerQueues = make([]chan broadcastJob, s.broadcastWorkers)
 	for i := 0; i < s.broadcastWorkers; i++ {
-		s.workerQueues[i] = make(chan *broadcastJob, queueSize)
+		s.workerQueues[i] = make(chan broadcastJob, queueSize)
 		go s.broadcastWorker(i, s.workerQueues[i])
 	}
 }
@@ -2599,7 +2599,7 @@ func (s *Server) dispatchSpotToWorkers(payload *broadcastPayload, shards [][]*Cl
 		if len(clients) == 0 {
 			continue
 		}
-		job := &broadcastJob{
+		job := broadcastJob{
 			spot:      payload.spot,
 			allowFast: payload.allowFast,
 			allowMed:  payload.allowMed,
@@ -2651,7 +2651,7 @@ func (s *Server) cachedClientShards() [][]*Client {
 	return shards
 }
 
-func (s *Server) broadcastWorker(id int, jobs <-chan *broadcastJob) {
+func (s *Server) broadcastWorker(id int, jobs <-chan broadcastJob) {
 	log.Printf("Broadcast worker %d started", id)
 	// Immediate mode when batching is disabled.
 	if s.batchInterval <= 0 {
@@ -2660,7 +2660,7 @@ func (s *Server) broadcastWorker(id int, jobs <-chan *broadcastJob) {
 			case <-s.shutdown:
 				return
 			case job := <-jobs:
-				if job == nil {
+				if !job.valid() {
 					continue
 				}
 				s.deliverJob(job)
@@ -2670,13 +2670,13 @@ func (s *Server) broadcastWorker(id int, jobs <-chan *broadcastJob) {
 
 	ticker := time.NewTicker(s.batchInterval)
 	defer ticker.Stop()
-	batch := make([]*broadcastJob, 0, s.batchMax)
+	batch := make([]broadcastJob, 0, s.batchMax)
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
 		for _, job := range batch {
-			if job == nil {
+			if !job.valid() {
 				continue
 			}
 			s.deliverJob(job)
@@ -2690,7 +2690,7 @@ func (s *Server) broadcastWorker(id int, jobs <-chan *broadcastJob) {
 			flush()
 			return
 		case job := <-jobs:
-			if job == nil {
+			if !job.valid() {
 				continue
 			}
 			batch = append(batch, job)
@@ -2732,12 +2732,19 @@ func normalizedOwnCall(callsign string) string {
 	return spot.NormalizeOwnCallsign(callsign)
 }
 
-func (s *Server) deliverJob(job *broadcastJob) {
+func (job broadcastJob) valid() bool {
+	return job.spot != nil && len(job.clients) != 0
+}
+
+func (s *Server) deliverJob(job broadcastJob) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("telnet: panic delivering broadcast job: %v", r)
 		}
 	}()
+	if !job.valid() {
+		return
+	}
 	for _, client := range job.clients {
 		if client == nil {
 			continue
