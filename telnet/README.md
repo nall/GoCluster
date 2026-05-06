@@ -39,6 +39,11 @@ Key operator-visible facts for the shipped config:
 
 The formatter keeps the right-side tail stable by truncating comment text before it can push the grid, confidence, or time columns around.
 
+Beacon spots with a blank source comment display `BEACON` in the comment field.
+The mode, SNR/report text, path glyph, grid, confidence, and time columns stay
+in their normal positions. This is a telnet and archive display convention; it
+does not rewrite the comment forwarded to peers.
+
 ## Filters
 
 The telnet layer owns the live filter parser and persistence rules.

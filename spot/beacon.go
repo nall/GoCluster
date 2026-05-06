@@ -1,8 +1,14 @@
+// File role: Beacon classification helpers for canonical spot records.
+// Crawler notes: Preserve source-class beacon state separately from comments so
+// peer compatibility and display/archive fallbacks can make different choices.
 package spot
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
 
-var beaconCommentKeywords = []string{"NCDXF", "BEACON", "BCN"}
+var beaconCommentKeywords = []string{"NCDXF B", "BEACON", "BCN"}
 
 // Purpose: Detect beacon markers in a comment string.
 // Key aspects: Case-insensitive substring match against known keywords.
@@ -32,8 +38,21 @@ func (s *Spot) RefreshBeaconFlag() {
 		return
 	}
 	if s.DXCallNorm != "" {
-		s.IsBeacon = strings.HasSuffix(s.DXCallNorm, "/B") || commentContainsBeaconKeyword(s.Comment)
+		s.IsBeacon = s.BeaconSourceClass || strings.HasSuffix(s.DXCallNorm, "/B") || commentContainsBeaconKeyword(s.Comment)
 		return
 	}
-	s.IsBeacon = IsBeaconCall(s.DXCall) || commentContainsBeaconKeyword(s.Comment)
+	s.IsBeacon = s.BeaconSourceClass || IsBeaconCall(s.DXCall) || commentContainsBeaconKeyword(s.Comment)
+}
+
+// EnsureBlankBeaconComment stores the display fallback for a caller-owned beacon spot.
+// Callers should use this only before an archive/history snapshot or another
+// owned handoff where synthetic comment text is intended to become durable.
+func (s *Spot) EnsureBlankBeaconComment() bool {
+	if s == nil || !s.IsBeacon || strings.TrimSpace(s.Comment) != "" {
+		return false
+	}
+	s.Comment = "BEACON"
+	s.formatted = ""
+	s.formatOnce = sync.Once{}
+	return true
 }

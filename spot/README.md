@@ -2,6 +2,11 @@
 
 This directory owns the canonical spot record, fixed-width spot formatting, call-correction helpers, harmonics, frequency averaging, recent-support stores, and custom SCP persistence.
 
+Beacon state can come from source metadata, such as an RBN spot class of
+`BEACON` or `NCDXF B`, or from the DX/comment beacon heuristics. Blank comments
+on beacon spots display as `BEACON` in telnet and newly archived rows while
+leaving the original peer-forwarded comment unchanged.
+
 ## Confidence Paths
 
 The runtime has two separate confidence paths.

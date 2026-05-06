@@ -79,6 +79,15 @@ func TestNewReplaySpotTagsBeaconSpotClasses(t *testing.T) {
 	if !spotEntry.IsBeacon {
 		t.Fatalf("expected NCDXF B spot class to set IsBeacon")
 	}
+	if !spotEntry.BeaconSourceClass {
+		t.Fatalf("expected NCDXF B spot class to set BeaconSourceClass")
+	}
+	if spotEntry.Comment != "" {
+		t.Fatalf("expected source comment to remain blank, got %q", spotEntry.Comment)
+	}
+	if got := spotEntry.FormatDXCluster(); !strings.Contains(got, "CW 5 dB BEACON") {
+		t.Fatalf("expected formatted beacon fallback, got %q", got)
+	}
 	if spotEntry.Mode != "CW" {
 		t.Fatalf("expected Spot.Mode to remain RF mode CW, got %q", spotEntry.Mode)
 	}

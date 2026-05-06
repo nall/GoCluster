@@ -3,6 +3,7 @@ package cluster
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -89,6 +90,33 @@ func TestOutputPipelineEmitSpotReusesFinalOwnedSnapshot(t *testing.T) {
 	}
 	if broadcasted != shared {
 		t.Fatalf("expected telnet broadcast to reuse the final shared pointer")
+	}
+}
+
+func TestArchiveSnapshotForBlankBeaconDoesNotMutatePeerComment(t *testing.T) {
+	src := spot.NewSpot("W1ABC/B", "K1XYZ", 14020.0, "CW")
+	src.SourceType = spot.SourceRBN
+	src.Comment = ""
+	shared := src.SealForAsync()
+
+	archived := archiveSnapshotForSpot(shared)
+	if archived == shared {
+		t.Fatalf("expected archive snapshot to clone blank beacon comment")
+	}
+	if archived.Comment != "BEACON" {
+		t.Fatalf("expected archive snapshot comment BEACON, got %q", archived.Comment)
+	}
+	if shared.Comment != "" {
+		t.Fatalf("expected shared peer/telnet snapshot comment to remain blank, got %q", shared.Comment)
+	}
+	if comment := peerPublishComment(shared); comment != "" {
+		t.Fatalf("expected peer comment to remain blank for non-manual beacon, got %q", comment)
+	}
+	if got := shared.FormatDXCluster(); !strings.Contains(got, "CW BEACON") {
+		t.Fatalf("expected telnet formatter fallback on shared snapshot, got %q", got)
+	}
+	if got := archived.FormatDXCluster(); !strings.Contains(got, "CW BEACON") {
+		t.Fatalf("expected archived snapshot to format beacon comment, got %q", got)
 	}
 }
 

@@ -539,10 +539,10 @@ func processRBNRow(st *runState, row rbnRow, evalNeg int) {
 	spotEntry.SourceNode = "RBN-HISTORY"
 	spotEntry.Band = row.Band
 	spotEntry.EnsureNormalized()
-	spotEntry.RefreshBeaconFlag()
 	if row.SpotClass.IsBeacon() {
-		spotEntry.IsBeacon = true
+		spotEntry.BeaconSourceClass = true
 	}
+	spotEntry.RefreshBeaconFlag()
 	if spotEntry.IsBeacon {
 		st.driver.Step(now)
 		return

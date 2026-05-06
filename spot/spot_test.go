@@ -140,6 +140,40 @@ func TestRefreshBeaconFlagUsesComment(t *testing.T) {
 	}
 }
 
+func TestRefreshBeaconFlagPreservesSourceClassBeacon(t *testing.T) {
+	s := NewSpot("4U1UN", "K1XYZ", 14100.0, "CW")
+	s.BeaconSourceClass = true
+	s.Comment = ""
+	s.RefreshBeaconFlag()
+	if !s.IsBeacon {
+		t.Fatalf("RefreshBeaconFlag should preserve source-class beacon state")
+	}
+
+	s.BeaconSourceClass = false
+	s.RefreshBeaconFlag()
+	if s.IsBeacon {
+		t.Fatalf("RefreshBeaconFlag should clear source-class beacon state when source flag is removed")
+	}
+}
+
+func TestEnsureBlankBeaconComment(t *testing.T) {
+	s := NewSpot("W1ABC/B", "K1XYZ", 14074.5, "CW")
+	if !s.EnsureBlankBeaconComment() {
+		t.Fatalf("expected blank beacon comment to be canonicalized")
+	}
+	if s.Comment != "BEACON" {
+		t.Fatalf("expected BEACON comment, got %q", s.Comment)
+	}
+
+	s.Comment = "NCDXF schedule"
+	if s.EnsureBlankBeaconComment() {
+		t.Fatalf("did not expect nonblank beacon comment to be replaced")
+	}
+	if s.Comment != "NCDXF schedule" {
+		t.Fatalf("expected nonblank comment to be preserved, got %q", s.Comment)
+	}
+}
+
 func TestFormatDXClusterUsesGridAndConfidence(t *testing.T) {
 	s := &Spot{
 		DXCall:     "KE0UI",
@@ -352,6 +386,68 @@ func TestFormatDXClusterZeroReport(t *testing.T) {
 	got := s.FormatDXCluster()
 	if !strings.Contains(got, "FT8 +0 dB") {
 		t.Fatalf("expected 0 dB report to render, got %q", got)
+	}
+}
+
+func TestFormatDXClusterBlankBeaconCommentFallback(t *testing.T) {
+	cases := []struct {
+		name      string
+		mode      string
+		report    int
+		hasReport bool
+		want      string
+	}{
+		{name: "CW report", mode: "CW", report: 5, hasReport: true, want: "CW 5 dB BEACON"},
+		{name: "FT8 zero report", mode: "FT8", report: 0, hasReport: true, want: "FT8 +0 dB BEACON"},
+		{name: "no report", mode: "CW", hasReport: false, want: "CW BEACON"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Spot{
+				DXCall:    "W1ABC/B",
+				DECall:    "K1XYZ",
+				Frequency: 14074.5,
+				Mode:      tc.mode,
+				Report:    tc.report,
+				HasReport: tc.hasReport,
+				IsBeacon:  true,
+				Time:      time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
+				DXMetadata: CallMetadata{
+					Grid: "FN20",
+				},
+				Confidence: "V",
+			}
+
+			got := s.FormatDXCluster()
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("expected %q to contain %q", got, tc.want)
+			}
+			if s.Comment != "" {
+				t.Fatalf("formatter fallback should not mutate comment, got %q", s.Comment)
+			}
+			layout := CurrentDXClusterLayout()
+			if strings.LastIndex(got, "FN20") != layout.GridColumn-1 {
+				t.Fatalf("expected grid column preserved, got %q", got)
+			}
+			if strings.LastIndex(got, "V") != layout.ConfidenceColumn-1 {
+				t.Fatalf("expected confidence column preserved, got %q", got)
+			}
+			if strings.LastIndex(got, "0615Z") != layout.TimeColumn-1 {
+				t.Fatalf("expected time column preserved, got %q", got)
+			}
+		})
+	}
+}
+
+func TestFormatDXClusterWithCommentOverridesBeaconFallback(t *testing.T) {
+	s := NewSpot("W1ABC/B", "K1XYZ", 14074.5, "CW")
+	got := s.FormatDXClusterWithComment("D:TEST")
+	if !strings.Contains(got, "CW D:TEST") {
+		t.Fatalf("expected alternate comment to override beacon fallback, got %q", got)
+	}
+	if strings.Contains(got, "BEACON") {
+		t.Fatalf("did not expect beacon fallback in alternate comment output, got %q", got)
 	}
 }
 

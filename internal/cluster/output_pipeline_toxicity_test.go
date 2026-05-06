@@ -75,6 +75,51 @@ func TestOutputPipelineToxicityStageQueuesHumanOnly(t *testing.T) {
 	}
 }
 
+func TestBlankBeaconFallbackDoesNotBecomeToxicityInput(t *testing.T) {
+	gate, err := toxicity.NewSafeGateFromLists([]string{"CQ", "73"}, []string{"POTA"}, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	classifier := toxicity.NewClassifier(toxicity.Config{
+		Enabled:         true,
+		Workers:         1,
+		QueueSize:       2,
+		CacheMaxEntries: 8,
+		CacheTTLSeconds: 60,
+		MaxCommentBytes: 512,
+		TimeoutMS:       100,
+	}, gate, clusterToxicityClient{})
+	classifier.Start()
+	defer classifier.Stop()
+	pipeline := &outputPipeline{
+		toxicityClassifier: classifier,
+		ctyLookup:          func() *cty.CTYDatabase { return nil },
+	}
+
+	humanBeacon := spot.NewSpot("W1ABC/B", "W1XYZ", 14074, "CW")
+	humanBeacon.IsHuman = true
+	humanBeacon.Comment = ""
+	if !pipeline.applyToxicityStage(humanBeacon) {
+		t.Fatalf("blank human beacon comment should not queue for AI")
+	}
+	if humanBeacon.ToxicityStatus != spot.ToxicitySafeLocal {
+		t.Fatalf("expected blank comment to be classified before fallback as SAFE_LOCAL, got %q", humanBeacon.ToxicityStatus)
+	}
+	if humanBeacon.Comment != "" {
+		t.Fatalf("expected toxicity stage not to synthesize comment, got %q", humanBeacon.Comment)
+	}
+	ctx, ok := pipeline.prepareSpotContext(humanBeacon)
+	if !ok {
+		t.Fatalf("expected spot context")
+	}
+	if got := ctx.spot.FormatDXCluster(); !strings.Contains(got, "CW BEACON") {
+		t.Fatalf("expected formatter fallback after toxicity, got %q", got)
+	}
+	if ctx.spot.Comment != "" {
+		t.Fatalf("expected formatter fallback not to mutate comment, got %q", ctx.spot.Comment)
+	}
+}
+
 func TestOutputPipelineDrainsToxicityOnInputClose(t *testing.T) {
 	gate, err := toxicity.NewSafeGateFromLists([]string{"CQ", "73"}, []string{"POTA"}, 8)
 	if err != nil {

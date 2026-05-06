@@ -859,9 +859,9 @@ func newReplaySpot(row rbnHistoryRow) *spot.Spot {
 	spotEntry.SourceType = spot.SourceRBN
 	spotEntry.SourceNode = "RBN-HISTORY"
 	spotEntry.EnsureNormalized()
-	spotEntry.RefreshBeaconFlag()
 	if row.SpotClass.IsBeacon() {
-		spotEntry.IsBeacon = true
+		spotEntry.BeaconSourceClass = true
 	}
+	spotEntry.RefreshBeaconFlag()
 	return spotEntry
 }

@@ -45,11 +45,16 @@ Important operator-visible ingest behavior:
   - `tx_mode` / explicit mode token: RF transmission mode such as `CW` or `RTTY`
 - only spot classes `CQ`, `BEACON`, and `NCDXF B` are ingested
 - spot class `DX`, blank class, and unknown class values are dropped before ingest
-- `BEACON` and `NCDXF B` are ingested with `IsBeacon=true`
+- `BEACON` and `NCDXF B` are ingested with source-class beacon state and
+  `IsBeacon=true`
+- blank comments on beacon spots display and archive as `BEACON`; peer
+  forwarding keeps the original blank comment
 - missing mode tokens on those feeds are rejected before ingest
 - zero-SNR skimmer spots are dropped before ingest
 - per-spotter skew corrections are applied before later normalization stages
 
-The parser does not own final mode policy, dedupe, confidence, or peer handling. It produces canonical spots for the downstream pipeline, with `Spot.Mode` reserved for RF/transmission mode rather than RBN spot class.
+The parser does not own final mode policy, dedupe, confidence, or peer handling.
+It produces canonical spots for the downstream pipeline, with `Spot.Mode`
+reserved for RF/transmission mode rather than RBN spot class.
 
 For the operator-facing overview, see [`../README.md`](../README.md).

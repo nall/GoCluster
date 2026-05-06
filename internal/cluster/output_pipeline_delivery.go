@@ -1,3 +1,5 @@
+// File role: Output-pipeline delivery decisions, delayed release handling, and
+// caller-owned archive snapshots for telnet/peer/archive fanout.
 package cluster
 
 import (
@@ -309,7 +311,7 @@ func (p *outputPipeline) emitSpot(ctx *outputSpotContext, plan outputDeliveryPla
 	}
 	emittedNow := false
 	if p.archiveWriter != nil && plan.archivePeerAllowMed && shouldArchiveSpot(shared) {
-		p.archiveWriter.EnqueueOwned(shared)
+		p.archiveWriter.EnqueueOwned(archiveSnapshotForSpot(shared))
 		emittedNow = true
 	}
 	if plan.telnetDeliverNow {
@@ -324,4 +326,16 @@ func (p *outputPipeline) emitSpot(ctx *outputSpotContext, plan outputDeliveryPla
 	if emittedNow && p.lastOutput != nil {
 		p.lastOutput.Store(time.Now().UTC().UnixNano())
 	}
+}
+
+func archiveSnapshotForSpot(shared *spot.Spot) *spot.Spot {
+	if shared == nil {
+		return nil
+	}
+	if !shared.IsBeacon || strings.TrimSpace(shared.Comment) != "" {
+		return shared
+	}
+	snapshot := shared.Clone()
+	snapshot.EnsureBlankBeaconComment()
+	return snapshot
 }

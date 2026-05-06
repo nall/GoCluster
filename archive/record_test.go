@@ -286,6 +286,32 @@ func TestArchiveRecordPreservesToxicity(t *testing.T) {
 	}
 }
 
+func TestArchiveRecordBeaconCommentRoundTrip(t *testing.T) {
+	s := spot.NewSpot("4U1UN", "K1ABC", 14100.0, "CW")
+	s.Report = 5
+	s.HasReport = true
+	s.BeaconSourceClass = true
+	s.RefreshBeaconFlag()
+	if !s.EnsureBlankBeaconComment() {
+		t.Fatalf("expected archive snapshot comment to be canonicalized")
+	}
+
+	raw := encodeRecord(s)
+	decoded, err := decodeSpot(time.Now().UTC().UnixNano(), raw)
+	if err != nil {
+		t.Fatalf("decodeSpot failed: %v", err)
+	}
+	if decoded.Comment != "BEACON" {
+		t.Fatalf("expected decoded beacon comment, got %q", decoded.Comment)
+	}
+	if !decoded.IsBeacon {
+		t.Fatalf("expected decoded beacon comment to restore IsBeacon")
+	}
+	if got := decoded.FormatDXCluster(); !strings.Contains(got, "CW 5 dB BEACON") {
+		t.Fatalf("expected decoded beacon to format with comment, got %q", got)
+	}
+}
+
 func TestArchiveLegacyRecordsDeriveEventsFromComment(t *testing.T) {
 	s := spot.NewSpot("K1ABC", "W1XYZ", 14074.0, "FT8")
 	s.Comment = "POTA-1234 WWFF-5678"
