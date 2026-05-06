@@ -334,12 +334,6 @@ func (p *outputPipeline) finalizeSpotForMetrics(ctx *outputSpotContext) bool {
 	if applyLicenseGate(s, ctx.ctyDB, p.metaCache, p.unlicensedReporter) {
 		return false
 	}
-	if !ctx.dirty {
-		ctx.dirty = true
-	}
-	if ctx.dirty {
-		s.EnsureNormalized()
-	}
 	if p.tracker != nil {
 		modeKey := ctx.modeUpper
 		if modeKey == "" {

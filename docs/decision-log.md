@@ -11,6 +11,7 @@ This index tracks all architecture and workflow decisions recorded as ADRs.
 | ADR | Title | Status | Date | Area | Supersedes | Superseded By | Links |
 |---|---|---|---|---|---|---|---|
 | ADR-0001 | <title> | Proposed | YYYY-MM-DD | <area> | - | - | `docs/decisions/ADR-0001-<slug>.md` |
+| ADR-0117 | Hot Path Duplicate Work Removal | Accepted | 2026-05-06 | spot, output pipeline, custom_scp, telnet, mqtt | - | - | `docs/decisions/ADR-0117-hot-path-duplicate-work-removal.md` |
 | ADR-0116 | Blank Beacon Comment Fallback | Accepted | 2026-05-06 | spot, telnet, rbn, archive, peer | - | - | `docs/decisions/ADR-0116-blank-beacon-comment-fallback.md` |
 | ADR-0115 | DX Numeric SSID Canonicalization | Accepted | 2026-05-05 | spot, ingest, telnet, commands, replay | - | - | `docs/decisions/ADR-0115-dx-numeric-ssid-canonicalization.md` |
 | ADR-0114 | Human Comment Toxicity Classifier | Accepted | 2026-05-05 | toxicity, telnet, output pipeline, config, archive | - | - | `docs/decisions/ADR-0114-human-comment-toxicity-classifier.md` |

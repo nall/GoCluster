@@ -1,3 +1,6 @@
+// File role: Custom SCP secondary expiry heaps and key indexes. The structures
+// are bounded by CustomSCPStore primary maps, and delete/pop paths keep indexes
+// coupled so cleanup does not retain stale side state.
 package spot
 
 const customSCPImmediateCleanupDueUnix int64 = -1 << 63
@@ -13,8 +16,8 @@ type customSCPEntryExpiryItem struct {
 
 // customSCPEntryExpiryQueue is a min-heap plus key index. It exists so cleanup
 // can find stale or oversized observation entries without scanning every key on
-// every interval; the index is rebuilt lazily after root pops to keep churn
-// bounded and simple.
+// every interval; root pops maintain the index incrementally so cleanup churn
+// stays proportional to removed entries instead of active retained state.
 type customSCPEntryExpiryQueue struct {
 	items        []customSCPEntryExpiryItem
 	indexes      map[customSCPKey]int
@@ -78,7 +81,6 @@ func (h *customSCPEntryExpiryQueue) popLast() customSCPEntryExpiryItem {
 }
 
 func (h *customSCPEntryExpiryQueue) popRoot() {
-	h.indexesDirty = true
 	h.remove(0)
 }
 
@@ -216,7 +218,6 @@ func (h *customSCPStaticExpiryQueue) popLast() customSCPStaticExpiryItem {
 }
 
 func (h *customSCPStaticExpiryQueue) popRoot() {
-	h.indexesDirty = true
 	h.remove(0)
 }
 

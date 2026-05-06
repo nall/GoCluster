@@ -493,7 +493,7 @@ func TestCustomSCPSpotterSeenUnixEncodingBounds(t *testing.T) {
 	}
 }
 
-func TestCustomSCPExpiryQueuesRebuildIndexesAfterDirtyPop(t *testing.T) {
+func TestCustomSCPExpiryQueuesMaintainIndexesAfterRootPop(t *testing.T) {
 	key1 := customSCPKey{call: "K1AAA", band: "20m", bucket: "cw"}
 	key2 := customSCPKey{call: "K1BBB", band: "20m", bucket: "cw"}
 	key3 := customSCPKey{call: "K1CCC", band: "20m", bucket: "cw"}
@@ -503,13 +503,15 @@ func TestCustomSCPExpiryQueuesRebuildIndexesAfterDirtyPop(t *testing.T) {
 	entryQueue.push(customSCPEntryExpiryItem{key: key2, dueUnix: 2})
 	entryQueue.push(customSCPEntryExpiryItem{key: key3, dueUnix: 3})
 	entryQueue.popRoot()
-	if !entryQueue.indexesDirty {
-		t.Fatalf("expected entry queue index to be dirty after root pop")
+	if entryQueue.indexesDirty {
+		t.Fatalf("expected entry queue index to stay clean after root pop")
 	}
-	entryQueue.ensureIndexes()
+	if _, ok := entryQueue.indexes[key1]; ok {
+		t.Fatalf("expected popped entry key to leave the index")
+	}
 	idx, ok := entryQueue.indexes[key2]
 	if !ok || entryQueue.items[idx].key != key2 {
-		t.Fatalf("expected rebuilt entry index for key2, ok=%v idx=%d", ok, idx)
+		t.Fatalf("expected maintained entry index for key2, ok=%v idx=%d", ok, idx)
 	}
 
 	staticQueue := newCustomSCPStaticExpiryQueue(3)
@@ -517,13 +519,15 @@ func TestCustomSCPExpiryQueuesRebuildIndexesAfterDirtyPop(t *testing.T) {
 	staticQueue.push(customSCPStaticExpiryItem{call: "K1BBB", dueUnix: 2})
 	staticQueue.push(customSCPStaticExpiryItem{call: "K1CCC", dueUnix: 3})
 	staticQueue.popRoot()
-	if !staticQueue.indexesDirty {
-		t.Fatalf("expected static queue index to be dirty after root pop")
+	if staticQueue.indexesDirty {
+		t.Fatalf("expected static queue index to stay clean after root pop")
 	}
-	staticQueue.ensureIndexes()
+	if _, ok := staticQueue.indexes["K1AAA"]; ok {
+		t.Fatalf("expected popped static call to leave the index")
+	}
 	staticIdx, ok := staticQueue.indexes["K1BBB"]
 	if !ok || staticQueue.items[staticIdx].call != "K1BBB" {
-		t.Fatalf("expected rebuilt static index for K1BBB, ok=%v idx=%d", ok, staticIdx)
+		t.Fatalf("expected maintained static index for K1BBB, ok=%v idx=%d", ok, staticIdx)
 	}
 }
 

@@ -1,3 +1,6 @@
+// File role: FT confidence burst controller for the output pipeline. It owns
+// bounded pending FT groups, due timers, and fail-open release semantics before
+// spots cross asynchronous fanout boundaries.
 package cluster
 
 import (
@@ -572,7 +575,6 @@ func (p *outputPipeline) applyFTConfidenceStage(ctx *outputSpotContext, now time
 		p.assignFTConfidence(ctx, 1)
 		return true
 	}
-	p.releaseDueFT(now, false)
 	held, uniqueCount := p.ftConfidence.Observe(now, *ctx)
 	if held {
 		return false
@@ -642,6 +644,7 @@ func (p *outputPipeline) stopFTTimer() {
 	}
 	p.ftTimer = nil
 	p.ftTimerCh = nil
+	p.ftTimerDue = time.Time{}
 }
 
 // scheduleFTTimer lets the single output goroutine wake for FT hard-cap or
@@ -662,7 +665,12 @@ func (p *outputPipeline) scheduleFTTimer(now time.Time) {
 	}
 	if p.ftTimer == nil {
 		p.ftTimer = time.NewTimer(delay)
+		p.ftTimerDue = nextDue
 	} else {
+		if p.ftTimerDue.Equal(nextDue) {
+			p.ftTimerCh = p.ftTimer.C
+			return
+		}
 		if !p.ftTimer.Stop() {
 			select {
 			case <-p.ftTimer.C:
@@ -670,6 +678,7 @@ func (p *outputPipeline) scheduleFTTimer(now time.Time) {
 			}
 		}
 		p.ftTimer.Reset(delay)
+		p.ftTimerDue = nextDue
 	}
 	p.ftTimerCh = p.ftTimer.C
 }

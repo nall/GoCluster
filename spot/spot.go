@@ -133,7 +133,7 @@ type CallMetadata struct {
 // NewSpot constructs a new spot with normalized defaults.
 // Key aspects: Normalizes calls/mode, rounds frequency, sets defaults.
 // Upstream: All spot creation paths (parsers and tests).
-// Downstream: EnsureNormalized and RefreshBeaconFlag.
+// Downstream: RefreshBeaconFlag.
 // NewSpot creates a new spot with sensible defaults
 func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
 	freq = roundFrequencyTo10Hz(freq)
@@ -164,7 +164,6 @@ func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
 		DXCellID:   0,
 		DECellID:   0,
 	}
-	spot.EnsureNormalized()
 	spot.RefreshBeaconFlag()
 	return spot
 }
@@ -172,7 +171,7 @@ func NewSpot(dxCall, deCall string, freq float64, mode string) *Spot {
 // NewSpotNormalized constructs a new spot using pre-normalized callsigns.
 // Key aspects: Assumes NormalizeCallsign already ran on DX/DE calls.
 // Upstream: Ingest paths that normalize once.
-// Downstream: EnsureNormalized and RefreshBeaconFlag.
+// Downstream: RefreshBeaconFlag.
 // NewSpotNormalized builds a spot without re-normalizing DX/DE calls.
 func NewSpotNormalized(dxCallNorm, deCallNorm string, freq float64, mode string) *Spot {
 	freq = roundFrequencyTo10Hz(freq)
@@ -203,7 +202,6 @@ func NewSpotNormalized(dxCallNorm, deCallNorm string, freq float64, mode string)
 		DXCellID:   0,
 		DECellID:   0,
 	}
-	spot.EnsureNormalized()
 	spot.RefreshBeaconFlag()
 	return spot
 }
@@ -442,7 +440,6 @@ func (s *Spot) EnsureNormalized() {
 		s.DXCallNorm = NormalizeSpotDXCallsign(s.DXCall)
 	}
 	if s.DXCallNorm != "" {
-		s.DXCallNorm = NormalizeSpotDXCallsign(s.DXCallNorm)
 		s.DXCall = s.DXCallNorm
 	}
 	if s.DECallNorm == "" && s.DECall != "" {

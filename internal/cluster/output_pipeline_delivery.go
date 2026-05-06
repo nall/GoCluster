@@ -15,6 +15,7 @@ type outputDeliveryPlan struct {
 	allowMed            bool
 	allowSlow           bool
 	telnetDeliverNow    bool
+	telnetDeliverSelf   bool
 	familySnapshot      spot.ResolverSnapshot
 	familySnapshotOK    bool
 }
@@ -209,11 +210,11 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 			plan.familySnapshot, plan.familySnapshotOK = p.signalResolver.Lookup(ctx.stabilizerResolverKey)
 		}
 		if !plan.allowFast && !plan.allowMed && !plan.allowSlow {
-			p.telnet.DeliverSelfSpot(s)
+			p.deliverSelfSpotOwned(s)
 			return plan, false
 		}
 		if p.familySuppressor != nil && p.familySuppressor.ShouldSuppressWithResolver(s, p.correctionCfg, time.Now().UTC(), plan.familySnapshot, plan.familySnapshotOK) {
-			p.telnet.DeliverSelfSpot(s)
+			p.deliverSelfSpotOwned(s)
 			return plan, false
 		}
 		return plan, true
@@ -265,14 +266,25 @@ func (p *outputPipeline) resolveDeliveryPlan(ctx *outputSpotContext) (outputDeli
 		p.recordFTRecentBandObservation(s)
 	}
 	if plan.telnetDeliverNow && !plan.allowFast && !plan.allowMed && !plan.allowSlow {
-		p.telnet.DeliverSelfSpot(s)
+		plan.telnetDeliverSelf = true
 		plan.telnetDeliverNow = false
 	}
 	if plan.telnetDeliverNow && p.familySuppressor != nil && p.familySuppressor.ShouldSuppressWithResolver(s, p.correctionCfg, time.Now().UTC(), plan.familySnapshot, plan.familySnapshotOK) {
-		p.telnet.DeliverSelfSpot(s)
+		plan.telnetDeliverSelf = true
 		plan.telnetDeliverNow = false
 	}
 	return plan, true
+}
+
+func (p *outputPipeline) deliverSelfSpotOwned(s *spot.Spot) {
+	if p == nil || p.telnet == nil || s == nil {
+		return
+	}
+	dxCall := normalizedDXCall(s)
+	if dxCall == "" {
+		return
+	}
+	p.telnet.DeliverSelfSpotOwned(dxCall, s.SealForAsync())
 }
 
 func (p *outputPipeline) updateGridCache(s *spot.Spot) {
@@ -317,6 +329,9 @@ func (p *outputPipeline) emitSpot(ctx *outputSpotContext, plan outputDeliveryPla
 	if plan.telnetDeliverNow {
 		p.telnet.BroadcastSpotOwned(shared, plan.allowFast, plan.allowMed, plan.allowSlow)
 		emittedNow = true
+	}
+	if plan.telnetDeliverSelf {
+		p.telnet.DeliverSelfSpotOwned(normalizedDXCall(shared), shared)
 	}
 	if p.peerManager != nil && plan.archivePeerAllowMed {
 		if p.peerManager.PublishDXWithComment(shared, peerPublishComment(shared)) {

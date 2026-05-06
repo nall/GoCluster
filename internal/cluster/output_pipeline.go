@@ -83,6 +83,7 @@ type outputPipeline struct {
 	ftRecentBandStore       *spot.RecentBandStore
 	ftTimer                 *time.Timer
 	ftTimerCh               <-chan time.Time
+	ftTimerDue              time.Time
 	toxicityClassifier      *toxicity.Classifier
 }
 

@@ -854,7 +854,6 @@ func (c *Client) parseSpot(line string) {
 		s.BeaconSourceClass = true
 	}
 	s.RefreshBeaconFlag()
-	s.EnsureNormalized()
 
 	c.lastSpotAt.Store(time.Now().UTC().UnixNano())
 	select {

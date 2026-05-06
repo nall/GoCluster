@@ -30,8 +30,9 @@ import (
 // callback to be executed upon the arrival of a message associated
 // with a subscription to that topic.
 type route struct {
-	topic    string
-	callback MessageHandler
+	topic       string
+	topicLevels []string
+	callback    MessageHandler
 }
 
 // match takes a slice of strings which represent the route being tested having been split on '/'
@@ -59,7 +60,7 @@ func match(route []string, topic []string) bool {
 }
 
 func routeIncludesTopic(route, topic string) bool {
-	return match(routeSplit(route), strings.Split(topic, "/"))
+	return matchTopicLevels(routeSplit(route), topic)
 }
 
 // removes $share and sharename when splitting the route to allow
@@ -74,10 +75,50 @@ func routeSplit(route string) []string {
 	return result
 }
 
+func matchTopicLevels(route []string, topic string) bool {
+	pos := 0
+	for _, level := range route {
+		if level == "#" {
+			return true
+		}
+		topicLevel, next, ok := nextTopicLevel(topic, pos)
+		if !ok {
+			return false
+		}
+		if level != "+" && level != topicLevel {
+			return false
+		}
+		pos = next
+	}
+	_, _, ok := nextTopicLevel(topic, pos)
+	return !ok
+}
+
+func nextTopicLevel(topic string, pos int) (string, int, bool) {
+	if pos > len(topic) {
+		return "", pos, false
+	}
+	if pos == len(topic) {
+		return "", len(topic) + 1, true
+	}
+	if offset := strings.IndexByte(topic[pos:], '/'); offset >= 0 {
+		end := pos + offset
+		return topic[pos:end], end + 1, true
+	}
+	return topic[pos:], len(topic) + 1, true
+}
+
 // match takes the topic string of the published message and does a basic compare to the
 // string of the current Route, if they match it returns true
 func (r *route) match(topic string) bool {
-	return r.topic == topic || routeIncludesTopic(r.topic, topic)
+	if r.topic == topic {
+		return true
+	}
+	levels := r.topicLevels
+	if levels == nil {
+		levels = routeSplit(r.topic)
+	}
+	return matchTopicLevels(levels, topic)
 }
 
 type router struct {
@@ -107,7 +148,7 @@ func (r *router) addRoute(topic string, callback MessageHandler) {
 			return
 		}
 	}
-	r.routes.PushBack(&route{topic: topic, callback: callback})
+	r.routes.PushBack(&route{topic: topic, topicLevels: routeSplit(topic), callback: callback})
 }
 
 // deleteRoute takes a route string, looks for a matching Route in the list of Routes. If

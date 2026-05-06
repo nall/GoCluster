@@ -282,6 +282,21 @@ func Test_match(t *testing.T) {
 	check(R, T, true)
 }
 
+func BenchmarkRouteMatchWildcard(b *testing.B) {
+	r := &route{
+		topic:       "psk/+/spot/#",
+		topicLevels: routeSplit("psk/+/spot/#"),
+	}
+	topic := "psk/receiver-a/spot/ft8/20m"
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !r.match(topic) {
+			b.Fatal("expected route match")
+		}
+	}
+}
+
 func Test_MatchAndDispatch(t *testing.T) {
 	calledback := make(chan bool)
 
