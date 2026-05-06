@@ -79,6 +79,7 @@ type Spot struct {
 	IsTestSpotter       bool           // True when the spotter callsign is a CTY-valid TEST identifier.
 	IsBeacon            bool           // True when DX call ends with /B (beacon identifiers)
 	BeaconSourceClass   bool           // True when source metadata, such as RBN spot class, identifies beacon traffic.
+	BeaconComment       string         // Synthetic blank-comment fallback for source-class beacons.
 	HasReport           bool           // Whether Report is present (distinguishes real 0 dB from "unknown")
 	DXMetadata          CallMetadata   // Metadata for the DX station
 	DEMetadata          CallMetadata   // Metadata for the spotter station
@@ -505,6 +506,7 @@ func (s *Spot) CloneWithComment(comment string) *Spot {
 		IsTestSpotter:       s.IsTestSpotter,
 		IsBeacon:            s.IsBeacon,
 		BeaconSourceClass:   s.BeaconSourceClass,
+		BeaconComment:       s.BeaconComment,
 		HasReport:           s.HasReport,
 		DXMetadata:          s.DXMetadata,
 		DEMetadata:          s.DEMetadata,
@@ -899,7 +901,7 @@ func (s *Spot) String() string {
 func (s *Spot) formatZoneGridComment() string {
 	comment := sanitizeDXClusterComment(s.Comment)
 	if comment == "" && s.IsBeacon {
-		return "BEACON"
+		return s.blankBeaconComment()
 	}
 	return comment
 }

@@ -10,6 +10,11 @@ import (
 
 var beaconCommentKeywords = []string{"NCDXF B", "BEACON", "BCN"}
 
+const (
+	BeaconCommentDefault = "BEACON"
+	BeaconCommentNCDXF   = "NCDXF BEACON"
+)
+
 // Purpose: Detect beacon markers in a comment string.
 // Key aspects: Case-insensitive substring match against known keywords.
 // Upstream: RefreshBeaconFlag.
@@ -48,11 +53,22 @@ func (s *Spot) RefreshBeaconFlag() {
 // Callers should use this only before an archive/history snapshot or another
 // owned handoff where synthetic comment text is intended to become durable.
 func (s *Spot) EnsureBlankBeaconComment() bool {
-	if s == nil || !s.IsBeacon || strings.TrimSpace(s.Comment) != "" {
+	if s == nil || !s.IsBeacon || sanitizeDXClusterComment(s.Comment) != "" {
 		return false
 	}
-	s.Comment = "BEACON"
+	s.Comment = s.blankBeaconComment()
 	s.formatted = ""
 	s.formatOnce = sync.Once{}
 	return true
+}
+
+func (s *Spot) blankBeaconComment() string {
+	if s == nil || strings.TrimSpace(s.BeaconComment) == "" {
+		return BeaconCommentDefault
+	}
+	comment := sanitizeDXClusterComment(s.BeaconComment)
+	if comment == "" {
+		return BeaconCommentDefault
+	}
+	return comment
 }

@@ -5,7 +5,8 @@ This directory owns the canonical spot record, fixed-width spot formatting, call
 Beacon state can come from source metadata, such as an RBN spot class of
 `BEACON` or `NCDXF B`, or from the DX/comment beacon heuristics. Blank comments
 on beacon spots display as `BEACON` in telnet and newly archived rows while
-leaving the original peer-forwarded comment unchanged.
+leaving the original peer-forwarded comment unchanged. `NCDXF B` source-class
+spots use `NCDXF BEACON` as that blank-comment display/archive fallback.
 
 ## Confidence Paths
 

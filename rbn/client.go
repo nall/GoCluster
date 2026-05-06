@@ -852,6 +852,9 @@ func (c *Client) parseSpot(line string) {
 
 	if spotClass.IsBeacon() {
 		s.BeaconSourceClass = true
+		if spotClass == SpotClassNCDXFB {
+			s.BeaconComment = spot.BeaconCommentNCDXF
+		}
 	}
 	s.RefreshBeaconFlag()
 

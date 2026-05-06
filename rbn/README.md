@@ -47,8 +47,9 @@ Important operator-visible ingest behavior:
 - spot class `DX`, blank class, and unknown class values are dropped before ingest
 - `BEACON` and `NCDXF B` are ingested with source-class beacon state and
   `IsBeacon=true`
-- blank comments on beacon spots display and archive as `BEACON`; peer
-  forwarding keeps the original blank comment
+- blank comments on generic `BEACON` spots display and archive as `BEACON`
+- blank comments on `NCDXF B` spots display and archive as `NCDXF BEACON`
+- peer forwarding keeps the original blank comment
 - missing mode tokens on those feeds are rejected before ingest
 - zero-SNR skimmer spots are dropped before ingest
 - per-spotter skew corrections are applied before later normalization stages

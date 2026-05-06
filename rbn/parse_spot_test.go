@@ -381,6 +381,9 @@ func TestACParserAcceptsBeaconSpotClass(t *testing.T) {
 	if !s.BeaconSourceClass {
 		t.Fatalf("expected BEACON spot class to set BeaconSourceClass")
 	}
+	if s.BeaconComment != "" {
+		t.Fatalf("expected generic BEACON class to keep default fallback, got %q", s.BeaconComment)
+	}
 	if s.Comment != "" {
 		t.Fatalf("expected source-class beacon to keep blank source comment, got %q", s.Comment)
 	}
@@ -403,11 +406,14 @@ func TestACParserAcceptsNCDXFBSpotClass(t *testing.T) {
 	if !s.BeaconSourceClass {
 		t.Fatalf("expected NCDXF B spot class to set BeaconSourceClass")
 	}
+	if s.BeaconComment != spot.BeaconCommentNCDXF {
+		t.Fatalf("expected NCDXF fallback %q, got %q", spot.BeaconCommentNCDXF, s.BeaconComment)
+	}
 	if s.Comment != "" {
 		t.Fatalf("expected source-class beacon to keep blank source comment, got %q", s.Comment)
 	}
-	if got := s.FormatDXCluster(); !strings.Contains(got, "CW 5 dB BEACON") {
-		t.Fatalf("expected formatted beacon fallback, got %q", got)
+	if got := s.FormatDXCluster(); !strings.Contains(got, "CW 5 dB NCDXF BEACON") {
+		t.Fatalf("expected formatted NCDXF beacon fallback, got %q", got)
 	}
 	if s.Mode != "CW" {
 		t.Fatalf("expected RF mode CW, got %q", s.Mode)

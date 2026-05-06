@@ -26,12 +26,15 @@ class of `BEACON` or `NCDXF B`, it records that source-class beacon state and
 refreshes the canonical `IsBeacon` flag from source metadata plus existing
 DX/comment beacon heuristics.
 
-Fixed-width spot formatting displays `BEACON` only when a spot is a beacon and
-the sanitized comment is blank. Explicit comments still win over the fallback.
+Fixed-width spot formatting displays synthetic beacon text only when a spot is
+a beacon and the sanitized comment is blank. Generic blank beacon comments show
+`BEACON`; blank `NCDXF B` source-class beacon comments show `NCDXF BEACON`.
+Explicit comments still win over the fallback.
 
 Archive persistence creates a narrow archive-only snapshot for blank beacon
-comments and stores `BEACON` in newly archived rows. The live shared spot and
-peer-forwarded comment remain unchanged. Existing archive rows are not migrated.
+comments and stores the same synthetic fallback in newly archived rows. The
+live shared spot and peer-forwarded comment remain unchanged. Existing archive
+rows are not migrated.
 
 ## Alternatives considered
 1. Mutate `Spot.Comment` globally when a source-class beacon is parsed.
@@ -48,7 +51,8 @@ peer-forwarded comment remain unchanged. Existing archive rows are not migrated.
 ## Consequences
 ### Benefits
 - Telnet users and archive-backed history see `BEACON` instead of a blank
-  comment for blank beacon rows.
+  comment for blank generic beacon rows, and `NCDXF BEACON` for blank
+  `NCDXF B` rows.
 - RF mode and report text remain intact, so examples such as `CW 5 dB BEACON`
   keep their normal mode/report shape.
 - Peer forwarding preserves the original upstream comment compatibility

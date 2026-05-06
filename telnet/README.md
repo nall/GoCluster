@@ -43,6 +43,7 @@ Beacon spots with a blank source comment display `BEACON` in the comment field.
 The mode, SNR/report text, path glyph, grid, confidence, and time columns stay
 in their normal positions. This is a telnet and archive display convention; it
 does not rewrite the comment forwarded to peers.
+Blank `NCDXF B` source-class beacon comments display `NCDXF BEACON`.
 
 ## Filters
 

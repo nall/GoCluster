@@ -22,6 +22,7 @@ import (
 	"dxcluster/cty"
 	"dxcluster/download"
 	"dxcluster/internal/correctionflow"
+	rbnfeed "dxcluster/rbn"
 	"dxcluster/spot"
 	"dxcluster/stats"
 	"dxcluster/uls"
@@ -861,6 +862,9 @@ func newReplaySpot(row rbnHistoryRow) *spot.Spot {
 	spotEntry.EnsureNormalized()
 	if row.SpotClass.IsBeacon() {
 		spotEntry.BeaconSourceClass = true
+		if row.SpotClass == rbnfeed.SpotClassNCDXFB {
+			spotEntry.BeaconComment = spot.BeaconCommentNCDXF
+		}
 	}
 	spotEntry.RefreshBeaconFlag()
 	return spotEntry

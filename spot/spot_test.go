@@ -172,6 +172,17 @@ func TestEnsureBlankBeaconComment(t *testing.T) {
 	if s.Comment != "NCDXF schedule" {
 		t.Fatalf("expected nonblank comment to be preserved, got %q", s.Comment)
 	}
+
+	ncdxf := NewSpot("4U1UN", "K1XYZ", 14100.0, "CW")
+	ncdxf.BeaconSourceClass = true
+	ncdxf.BeaconComment = BeaconCommentNCDXF
+	ncdxf.RefreshBeaconFlag()
+	if !ncdxf.EnsureBlankBeaconComment() {
+		t.Fatalf("expected blank NCDXF beacon comment to be canonicalized")
+	}
+	if ncdxf.Comment != "NCDXF BEACON" {
+		t.Fatalf("expected NCDXF BEACON comment, got %q", ncdxf.Comment)
+	}
 }
 
 func TestFormatDXClusterUsesGridAndConfidence(t *testing.T) {
@@ -395,24 +406,27 @@ func TestFormatDXClusterBlankBeaconCommentFallback(t *testing.T) {
 		mode      string
 		report    int
 		hasReport bool
+		fallback  string
 		want      string
 	}{
 		{name: "CW report", mode: "CW", report: 5, hasReport: true, want: "CW 5 dB BEACON"},
 		{name: "FT8 zero report", mode: "FT8", report: 0, hasReport: true, want: "FT8 +0 dB BEACON"},
 		{name: "no report", mode: "CW", hasReport: false, want: "CW BEACON"},
+		{name: "NCDXF beacon", mode: "CW", report: 5, hasReport: true, fallback: BeaconCommentNCDXF, want: "CW 5 dB NCDXF BEACON"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &Spot{
-				DXCall:    "W1ABC/B",
-				DECall:    "K1XYZ",
-				Frequency: 14074.5,
-				Mode:      tc.mode,
-				Report:    tc.report,
-				HasReport: tc.hasReport,
-				IsBeacon:  true,
-				Time:      time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
+				DXCall:        "W1ABC/B",
+				DECall:        "K1XYZ",
+				Frequency:     14074.5,
+				Mode:          tc.mode,
+				Report:        tc.report,
+				HasReport:     tc.hasReport,
+				IsBeacon:      true,
+				BeaconComment: tc.fallback,
+				Time:          time.Date(2025, time.November, 22, 6, 15, 0, 0, time.UTC),
 				DXMetadata: CallMetadata{
 					Grid: "FN20",
 				},

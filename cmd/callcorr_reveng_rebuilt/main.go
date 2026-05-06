@@ -541,6 +541,9 @@ func processRBNRow(st *runState, row rbnRow, evalNeg int) {
 	spotEntry.EnsureNormalized()
 	if row.SpotClass.IsBeacon() {
 		spotEntry.BeaconSourceClass = true
+		if row.SpotClass == rbnfeed.SpotClassNCDXFB {
+			spotEntry.BeaconComment = spot.BeaconCommentNCDXF
+		}
 	}
 	spotEntry.RefreshBeaconFlag()
 	if spotEntry.IsBeacon {

@@ -291,6 +291,7 @@ func TestArchiveRecordBeaconCommentRoundTrip(t *testing.T) {
 	s.Report = 5
 	s.HasReport = true
 	s.BeaconSourceClass = true
+	s.BeaconComment = spot.BeaconCommentNCDXF
 	s.RefreshBeaconFlag()
 	if !s.EnsureBlankBeaconComment() {
 		t.Fatalf("expected archive snapshot comment to be canonicalized")
@@ -301,13 +302,13 @@ func TestArchiveRecordBeaconCommentRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeSpot failed: %v", err)
 	}
-	if decoded.Comment != "BEACON" {
+	if decoded.Comment != "NCDXF BEACON" {
 		t.Fatalf("expected decoded beacon comment, got %q", decoded.Comment)
 	}
 	if !decoded.IsBeacon {
 		t.Fatalf("expected decoded beacon comment to restore IsBeacon")
 	}
-	if got := decoded.FormatDXCluster(); !strings.Contains(got, "CW 5 dB BEACON") {
+	if got := decoded.FormatDXCluster(); !strings.Contains(got, "CW 5 dB NCDXF BEACON") {
 		t.Fatalf("expected decoded beacon to format with comment, got %q", got)
 	}
 }
