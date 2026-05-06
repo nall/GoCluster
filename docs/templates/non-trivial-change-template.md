@@ -38,6 +38,15 @@ restating unchanged facts.
 - Risks requiring attention:
 - Reasoning budget: <low|medium|high|xhigh> (lowest sufficient). Rationale: <one sentence>; escalation trigger: <one phrase or "none expected">.
 
+### SCOPE ADVERSARIAL REVIEW
+- question: What edge case would make this scope unsafe or incomplete?
+- applicable edge areas:
+- gaps found: none | <items>
+- disposition: nothing material found | revise ledger to v<N+1>
+
+If material gaps are found, do not present the approval token for the current
+version. Produce the revised Scope Ledger and repeat this review.
+
 Stop here and wait for the exact approval token:
 `Approved vN`
 

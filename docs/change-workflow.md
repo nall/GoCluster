@@ -62,6 +62,8 @@ For Non-trivial changes:
 - record `Ledger status: Approved vN found: yes/no`
 - do not treat discussion, "please implement", "go ahead", or any non-exact wording as approval
 - every scope change after approval requires a new ledger version
+- before showing the approval token, perform `SCOPE ADVERSARIAL REVIEW`; if it
+  finds a material gap, revise the Scope Ledger version and repeat the review
 
 ### Current-State Discovery before Scope Ledger
 Before proposing or confirming a Non-trivial Scope Ledger, perform a targeted
@@ -79,6 +81,25 @@ Minimum discovery:
 Ask product or semantic questions only after discoverable code facts have been
 checked. If a fact cannot be established from inspection, say
 `Unknown from inspected code` and name what should be inspected next.
+
+### Scope adversarial review before approval
+Required before presenting the exact approval token for every Non-trivial Scope
+Ledger.
+
+After `Proposed Scope Ledger vN`, Codex must ask:
+`What edge case would make this scope unsafe or incomplete?`
+
+The review must check applicable edge areas, including lifecycle/shutdown,
+backpressure/drops/queues, bounded memory/state, zero/nil/empty inputs,
+config/YAML/schema/defaults, parser/protocol/user-visible behavior,
+metrics/logging/latency, tests/benchmarks, docs/support-agent impact, and
+ADR/TSR obligations.
+
+Each material edge case must be classified as covered by the ledger, explicitly
+out of scope, or requiring a revised ledger. If any material gap is found, do
+not present the approval token for the current ledger version. Create the next
+`Proposed Scope Ledger vN`, repeat `SCOPE ADVERSARIAL REVIEW`, and continue
+until the disposition is exactly `nothing material found`.
 
 ### Reasoning budget recommendation
 Every Proposed Scope Ledger must recommend the lowest reasoning level expected
@@ -154,7 +175,10 @@ Quality rules:
 ## Requirements & Edge Cases Note
 Required for Non-trivial work.
 
-This is where hidden expectations should be surfaced before code.
+This is where hidden implementation expectations should be surfaced before
+code after approval. It does not replace the pre-approval `SCOPE ADVERSARIAL
+REVIEW`, which decides whether the Scope Ledger itself is complete enough to
+approve.
 
 ## Dependency rigor decision tree
 Choose `Light` or `Full`.

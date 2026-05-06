@@ -97,6 +97,9 @@ For Non-trivial work, Codex must:
   Scope Ledger
 - produce `Proposed Scope Ledger vN` with a compact `Reasoning budget`
   recommendation
+- perform and report `SCOPE ADVERSARIAL REVIEW` before showing the approval
+  token; if material gaps are found, revise the ledger version and repeat the
+  review
 - stop until the user replies with the exact token `Approved vN`
 - emit `Ledger status: Approved vN found: yes/no`
 - refuse to treat discussion, "please implement", "go ahead", or any
@@ -112,6 +115,7 @@ marker shape. Required Non-trivial markers are:
 - `GATE`
 - `DISCOVERY`
 - `SCOPE`
+- `SCOPE ADVERSARIAL REVIEW`
 - `PREFLIGHT`
 - `DESIGN`
 - `IMPLEMENTATION`

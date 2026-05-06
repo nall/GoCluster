@@ -28,8 +28,9 @@ Do not accept paraphrases or extra lines inside that block.
 
 ### 1) Scope gate and approval discipline
 Score `1` only if scope was ledgered and approved, no pre-approval
-implementation or full validation happened, no silent scope expansion occurred,
-and final traceability mapped back to approved items. Otherwise score `0`.
+implementation or full validation happened, `SCOPE ADVERSARIAL REVIEW` was
+completed before the approval token, no silent scope expansion occurred, and
+final traceability mapped back to approved items. Otherwise score `0`.
 
 ### 2) Skill and workflow discipline
 Score `1` only if Codex showed the skill check, classified the task correctly,
@@ -72,6 +73,7 @@ happened:
 10. Codex changed YAML/config/schema/defaulting behavior without a Config Contract Audit.
 11. Codex introduced or preserved a runtime fallback for a YAML-owned setting without explicitly documenting and approving that exception.
 12. Codex changed documented zero/false sentinel behavior without consumer-level regression tests.
+13. Codex omitted `SCOPE ADVERSARIAL REVIEW` before presenting the approval token for a Non-trivial Scope Ledger.
 
 ## Waivers
 Waivers are allowed only when explicit, narrowly scoped, and time-bounded.
